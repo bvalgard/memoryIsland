@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isIslandOwner() {
+      return isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function ownsIsland() {
+      return isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    function isCardOwner() {
+      return isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function ownsCard() {
+      return isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Validations
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 256;
+    }
+
+    function isValidUserCreate(data, userId) {
+      return isValidUser(data) && data.uid == userId;
+    }
+
+    function isValidPublicIsland(data) {
+      return data.keys().hasAll(['id', 'name', 'authorId', 'isPublic']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.authorId == request.auth.uid;
+    }
+
+    function isValidPublishedArchipelago(data) {
+      return data.keys().hasAll(['id', 'name', 'authorId', 'isPublic', 'islands']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.authorId == request.auth.uid &&
+             data.islands is list && data.islands.size() <= 50;
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUserCreate(incoming(), userId);
+      allow update: if isOwner(userId) || isAdmin();
+    }
+
+    // Admin-managed top-level content collections
+    match /islands/{islandId} {
+      allow create: if isIslandOwner() || isAdmin();
+      allow read: if ownsIsland() || isAdmin();
+      allow update, delete: if ownsIsland() || isAdmin();
+    }
+
+    match /cards/{cardId} {
+      allow create: if isCardOwner() || isAdmin();
+      allow read: if ownsCard() || isAdmin();
+      allow update, delete: if ownsCard() || isAdmin();
+    }
+
+    match /adminStats/{docId} {
+      allow read: if isAdmin();
+    }
+
+    match /globalAnnouncements/{announcementId} {
+      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+    }
+
+    // Profiles Collection for social features and leaderboards
+    match /profiles/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+
+    // Follows Collection for social relationships
+    match /follows/{followerId}/following/{followingId} {
+      allow read: if true;
+      allow write: if isOwner(followerId);
+    }
+
+    // 2. Published Islands Discovery
+    match /published_islands/{islandId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // 3. Published Archipelagos Discovery
+    match /published_archipelagos/{archipelagoId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}
