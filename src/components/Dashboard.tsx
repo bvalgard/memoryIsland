@@ -115,7 +115,8 @@ export default function Dashboard() {
     setIsDiscovering(false);
   };
 
-  const currentIslands = progress?.islands || [];
+  // Exclude imported (anchored from community) islands from the main view and study
+  const currentIslands = (progress?.islands || []).filter(i => !i.isImported);
   const islandsInArchipelago = selectedArchipelagoId 
     ? currentIslands.filter(island => island.archipelagoId === selectedArchipelagoId)
     : currentIslands;
@@ -129,10 +130,13 @@ export default function Dashboard() {
       return 0;
     });
 
-  const selectedArchipelago = progress?.archipelagos?.find(a => a.id === selectedArchipelagoId);
+  // Only show non-imported archipelagos in the selector
+  const ownedArchipelagos = (progress?.archipelagos || []).filter(a => !a.isImported);
+
+  const selectedArchipelago = ownedArchipelagos.find(a => a.id === selectedArchipelagoId);
   const archipelagoName = selectedArchipelago ? selectedArchipelago.name : 'The Archipelago';
 
-  // Combine all cards for Archipelago Study
+  // Combine all cards for Archipelago Study (imported islands excluded)
   const allCards = islandsInArchipelago.flatMap(i => i.cards) || [];
   const archipelagoIsland: Island = {
     id: 'archipelago',
@@ -897,7 +901,7 @@ export default function Dashboard() {
                           className="bg-transparent text-white font-bold text-sm px-3 py-1 outline-none appearance-none cursor-pointer"
                         >
                           <option value="" className="bg-[#111]">All Islands</option>
-                          {progress?.archipelagos?.map(a => (
+                          {ownedArchipelagos.map(a => (
                             <option key={a.id} value={a.id} className="bg-[#111]">{a.name}</option>
                           ))}
                         </select>

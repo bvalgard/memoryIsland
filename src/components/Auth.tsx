@@ -3,6 +3,8 @@ import { LogIn, AlertCircle } from 'lucide-react';
 import { auth, googleProvider, isConfigPlaceholder } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 export default function Auth() {
   const handleSignIn = async () => {
     if (isConfigPlaceholder) {
@@ -30,9 +32,23 @@ export default function Auth() {
         <div className="absolute bottom-[-50px] right-[-50px] w-[250px] h-[250px] bg-red-500/5 rounded-full blur-[80px]" />
 
         <div className="relative flex-1 flex flex-col px-8 pt-12 pb-10 z-10">
-          {/* Logo Box */}
-          <div className="w-16 h-16 bg-gradient-to-br from-[#222] to-[#111] border border-brand-border rounded-[16px] mb-8 flex items-center justify-center text-white font-black text-2xl tracking-tighter">
-            N
+          {/* Island Images */}
+          <div className="flex gap-2 mb-8">
+            {[
+              { src: `${BASE}/struggling.jpeg`, label: 'Struggling' },
+              { src: `${BASE}/learning.jpeg`,   label: 'Learning'   },
+              { src: `${BASE}/mastered.jpeg`,   label: 'Mastered'   },
+            ].map(({ src, label }, i) => (
+              <motion.div
+                key={label}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                className="w-16 h-16 rounded-[16px] overflow-hidden border border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.4)] shrink-0"
+              >
+                <img src={src} alt={label} className="w-full h-full object-cover" />
+              </motion.div>
+            ))}
           </div>
 
           <div className="mb-12">

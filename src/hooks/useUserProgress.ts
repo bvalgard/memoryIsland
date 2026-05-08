@@ -44,6 +44,7 @@ export interface Archipelago {
   name: string;
   isPublic?: boolean;
   publishedId?: string;
+  isImported?: boolean;
 }
 
 export interface Island {
@@ -59,6 +60,7 @@ export interface Island {
   downloads?: number;
   createdAt?: number;
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
+  isImported?: boolean;
 }
 
 export interface UserStats {
@@ -115,6 +117,7 @@ interface IslandDocumentData {
   createdAt?: number;
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
   submittedAt?: Timestamp;
+  isImported?: boolean;
 }
 
 interface CardDocumentData extends Card {
@@ -256,6 +259,7 @@ function toIslandDocument(island: Island, ownerId: string, ownerEmail?: string |
     downloads: island.downloads || 0,
     createdAt: island.createdAt || Date.now(),
     approvalStatus: island.approvalStatus || (island.isPublic ? 'approved' : 'draft'),
+    isImported: island.isImported || false,
   });
 }
 
@@ -529,6 +533,7 @@ export function useUserProgress() {
         downloads: data.downloads,
         createdAt: data.createdAt,
         approvalStatus: data.approvalStatus,
+        isImported: data.isImported || false,
         cards: cardsByIsland.get(id) || [],
       }));
 
@@ -1061,6 +1066,7 @@ export function useUserProgress() {
       createdAt: Date.now(),
       isPublic: false,
       approvalStatus: 'draft',
+      isImported: true,
     }));
 
     try {
@@ -1089,7 +1095,7 @@ export function useUserProgress() {
       console.warn('Could not increment download count.');
     }
 
-    await updateArchipelagos([...(progress.archipelagos || []), newArchipelago]);
+    await updateArchipelagos([...(progress.archipelagos || []), { ...newArchipelago, isImported: true }]);
   };
 
   const discoverIslands = async (searchTerm?: string) => {
