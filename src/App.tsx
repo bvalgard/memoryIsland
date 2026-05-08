@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, isConfigPlaceholder } from './firebase';
 import Auth from './components/Auth';
@@ -34,13 +34,13 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route 
-          path="/" 
-          element={!user ? <Auth /> : <Navigate to="/dashboard" replace />} 
+        <Route
+          path="/"
+          element={!user ? <Auth /> : <Navigate to="/dashboard" replace />}
         />
-        <Route 
-          path="/dashboard" 
-          element={(user || isConfigPlaceholder) ? <Dashboard /> : <Navigate to="/" replace />} 
+        <Route
+          path="/dashboard"
+          element={(user || isConfigPlaceholder) ? <Dashboard /> : <Navigate to="/" replace />}
         />
         <Route element={<AdminRoute />}>
           <Route path="/admin" element={<AdminLayout />}>
