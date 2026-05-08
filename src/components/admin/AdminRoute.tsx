@@ -24,11 +24,11 @@ export default function AdminRoute() {
   }
 
   if (!user) {
-    return <Navigate to="/" replace state={{ from: location }} />;
+    return <Navigate to="" replace state={{ from: location }} />;
   }
 
   if (!isAdmin) {
-    return <Navigate to="/dashboard" replace state={{ from: location, adminError: error }} />;
+    return <Navigate to="dashboard" replace state={{ from: location, adminError: error }} />;
   }
 
   return <Outlet />;
