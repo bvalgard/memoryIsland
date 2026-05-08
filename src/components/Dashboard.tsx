@@ -37,7 +37,8 @@ export default function Dashboard() {
     importIsland,
     importArchipelago,
     deletePublishedIsland,
-    deletePublishedArchipelago
+    deletePublishedArchipelago,
+    removeArchipelago,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -90,6 +91,7 @@ export default function Dashboard() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
+  const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
 
   useEffect(() => {
     if (activeModal === 'users') {
@@ -939,16 +941,26 @@ export default function Dashboard() {
                           <div className="flex items-center gap-3 mb-1">
                             <h3 className="text-xl font-bold">{archipelagoName} Study</h3>
                             {selectedArchipelagoId && (
-                              <button 
-                                onClick={() => selectedArchipelago?.isPublic ? setShowUnshareArchipelagoConfirm(true) : setShowShareArchipelagoConfirm(true)}
-                                className="p-1.5 rounded-lg bg-white/5 border border-white/5 text-brand-muted hover:text-white hover:border-white/10 transition-all flex items-center gap-1.5"
-                                title={selectedArchipelago?.isPublic ? "Remove this Archipelago from Community" : "Share this Archipelago"}
-                              >
-                                <Globe className="w-3.5 h-3.5" />
-                                <span className="text-[10px] font-bold uppercase tracking-tight">
-                                  {selectedArchipelago?.isPublic ? 'Public' : 'Share'}
-                                </span>
-                              </button>
+                              <>
+                                <button 
+                                  onClick={() => selectedArchipelago?.isPublic ? setShowUnshareArchipelagoConfirm(true) : setShowShareArchipelagoConfirm(true)}
+                                  className="p-1.5 rounded-lg bg-white/5 border border-white/5 text-brand-muted hover:text-white hover:border-white/10 transition-all flex items-center gap-1.5"
+                                  title={selectedArchipelago?.isPublic ? "Remove this Archipelago from Community" : "Share this Archipelago"}
+                                >
+                                  <Globe className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] font-bold uppercase tracking-tight">
+                                    {selectedArchipelago?.isPublic ? 'Public' : 'Share'}
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => setShowDeleteArchipelagoConfirm(true)}
+                                  className="p-1.5 rounded-lg bg-red-500/5 border border-red-500/10 text-red-400/60 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all flex items-center gap-1.5"
+                                  title="Delete this Archipelago"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] font-bold uppercase tracking-tight">Delete</span>
+                                </button>
+                              </>
                             )}
                           </div>
                           <p className="text-brand-muted text-sm max-w-sm">Review your entire knowledge base across all anchored islands.</p>
@@ -1297,6 +1309,54 @@ export default function Dashboard() {
                 </button>
                 <button 
                   onClick={() => setShowUnshareArchipelagoConfirm(false)}
+                  className="w-full py-4 text-brand-muted hover:text-white font-bold text-xs uppercase tracking-widest transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Archipelago Confirmation */}
+      <AnimatePresence>
+        {showDeleteArchipelagoConfirm && selectedArchipelago && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              onClick={() => setShowDeleteArchipelagoConfirm(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md glass p-8 rounded-[40px] border-red-500/30 shadow-[0_40px_100px_rgba(0,0,0,0.8)] text-center"
+            >
+              <div className="w-20 h-20 bg-red-500/15 rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-xl border border-red-500/30">
+                <Trash2 className="w-10 h-10 text-red-400" />
+              </div>
+              <h2 className="text-2xl font-bold mb-3 tracking-tight">Delete Archipelago?</h2>
+              <p className="text-brand-muted text-sm leading-relaxed mb-2 px-4">
+                This will permanently delete <span className="text-white font-bold">"{selectedArchipelago.name}"</span> and all of its islands and cards.
+              </p>
+              <p className="text-red-400/70 text-xs font-bold uppercase tracking-widest mb-10">This cannot be undone.</p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={async () => {
+                    await removeArchipelago(selectedArchipelago.id);
+                    setShowDeleteArchipelagoConfirm(false);
+                    setSelectedArchipelagoId(null);
+                  }}
+                  className="w-full py-4 bg-red-500 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-transform"
+                >
+                  Delete Everything
+                </button>
+                <button
+                  onClick={() => setShowDeleteArchipelagoConfirm(false)}
                   className="w-full py-4 text-brand-muted hover:text-white font-bold text-xs uppercase tracking-widest transition-colors"
                 >
                   Cancel

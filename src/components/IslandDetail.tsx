@@ -81,7 +81,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (front.trim() && (back.trim() || cardType === 'matching')) {
+    if (front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing'].includes(cardType))) {
       let newCard: Card = { 
         id: (editingCardIndex !== null && island.cards[editingCardIndex].id) ? island.cards[editingCardIndex].id : Math.random().toString(36).substring(2, 11),
         front: front.trim(), 

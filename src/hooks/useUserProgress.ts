@@ -663,6 +663,28 @@ export function useUserProgress() {
     return newArchipelago.id;
   };
 
+  const removeArchipelago = async (archipelagoId: string) => {
+    if (!user || !progress) return;
+    const islandsToRemove = progress.islands.filter(i => i.archipelagoId === archipelagoId);
+
+    try {
+      const batch = writeBatch(db);
+      for (const island of islandsToRemove) {
+        island.cards.forEach(card => {
+          if (card.id) batch.delete(doc(db, 'cards', card.id));
+        });
+        batch.delete(doc(db, 'islands', island.id));
+      }
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `archipelago/${archipelagoId}/islands`);
+      return;
+    }
+
+    const updatedArchipelagos = (progress.archipelagos || []).filter(a => a.id !== archipelagoId);
+    await updateArchipelagos(updatedArchipelagos);
+  };
+
   const addIsland = async (name: string, archipelagoId?: string) => {
     if (!user) return;
     const islandId = randomId();
@@ -1204,6 +1226,7 @@ export function useUserProgress() {
     updateArchipelagos,
     updateSettings,
     addArchipelago,
+    removeArchipelago,
     addIsland,
     updateIsland,
     removeIsland,
