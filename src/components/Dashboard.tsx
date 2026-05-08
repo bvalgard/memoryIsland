@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
@@ -102,6 +102,17 @@ export default function Dashboard() {
       }
     }
   }, [activeModal, discoverySearch, discoveryTab]);
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Recently';
+    const date = timestamp.toMillis ? new Date(timestamp.toMillis()) : new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Recently';
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  };
 
   const loadPublicIslands = async () => {
     setIsDiscovering(true);
@@ -290,22 +301,45 @@ export default function Dashboard() {
                               <span>{island.cards.length} Cards</span>
                               <span className="w-1 h-1 bg-white/20 rounded-full" />
                               <span className="text-brand-primary">@{island.authorName}</span>
+                              <span className="w-1 h-1 bg-white/20 rounded-full" />
+                              <span className="flex items-center gap-1 opacity-60">
+                                <Calendar className="w-3 h-3" />
+                                {formatDate(island.publishedAt || (island as any).submittedAt)}
+                              </span>
                             </div>
                           </div>
                           <div className="flex gap-2">
                             {island.authorId === user?.uid && (
-                              <button 
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to permanently delete this shared island?')) {
-                                    deletePublishedIsland(island.id);
-                                    setPublicIslands(prev => prev.filter(i => i.id !== island.id));
-                                  }
-                                }}
-                                className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
-                                title="Delete from Community"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button 
+                                  onClick={async () => {
+                                    const localIsland = progress?.islands.find(i => i.publishedId === island.id || i.id === island.id);
+                                    if (localIsland) {
+                                      await shareIsland(localIsland);
+                                      loadPublicIslands();
+                                    } else {
+                                      alert("Could not find the local version of this island to update.");
+                                    }
+                                  }}
+                                  className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 font-bold transition-all shadow-lg active:scale-95 gap-2"
+                                  title="Update Community Version"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span className="text-xs uppercase tracking-widest hidden sm:inline">Update</span>
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to permanently delete this shared island?')) {
+                                      deletePublishedIsland(island.id);
+                                      setPublicIslands(prev => prev.filter(i => i.id !== island.id));
+                                    }
+                                  }}
+                                  className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
+                                  title="Delete from Community"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
                             <button 
                               onClick={() => {
@@ -358,22 +392,45 @@ export default function Dashboard() {
                               <span>{arch.islandCount} Islands</span>
                               <span className="w-1 h-1 bg-white/20 rounded-full" />
                               <span className="text-brand-primary">@{arch.authorName}</span>
+                              <span className="w-1 h-1 bg-white/20 rounded-full" />
+                              <span className="flex items-center gap-1 opacity-60">
+                                <Calendar className="w-3 h-3" />
+                                {formatDate(arch.publishedAt)}
+                              </span>
                             </div>
                           </div>
                           <div className="flex gap-2">
                             {arch.authorId === user?.uid && (
-                              <button 
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to permanently delete this shared archipelago?')) {
-                                    deletePublishedArchipelago(arch.id);
-                                    setPublicArchipelagos(prev => prev.filter(a => a.id !== arch.id));
-                                  }
-                                }}
-                                className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
-                                title="Delete from Community"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <>
+                                <button 
+                                  onClick={async () => {
+                                    const localArch = progress?.archipelagos?.find(a => a.publishedId === arch.id || a.id === arch.id);
+                                    if (localArch) {
+                                      await shareArchipelago(localArch);
+                                      loadPublicArchipelagos();
+                                    } else {
+                                      alert("Could not find the local version of this archipelago to update.");
+                                    }
+                                  }}
+                                  className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 font-bold transition-all shadow-lg active:scale-95 gap-2"
+                                  title="Update Community Version"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span className="text-xs uppercase tracking-widest hidden sm:inline">Update</span>
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to permanently delete this shared archipelago?')) {
+                                      deletePublishedArchipelago(arch.id);
+                                      setPublicArchipelagos(prev => prev.filter(a => a.id !== arch.id));
+                                    }
+                                  }}
+                                  className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
+                                  title="Delete from Community"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
                             )}
                             <button 
                               onClick={() => {

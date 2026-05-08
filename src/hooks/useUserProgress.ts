@@ -922,6 +922,7 @@ export function useUserProgress() {
         authorName: user.displayName || 'Explorer',
         approvalStatus: 'pending',
         submittedAt: serverTimestamp(),
+        publishedAt: serverTimestamp(),
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `islands/${island.id}`);
