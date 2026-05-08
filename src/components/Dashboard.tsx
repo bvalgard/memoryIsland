@@ -1010,11 +1010,11 @@ export default function Dashboard() {
                 )}
 
                 {loading ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-pulse">
                     {[1, 2, 3].map(i => <div key={i} className="h-44 rounded-[32px] bg-white/5" />)}
                   </div>
                 ) : filteredIslands.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                     {filteredIslands.map((island) => {
                       const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
                       const learningCount = island.cards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
