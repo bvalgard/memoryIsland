@@ -902,7 +902,22 @@ export function useUserProgress() {
   };
 
   const unshareIsland = async (island: Island) => {
+    if (!user) return;
+
+    let publishedIds = island.publishedId ? [island.publishedId] : [];
+    if (!publishedIds.length) {
+      try {
+        const snapshot = await getDocs(query(collection(db, 'published_islands'), where('authorId', '==', user.uid), limit(100)));
+        publishedIds = snapshot.docs.filter((docSnap) => (docSnap.data() as any).name === island.name).map((docSnap) => docSnap.id);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'published_islands');
+      }
+    }
+
     try {
+      if (publishedIds.length > 0) {
+        await Promise.all(publishedIds.map((id) => deleteDoc(doc(db, 'published_islands', id))));
+      }
       await updateDoc(doc(db, 'islands', island.id), {
         isPublic: false,
         approvalStatus: 'draft',
@@ -968,6 +983,40 @@ export function useUserProgress() {
       await updateArchipelagos(updatedArchipelagos);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `published_archipelagos/${archipelago.id}`);
+    }
+  };
+
+  const deletePublishedIsland = async (publishedId: string) => {
+    try {
+      await deleteDoc(doc(db, 'published_islands', publishedId));
+      if (progress) {
+        const localMatch = progress.islands.find(i => i.publishedId === publishedId || i.id === publishedId);
+        if (localMatch) {
+          await updateDoc(doc(db, 'islands', localMatch.id), {
+            isPublic: false,
+            approvalStatus: 'draft'
+          });
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `published_islands/${publishedId}`);
+    }
+  };
+
+  const deletePublishedArchipelago = async (publishedId: string) => {
+    try {
+      await deleteDoc(doc(db, 'published_archipelagos', publishedId));
+      if (progress) {
+        const localMatch = progress.archipelagos?.find(a => a.publishedId === publishedId || a.id === publishedId);
+        if (localMatch) {
+          const updatedArchipelagos = (progress.archipelagos || []).map((entry) =>
+            entry.id === localMatch.id ? { ...entry, isPublic: false, publishedId: undefined } : entry
+          );
+          await updateArchipelagos(updatedArchipelagos);
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `published_archipelagos/${publishedId}`);
     }
   };
 
@@ -1167,5 +1216,7 @@ export function useUserProgress() {
     discoverArchipelagos,
     importIsland,
     importArchipelago,
+    deletePublishedIsland,
+    deletePublishedArchipelago,
   };
 }

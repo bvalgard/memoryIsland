@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
@@ -35,7 +35,9 @@ export default function Dashboard() {
     discoverIslands,
     discoverArchipelagos,
     importIsland,
-    importArchipelago
+    importArchipelago,
+    deletePublishedIsland,
+    deletePublishedArchipelago
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -284,31 +286,47 @@ export default function Dashboard() {
                               <span className="text-brand-primary">@{island.authorName}</span>
                             </div>
                           </div>
-                          <button 
-                            onClick={() => {
-                              importIsland(island);
-                              setActiveModal(null);
-                            }}
-                            disabled={isAlreadyImported && island.authorId !== user?.uid}
-                            className={cn(
-                              "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
-                              isAlreadyImported 
-                                ? "bg-white/5 text-brand-muted cursor-default" 
-                                : "bg-white text-black hover:bg-white/90 shadow-lg active:scale-95"
+                          <div className="flex gap-2">
+                            {island.authorId === user?.uid && (
+                              <button 
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to permanently delete this shared island?')) {
+                                    deletePublishedIsland(island.id);
+                                    setPublicIslands(prev => prev.filter(i => i.id !== island.id));
+                                  }
+                                }}
+                                className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
+                                title="Delete from Community"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             )}
-                          >
-                            {isAlreadyImported ? (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                Anchored
-                              </>
-                            ) : (
-                              <>
-                                <Download className="w-3.5 h-3.5" />
-                                Import
-                              </>
-                            )}
-                          </button>
+                            <button 
+                              onClick={() => {
+                                importIsland(island);
+                                setActiveModal(null);
+                              }}
+                              disabled={isAlreadyImported && island.authorId !== user?.uid}
+                              className={cn(
+                                "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
+                                isAlreadyImported 
+                                  ? "bg-white/5 text-brand-muted cursor-default" 
+                                  : "bg-white text-black hover:bg-white/90 shadow-lg active:scale-95"
+                              )}
+                            >
+                              {isAlreadyImported ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  Anchored
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="w-3.5 h-3.5" />
+                                  Import
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       );
                     })
@@ -336,31 +354,47 @@ export default function Dashboard() {
                               <span className="text-brand-primary">@{arch.authorName}</span>
                             </div>
                           </div>
-                          <button 
-                            onClick={() => {
-                              importArchipelago(arch);
-                              setActiveModal(null);
-                            }}
-                            disabled={isAlreadyImported && arch.authorId !== user?.uid}
-                            className={cn(
-                              "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
-                              isAlreadyImported 
-                                ? "bg-white/5 text-brand-muted cursor-default" 
-                                : "bg-white text-black hover:bg-white/90 shadow-lg active:scale-95"
+                          <div className="flex gap-2">
+                            {arch.authorId === user?.uid && (
+                              <button 
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to permanently delete this shared archipelago?')) {
+                                    deletePublishedArchipelago(arch.id);
+                                    setPublicArchipelagos(prev => prev.filter(a => a.id !== arch.id));
+                                  }
+                                }}
+                                className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
+                                title="Delete from Community"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             )}
-                          >
-                            {isAlreadyImported ? (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                Imported
-                              </>
-                            ) : (
-                              <>
-                                <Download className="w-3.5 h-3.5" />
-                                Import All
-                              </>
-                            )}
-                          </button>
+                            <button 
+                              onClick={() => {
+                                importArchipelago(arch);
+                                setActiveModal(null);
+                              }}
+                              disabled={isAlreadyImported && arch.authorId !== user?.uid}
+                              className={cn(
+                                "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
+                                isAlreadyImported 
+                                  ? "bg-white/5 text-brand-muted cursor-default" 
+                                  : "bg-white text-black hover:bg-white/90 shadow-lg active:scale-95"
+                              )}
+                            >
+                              {isAlreadyImported ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  Imported
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="w-3.5 h-3.5" />
+                                  Import All
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       );
                     })
