@@ -429,7 +429,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     masteryLevel = 'learning';
   }
 
-  const imageSrc = masteryLevel === 'struggling' ? '/struggling.jpeg' : masteryLevel === 'learning' ? '/learning.jpeg' : '/mastered.jpeg';
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const imageSrc = masteryLevel === 'struggling' ? `${basePath}/struggling.jpeg` : masteryLevel === 'learning' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
 
   const radius = 16;
   const circumference = 2 * Math.PI * radius;

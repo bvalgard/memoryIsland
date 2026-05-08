@@ -173,7 +173,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     masteryLevel = 'learning';
   }
 
-  const imageSrc = masteryLevel === 'struggling' ? '/struggling.jpeg' : masteryLevel === 'learning' ? '/learning.jpeg' : '/mastered.jpeg';
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const imageSrc = masteryLevel === 'struggling' ? `${basePath}/struggling.jpeg` : masteryLevel === 'learning' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
 
   const getTierInfo = (card: Card | undefined) => {
     if (!card) return null;

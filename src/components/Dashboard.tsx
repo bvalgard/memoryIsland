@@ -995,10 +995,11 @@ export default function Dashboard() {
                         masteryLevel = 'learning';
                       }
                       
+                      const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
                       let imageSrc = '';
-                      if (masteryLevel === 'struggling') imageSrc = '/struggling.jpeg';
-                      else if (masteryLevel === 'learning') imageSrc = '/learning.jpeg';
-                      else imageSrc = '/mastered.jpeg';
+                      if (masteryLevel === 'struggling') imageSrc = `${basePath}/struggling.jpeg`;
+                      else if (masteryLevel === 'learning') imageSrc = `${basePath}/learning.jpeg`;
+                      else imageSrc = `${basePath}/mastered.jpeg`;
 
                       return (
                         <IslandCard 
