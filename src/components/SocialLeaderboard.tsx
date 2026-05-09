@@ -107,18 +107,6 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
           >
             Friends
           </button>
-          <button
-            onClick={() => setTab('requests')}
-            className={cn(
-              "px-4 py-2 rounded-xl text-sm font-medium transition-all w-32 relative",
-              tab === 'requests' ? "bg-white/10 text-white" : "text-brand-muted hover:text-white hover:bg-white/5"
-            )}
-          >
-            Requests
-            {friendRequests.length > 0 && (
-              <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-brand-primary" />
-            )}
-          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
@@ -158,20 +146,6 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
                 />
               ))
             ) : <div className="text-center text-brand-muted py-8">You haven't added any friends yet.</div>
-          ) : tab === 'requests' ? (
-            requestsData.length > 0 ? (
-              requestsData.map((profile) => (
-                <ProfileCard 
-                  key={profile.uid} 
-                  profile={profile} 
-                  isSelf={profile.uid === currentUser?.uid}
-                  relationship="received"
-                  onAdd={() => {}}
-                  onRemove={() => removeFriend(profile.uid)} // rejecting is same as removeFriend
-                  onAccept={() => acceptFriendRequest(profile.uid)}
-                />
-              ))
-            ) : <div className="text-center text-brand-muted py-8">No pending friend requests.</div>
           ) : null}
         </div>
       </motion.div>

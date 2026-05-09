@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
@@ -86,10 +86,14 @@ export default function Dashboard() {
   }, [selectedArchipelagoId]);
 
   // Discovery State
-  const { searchUsers, sendFriendRequest, friends, sentRequests, friendRequests, error: socialError } = useSocial();
+  const { searchUsers, sendFriendRequest, acceptFriendRequest, removeFriend, friends, sentRequests, friendRequests, error: socialError, fetchProfilesByUids } = useSocial();
   const [discoverySearch, setDiscoverySearch] = useState('');
   const [discoveryTab, setDiscoveryTab] = useState<'islands' | 'archipelagos' | 'explorers'>('islands');
   const [discoveryExplorers, setDiscoveryExplorers] = useState<any[]>([]);
+  const [discoveryInboundRequests, setDiscoveryInboundRequests] = useState<any[]>([]);
+  const [discoveryFriends, setDiscoveryFriends] = useState<any[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const [publicIslands, setPublicIslands] = useState<Island[]>([]);
   const [publicArchipelagos, setPublicArchipelagos] = useState<any[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -99,6 +103,46 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (activeModal === 'users') {
+      // Default to explorers if no tab set
+      if (discoveryTab !== 'explorers' && discoveryTab !== 'archipelagos' && discoveryTab !== 'islands') {
+        setDiscoveryTab('explorers');
+      }
+
+      // Load pending requests
+      const loadRequests = async () => {
+        if (friendRequests.length > 0) {
+          setIsLoadingRequests(true);
+          const profiles = await fetchProfilesByUids(friendRequests);
+          setDiscoveryInboundRequests(profiles);
+          setIsLoadingRequests(false);
+        } else {
+          setDiscoveryInboundRequests([]);
+        }
+      };
+
+      // Load current friends
+      const loadFriends = async () => {
+        if (friends.length > 0) {
+          setIsLoadingFriends(true);
+          const profiles = await fetchProfilesByUids(friends);
+          setDiscoveryFriends(profiles);
+          setIsLoadingFriends(false);
+        } else {
+          setDiscoveryFriends([]);
+        }
+      };
+
+      loadRequests();
+      loadFriends();
+    } else if (activeModal === 'discover') {
+      if (discoveryTab !== 'islands' && discoveryTab !== 'archipelagos') {
+        setDiscoveryTab('islands');
+      }
+    }
+  }, [activeModal, friendRequests, friends]);
+
+  useEffect(() => {
+    if (activeModal === 'discover' || activeModal === 'users') {
       if (discoveryTab === 'islands') {
         loadPublicIslands();
       } else if (discoveryTab === 'archipelagos') {
@@ -189,17 +233,37 @@ export default function Dashboard() {
   const globalLearningCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
 
-  const notifications = currentIslands.filter(i => i.color_score < 80).map(island => ({
-    id: `review-${island.id}`,
-    title: island.color_score < 40 ? 'Urgent Review' : 'Review Recommended',
-    message: island.color_score < 40 
-      ? `${island.name} needs attention. Study now to improve your score!`
-      : `${island.name} score is decreasing. Study soon to maintain mastery.`,
-    islandId: island.id,
-    type: island.color_score < 40 ? 'error' : 'warning'
-  })) || [];
+  // Derived state for notifications
+  const memoryNotifications = currentIslands
+    .filter(i => i.color_score < 80)
+    .map(island => ({
+      id: island.id,
+      islandId: island.id,
+      title: "Retention Warning",
+      message: `Your retention for "${island.name}" is dropping (${Math.round(island.color_score || 0)}%). Time for a review?`,
+      type: island.color_score < 40 ? 'error' as const : 'warning' as const
+    }));
 
+  const friendRequestNotifications = (discoveryInboundRequests || []).map(profile => ({
+    id: `friend_req_${profile.uid}`,
+    islandId: 'social', // Special key to trigger social modal
+    title: "Friend Request",
+    message: `${profile.displayName} wants to be your explorer friend.`,
+    type: 'info' as const
+  }));
+
+  const notifications = [...memoryNotifications, ...friendRequestNotifications];
   const unreadCount = notifications.length;
+
+  const handleNotificationClick = (islandId: string) => {
+    if (islandId === 'social') {
+      setActiveModal('users');
+      setDiscoveryTab('islands'); // This maps to the "Friend Requests" tab in our new Social modal
+    } else {
+      setSelectedIslandId(islandId);
+    }
+    setIsNotificationsOpen(false);
+  };
 
   const handleSignOut = () => signOut(auth);
 
@@ -240,7 +304,7 @@ export default function Dashboard() {
         }}
       />
 
-      {/* Community Modal (Marketplace) */}
+      {/* Community / Social Modal (Users) */}
       <AnimatePresence>
         {activeModal === 'users' && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -255,63 +319,72 @@ export default function Dashboard() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[90vh]"
+              className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[85vh]"
             >
               <button 
                 onClick={() => setActiveModal(null)}
-                className="absolute top-6 right-6 text-brand-muted hover:text-white transition-colors"
+                className="absolute top-6 right-6 text-brand-muted hover:text-white transition-colors z-10"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
-              
-              <div className="flex items-center gap-6 mb-8">
-                <div className="w-14 h-14 bg-brand-primary/10 rounded-2xl flex items-center justify-center border border-brand-primary/20">
-                  <Globe className="w-7 h-7 text-brand-primary" />
+
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-brand-primary/20 rounded-[18px] flex items-center justify-center">
+                  <Users className="w-6 h-6 text-brand-primary" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold">Community Discovery</h2>
-                  <div className="flex gap-4 mt-2">
-                    <button 
-                      onClick={() => setDiscoveryTab('islands')}
-                      className={cn(
-                        "text-[10px] uppercase tracking-widest font-black transition-all",
-                        discoveryTab === 'islands' ? "text-brand-primary" : "text-brand-muted hover:text-white"
-                      )}
-                    >
-                      Islands
-                    </button>
-                    <button 
-                      onClick={() => setDiscoveryTab('archipelagos')}
-                      className={cn(
-                        "text-[10px] uppercase tracking-widest font-black transition-all",
-                        discoveryTab === 'archipelagos' ? "text-brand-primary" : "text-brand-muted hover:text-white"
-                      )}
-                    >
-                      Archipelagos
-                    </button>
-                    <button 
-                      onClick={() => setDiscoveryTab('explorers')}
-                      className={cn(
-                        "text-[10px] uppercase tracking-widest font-black transition-all",
-                        discoveryTab === 'explorers' ? "text-brand-primary" : "text-brand-muted hover:text-white"
-                      )}
-                    >
-                      Explorers
-                    </button>
-                  </div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Social & Friends</h2>
+                  <p className="text-brand-muted text-sm">Manage your connections and find new explorers.</p>
                 </div>
               </div>
 
-              <div className="relative mb-8 group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted group-focus-within:text-brand-primary transition-colors" />
-                <input 
-                  type="text"
-                  value={discoverySearch}
-                  onChange={(e) => setDiscoverySearch(e.target.value)}
-                  placeholder={discoveryTab === 'islands' ? "Search public islands..." : discoveryTab === 'archipelagos' ? "Search public archipelagos..." : "Search for explorers by name..."}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3 text-sm outline-none focus:border-brand-primary/50 transition-all font-medium"
-                />
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-6">
+                  <button 
+                    onClick={() => setDiscoveryTab('explorers')}
+                    className={cn(
+                      "text-[10px] uppercase tracking-widest font-black transition-all",
+                      discoveryTab === 'explorers' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                    )}
+                  >
+                    Find Explorers
+                  </button>
+                  <button 
+                    onClick={() => setDiscoveryTab('archipelagos')}
+                    className={cn(
+                      "text-[10px] uppercase tracking-widest font-black transition-all",
+                      discoveryTab === 'archipelagos' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                    )}
+                  >
+                    My Friends
+                  </button>
+                  <button 
+                    onClick={() => setDiscoveryTab('islands')}
+                    className={cn(
+                      "text-[10px] uppercase tracking-widest font-black transition-all relative",
+                      discoveryTab === 'islands' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                    )}
+                  >
+                    Requests
+                    {friendRequests.length > 0 && (
+                      <span className="absolute -top-1 -right-2 w-1.5 h-1.5 bg-brand-primary rounded-full" />
+                    )}
+                  </button>
+                </div>
               </div>
+
+              {discoveryTab === 'explorers' && (
+                <div className="relative mb-6 group">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted group-focus-within:text-brand-primary transition-colors" />
+                  <input 
+                    type="text"
+                    value={discoverySearch}
+                    onChange={(e) => setDiscoverySearch(e.target.value)}
+                    placeholder="Search for explorers by name..."
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3 text-sm outline-none focus:border-brand-primary/50 transition-all font-medium"
+                  />
+                </div>
+              )}
 
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
                 {socialError && (
@@ -320,6 +393,227 @@ export default function Dashboard() {
                     {socialError}
                   </div>
                 )}
+                
+                {discoveryTab === 'explorers' ? (
+                  isDiscovering ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                      <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-brand-muted font-bold tracking-widest uppercase">Searching...</p>
+                    </div>
+                  ) : discoveryExplorers.length > 0 ? (
+                    discoveryExplorers.map(profile => {
+                      const isFriend = friends.includes(profile.uid);
+                      const isSent = sentRequests.includes(profile.uid);
+                      const isReceived = friendRequests.includes(profile.uid);
+                      const isSelf = profile.uid === user?.uid;
+                      
+                      return (
+                        <div key={profile.uid} className="glass p-5 rounded-[24px] border-white/5 flex items-center justify-between gap-4 group">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-[#222] border border-white/10 flex items-center justify-center shrink-0">
+                               {profile.photoURL ? (
+                                 <img src={profile.photoURL} alt={profile.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                               ) : (
+                                 <Users className="w-5 h-5 text-brand-muted" />
+                               )}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-lg">{profile.displayName}</h4>
+                              <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
+                                <span>{profile.stats?.dailyReviewed || 0} Studied</span>
+                                <span className="w-1 h-1 bg-white/20 rounded-full" />
+                                <span>{profile.stats?.dailyStreak || 0} Streak</span>
+                              </div>
+                            </div>
+                          </div>
+                          {!isSelf && (
+                            <button
+                              disabled={isFriend || isSent || isReceived}
+                              onClick={() => sendFriendRequest(profile.uid)}
+                              className={cn(
+                                "flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all",
+                                isFriend || isSent || isReceived
+                                  ? "bg-white/5 text-brand-muted cursor-default"
+                                  : "bg-brand-primary text-white hover:bg-brand-primary/90 shadow-lg active:scale-95"
+                              )}
+                            >
+                              {isFriend ? 'Friends' : isSent ? 'Request Sent' : isReceived ? 'Review Request' : 'Add Friend'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-20 text-center opacity-40">
+                      <p className="text-sm font-bold tracking-widest uppercase">
+                        {discoverySearch.length < 2 ? "Type a name to search for explorers." : "No explorers found matching that name."}
+                      </p>
+                    </div>
+                  )
+                ) : discoveryTab === 'islands' ? (
+                  // Pending Requests View
+                  isLoadingRequests ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                      <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-brand-muted font-bold tracking-widest uppercase">Loading requests...</p>
+                    </div>
+                  ) : discoveryInboundRequests.length > 0 ? (
+                    discoveryInboundRequests.map(profile => (
+                      <div key={profile.uid} className="glass p-5 rounded-[24px] border-white/5 flex items-center justify-between gap-4 group">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full overflow-hidden bg-[#222] border border-white/10 flex items-center justify-center shrink-0">
+                             {profile.photoURL ? (
+                               <img src={profile.photoURL} alt={profile.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                             ) : (
+                               <Users className="w-5 h-5 text-brand-muted" />
+                             )}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-lg">{profile.displayName}</h4>
+                            <p className="text-[10px] text-brand-primary uppercase tracking-widest font-black mt-0.5">Wants to be your friend</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => acceptFriendRequest(profile.uid)}
+                            className="w-10 h-10 rounded-xl bg-brand-primary/20 text-brand-primary hover:bg-brand-primary hover:text-white transition-all flex items-center justify-center"
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={() => removeFriend(profile.uid)}
+                            className="w-10 h-10 rounded-xl bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400 transition-all flex items-center justify-center"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-20 text-center opacity-40">
+                      <p className="text-sm font-bold tracking-widest uppercase">No pending friend requests.</p>
+                    </div>
+                  )
+                ) : (
+                  // Friends View
+                  isLoadingFriends ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                      <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-brand-muted font-bold tracking-widest uppercase">Loading friends...</p>
+                    </div>
+                  ) : discoveryFriends.length > 0 ? (
+                    discoveryFriends.map(profile => (
+                      <div key={profile.uid} className="glass p-5 rounded-[24px] border-white/5 flex items-center justify-between gap-4 group">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full overflow-hidden bg-[#222] border border-white/10 flex items-center justify-center shrink-0">
+                             {profile.photoURL ? (
+                               <img src={profile.photoURL} alt={profile.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                             ) : (
+                               <Users className="w-5 h-5 text-brand-muted" />
+                             )}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-lg">{profile.displayName}</h4>
+                            <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
+                              <span>{profile.stats?.dailyReviewed || 0} Studied</span>
+                              <span className="w-1 h-1 bg-white/20 rounded-full" />
+                              <span>{profile.stats?.dailyStreak || 0} Streak</span>
+                            </div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            if (confirm(`Remove ${profile.displayName} from friends?`)) {
+                              removeFriend(profile.uid);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400 font-bold text-xs transition-all"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-20 text-center opacity-40">
+                      <p className="text-sm font-bold tracking-widest uppercase">You haven't added any friends yet.</p>
+                    </div>
+                  )
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Discover Modal (Compass) */}
+      <AnimatePresence>
+        {activeModal === 'discover' && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setActiveModal(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[85vh]"
+            >
+              <button 
+                onClick={() => setActiveModal(null)}
+                className="absolute top-6 right-6 text-brand-muted hover:text-white transition-colors z-10"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-brand-primary/20 rounded-[18px] flex items-center justify-center">
+                  <Compass className="w-6 h-6 text-brand-primary" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Community Discovery</h2>
+                  <p className="text-brand-muted text-sm">Explore islands and archipelagos shared by others.</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-6">
+                  <button 
+                    onClick={() => setDiscoveryTab('islands')}
+                    className={cn(
+                      "text-[10px] uppercase tracking-widest font-black transition-all",
+                      discoveryTab === 'islands' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                    )}
+                  >
+                    Islands
+                  </button>
+                  <button 
+                    onClick={() => setDiscoveryTab('archipelagos')}
+                    className={cn(
+                      "text-[10px] uppercase tracking-widest font-black transition-all",
+                      discoveryTab === 'archipelagos' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                    )}
+                  >
+                    Archipelagos
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative mb-6 group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted group-focus-within:text-brand-primary transition-colors" />
+                <input 
+                  type="text"
+                  value={discoverySearch}
+                  onChange={(e) => setDiscoverySearch(e.target.value)}
+                  placeholder={discoveryTab === 'islands' ? "Search public islands..." : "Search public archipelagos..."}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3 text-sm outline-none focus:border-brand-primary/50 transition-all font-medium"
+                />
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
                 {isDiscovering ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-4">
                     <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
@@ -333,37 +627,35 @@ export default function Dashboard() {
                         <div key={island.id} className="glass p-5 rounded-[24px] border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
-                              <h4 className="font-bold text-lg">{island.name}</h4>
-                              {island.sharedWith?.includes(user?.uid || '') && (
-                                <span className="bg-brand-primary/20 text-brand-primary border border-brand-primary/30 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                  Shared with You
-                                </span>
-                              )}
+                              <h4 className="font-bold text-lg text-white">{island.name}</h4>
+                              <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold">
+                                {island.cards?.length || 0} Cards
+                              </span>
                             </div>
-                            <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
-                              <span className="flex items-center gap-1">
-                                <Download className="w-3 h-3" />
-                                {island.downloads || 0}
-                              </span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span>{island.cards.length} Cards</span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span className="text-brand-primary">@{island.authorName}</span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span className="flex items-center gap-1 opacity-60">
-                                <Calendar className="w-3 h-3" />
-                                {formatDate(island.publishedAt || (island as any).submittedAt)}
-                              </span>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                              <div className="flex items-center gap-2 text-[11px] text-brand-muted">
+                                <Users className="w-3.5 h-3.5" />
+                                <span>{island.authorName || 'Explorer'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-brand-muted">
+                                <Download className="w-3.5 h-3.5" />
+                                <span>{island.downloads || 0} Imports</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-brand-muted">
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span>{formatDate(island.createdAt)}</span>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          
+                          <div className="flex items-center gap-2 shrink-0">
                             {island.authorId === user?.uid && (
                               <>
                                 <button 
                                   onClick={async () => {
-                                    const localIsland = progress?.islands.find(i => i.publishedId === island.id || i.id === island.id);
-                                    if (localIsland) {
-                                      await shareIsland(localIsland);
+                                    const localVersion = progress?.islands.find(i => i.name === island.name);
+                                    if (localVersion) {
+                                      await shareIsland(localVersion);
                                       loadPublicIslands();
                                     } else {
                                       alert("Could not find the local version of this island to update.");
@@ -423,7 +715,7 @@ export default function Dashboard() {
                       <p className="text-sm font-bold tracking-widest uppercase">No islands discovered in these waters.</p>
                     </div>
                   )
-                ) : discoveryTab === 'archipelagos' ? (
+                ) : (
                   publicArchipelagos.length > 0 ? (
                     publicArchipelagos.map(arch => {
                       const isAlreadyImported = progress?.archipelagos?.some(a => a.name === arch.name);
@@ -431,37 +723,35 @@ export default function Dashboard() {
                         <div key={arch.id} className="glass p-5 rounded-[24px] border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
-                              <h4 className="font-bold text-lg">{arch.name}</h4>
-                              {arch.sharedWith?.includes(user?.uid || '') && (
-                                <span className="bg-brand-primary/20 text-brand-primary border border-brand-primary/30 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                  Shared with You
-                                </span>
-                              )}
+                              <h4 className="font-bold text-lg text-white">{arch.name}</h4>
+                              <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold">
+                                {arch.islands?.length || 0} Islands
+                              </span>
                             </div>
-                            <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
-                              <span className="flex items-center gap-1">
-                                <Download className="w-3 h-3" />
-                                {arch.downloads || 0}
-                              </span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span>{arch.islandCount} Islands</span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span className="text-brand-primary">@{arch.authorName}</span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span className="flex items-center gap-1 opacity-60">
-                                <Calendar className="w-3 h-3" />
-                                {formatDate(arch.publishedAt)}
-                              </span>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                              <div className="flex items-center gap-2 text-[11px] text-brand-muted">
+                                <Users className="w-3.5 h-3.5" />
+                                <span>{arch.authorName || 'Explorer'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-brand-muted">
+                                <Download className="w-3.5 h-3.5" />
+                                <span>{arch.downloads || 0} Imports</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-brand-muted">
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span>{formatDate(arch.createdAt)}</span>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          
+                          <div className="flex items-center gap-2 shrink-0">
                             {arch.authorId === user?.uid && (
                               <>
                                 <button 
                                   onClick={async () => {
-                                    const localArch = progress?.archipelagos?.find(a => a.publishedId === arch.id || a.id === arch.id);
-                                    if (localArch) {
-                                      await shareArchipelago(localArch);
+                                    const localVersion = progress?.archipelagos?.find(a => a.name === arch.name);
+                                    if (localVersion) {
+                                      await shareArchipelago(localVersion);
                                       loadPublicArchipelagos();
                                     } else {
                                       alert("Could not find the local version of this archipelago to update.");
@@ -519,57 +809,6 @@ export default function Dashboard() {
                   ) : (
                     <div className="py-20 text-center opacity-40">
                       <p className="text-sm font-bold tracking-widest uppercase">No archipelagos discovered yet.</p>
-                    </div>
-                  )
-                ) : (
-                  discoveryExplorers.length > 0 ? (
-                    discoveryExplorers.map(profile => {
-                      const isFriend = friends.includes(profile.uid);
-                      const isSent = sentRequests.includes(profile.uid);
-                      const isReceived = friendRequests.includes(profile.uid);
-                      const isSelf = profile.uid === user?.uid;
-                      
-                      return (
-                        <div key={profile.uid} className="glass p-5 rounded-[24px] border-white/5 flex items-center justify-between gap-4 group">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full overflow-hidden bg-[#222] border border-white/10 flex items-center justify-center shrink-0">
-                               {profile.photoURL ? (
-                                 <img src={profile.photoURL} alt={profile.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                               ) : (
-                                 <Users className="w-5 h-5 text-brand-muted" />
-                               )}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-lg">{profile.displayName}</h4>
-                              <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
-                                <span>{profile.stats.dailyReviewed} Studied</span>
-                                <span className="w-1 h-1 bg-white/20 rounded-full" />
-                                <span>{profile.stats.dailyStreak} Streak</span>
-                              </div>
-                            </div>
-                          </div>
-                          {!isSelf && (
-                            <button
-                              disabled={isFriend || isSent || isReceived}
-                              onClick={() => sendFriendRequest(profile.uid)}
-                              className={cn(
-                                "flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all",
-                                isFriend || isSent || isReceived
-                                  ? "bg-white/5 text-brand-muted cursor-default"
-                                  : "bg-brand-primary text-white hover:bg-brand-primary/90 shadow-lg active:scale-95"
-                              )}
-                            >
-                              {isFriend ? 'Friends' : isSent ? 'Request Sent' : isReceived ? 'Review Request' : 'Add Friend'}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="py-20 text-center opacity-40">
-                      <p className="text-sm font-bold tracking-widest uppercase">
-                        {discoverySearch.length < 2 ? "Type a name to search for explorers." : "No explorers found matching that name."}
-                      </p>
                     </div>
                   )
                 )}
@@ -948,10 +1187,7 @@ export default function Dashboard() {
               <NotificationsPanel 
                 notifications={notifications} 
                 onClose={() => setIsNotificationsOpen(false)}
-                onSelect={(id) => {
-                  setSelectedIslandId(id);
-                  setIsNotificationsOpen(false);
-                }}
+                onSelect={handleNotificationClick}
               />
             )}
           </AnimatePresence>
@@ -968,12 +1204,24 @@ export default function Dashboard() {
             </div>
           </button>
           <button 
+            onClick={() => setActiveModal('discover')}
+            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+          >
+            <Compass className="w-6 h-6" />
+            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+              Discover
+            </div>
+          </button>
+          <button 
             onClick={() => setActiveModal('users')}
             className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
           >
             <Users className="w-6 h-6" />
+            {friendRequests.length > 0 && (
+              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+            )}
             <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Community
+              Social
             </div>
           </button>
           <button 
@@ -1336,6 +1584,25 @@ export default function Dashboard() {
           <LayoutDashboard className="w-6 h-6" />
         </button>
 
+        {/* Discover */}
+        <button 
+          onClick={() => setActiveModal('discover')} 
+          className={cn("p-2 transition-all relative", activeModal === 'discover' ? "text-brand-primary scale-110" : "text-brand-muted")}
+        >
+          <Compass className="w-6 h-6" />
+        </button>
+
+        {/* Social */}
+        <button 
+          onClick={() => setActiveModal('users')} 
+          className={cn("p-2 transition-all relative", activeModal === 'users' ? "text-white scale-110" : "text-brand-muted")}
+        >
+          <Users className="w-6 h-6" />
+          {friendRequests.length > 0 && (
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+          )}
+        </button>
+
         {/* Stats */}
         <button 
           onClick={() => setActiveModal('stats')} 
@@ -1350,14 +1617,6 @@ export default function Dashboard() {
           className={cn("p-2 transition-all relative", activeModal === 'leaderboard' ? "text-brand-primary scale-110" : "text-brand-muted")}
         >
           <Trophy className="w-6 h-6" />
-        </button>
-
-        {/* Social */}
-        <button 
-          onClick={() => setActiveModal('users')} 
-          className={cn("p-2 transition-all relative", activeModal === 'users' ? "text-white scale-110" : "text-brand-muted")}
-        >
-          <Users className="w-6 h-6" />
         </button>
 
         {/* Mobile Notifications */}
@@ -1380,10 +1639,7 @@ export default function Dashboard() {
               <NotificationsPanel 
                 notifications={notifications} 
                 onClose={() => setIsNotificationsOpen(false)}
-                onSelect={(id) => {
-                  setSelectedIslandId(id);
-                  setIsNotificationsOpen(false);
-                }}
+                onSelect={handleNotificationClick}
                 position="bottom"
               />
             )}
@@ -1726,7 +1982,7 @@ function NotificationsPanel({
           notifications.map((notif) => (
             <button
               key={notif.id}
-              onClick={() => onSelect(notif.islandId)}
+              onClick={() => handleNotificationClick(notif.islandId)}
               className="w-full text-left p-4 rounded-2xl hover:bg-white/5 transition-colors group flex gap-3 items-start"
             >
               <div className={cn(
