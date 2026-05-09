@@ -10,6 +10,7 @@ import NewIslandModal from './NewIslandModal';
 import NewArchipelagoModal from './NewArchipelagoModal';
 import IslandDetail from './IslandDetail';
 import StudySession from './StudySession';
+import ShareModal from './ShareModal';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -291,7 +292,14 @@ export default function Dashboard() {
                       return (
                         <div key={island.id} className="glass p-5 rounded-[24px] border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group">
                           <div className="flex-1">
-                            <h4 className="font-bold text-lg mb-1">{island.name}</h4>
+                            <div className="flex items-center gap-3 mb-1">
+                              <h4 className="font-bold text-lg">{island.name}</h4>
+                              {island.sharedWith?.includes(user?.uid || '') && (
+                                <span className="bg-brand-primary/20 text-brand-primary border border-brand-primary/30 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                  Shared with You
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
                               <span className="flex items-center gap-1">
                                 <Download className="w-3 h-3" />
@@ -382,7 +390,14 @@ export default function Dashboard() {
                       return (
                         <div key={arch.id} className="glass p-5 rounded-[24px] border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group">
                           <div className="flex-1">
-                            <h4 className="font-bold text-lg mb-1">{arch.name}</h4>
+                            <div className="flex items-center gap-3 mb-1">
+                              <h4 className="font-bold text-lg">{arch.name}</h4>
+                              {arch.sharedWith?.includes(user?.uid || '') && (
+                                <span className="bg-brand-primary/20 text-brand-primary border border-brand-primary/30 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                  Shared with You
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
                               <span className="flex items-center gap-1">
                                 <Download className="w-3 h-3" />
@@ -1287,47 +1302,19 @@ export default function Dashboard() {
 
       {/* Share Archipelago Confirmation */}
       <AnimatePresence>
-        {showShareArchipelagoConfirm && selectedArchipelago && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
-              onClick={() => setShowShareArchipelagoConfirm(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md glass p-8 rounded-[40px] border-brand-primary/30 shadow-[0_40px_100px_rgba(0,0,0,0.8)] text-center"
-            >
-              <div className="w-20 h-20 bg-brand-primary/20 rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-xl border border-brand-primary/30">
-                <Globe className="w-10 h-10 text-brand-primary" />
-              </div>
-              <h2 className="text-2xl font-bold mb-3 tracking-tight">Publish Archipelago?</h2>
-              <p className="text-brand-muted text-sm leading-relaxed mb-10 px-4">
-                This will share <span className="text-white font-bold">"{selectedArchipelago.name}"</span> and all its <span className="text-white font-bold">{islandsInArchipelago.length} islands</span> to the public discovery feed. Other explorers will be able to anchor this knowledge.
-              </p>
-              <div className="flex flex-col gap-3">
-                <button 
-                  onClick={async () => {
-                    await shareArchipelago(selectedArchipelago);
-                    setShowShareArchipelagoConfirm(false);
-                  }}
-                  className="w-full py-4 bg-brand-primary text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-transform"
-                >
-                  Confirm & Publish
-                </button>
-                <button 
-                  onClick={() => setShowShareArchipelagoConfirm(false)}
-                  className="w-full py-4 text-brand-muted hover:text-white font-bold text-xs uppercase tracking-widest transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          </div>
+        {selectedArchipelago && (
+          <ShareModal
+            isOpen={showShareArchipelagoConfirm}
+            onClose={() => setShowShareArchipelagoConfirm(false)}
+            title="Publish Archipelago?"
+            description={`This will share "${selectedArchipelago.name}" and all its ${islandsInArchipelago.length} islands. Other explorers will be able to anchor this knowledge.`}
+            onSharePublic={async () => {
+              await shareArchipelago(selectedArchipelago);
+            }}
+            onShareTargeted={async (uids) => {
+              await shareArchipelago(selectedArchipelago, uids);
+            }}
+          />
         )}
       </AnimatePresence>
 

@@ -45,6 +45,7 @@ export interface Archipelago {
   isPublic?: boolean;
   publishedId?: string;
   isImported?: boolean;
+  sharedWith?: string[];
 }
 
 export interface Island {
@@ -61,6 +62,7 @@ export interface Island {
   createdAt?: number;
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
   isImported?: boolean;
+  sharedWith?: string[];
 }
 
 export interface UserStats {
@@ -911,16 +913,18 @@ export function useUserProgress() {
     }
   };
 
-  const shareIsland = async (island: Island) => {
+  const shareIsland = async (island: Island, targetUids?: string[]) => {
     if (!user) return;
 
     try {
+      const isTargeted = targetUids && targetUids.length > 0;
       await updateDoc(doc(db, 'islands', island.id), {
-        isPublic: true,
+        isPublic: !isTargeted,
+        sharedWith: isTargeted ? targetUids : [],
         publishedId: island.publishedId || island.id,
         authorId: user.uid,
         authorName: user.displayName || 'Explorer',
-        approvalStatus: 'pending',
+        approvalStatus: isTargeted ? 'approved' : 'pending',
         submittedAt: serverTimestamp(),
         publishedAt: serverTimestamp(),
       });
@@ -955,12 +959,14 @@ export function useUserProgress() {
     }
   };
 
-  const shareArchipelago = async (archipelago: Archipelago) => {
+  const shareArchipelago = async (archipelago: Archipelago, targetUids?: string[]) => {
     if (!user || !progress) return;
 
     const constituentIslands = progress.islands.filter((entry) => entry.archipelagoId === archipelago.id);
     const targetArchipelagoId = archipelago.publishedId || archipelago.id;
     const publishedArchipelagosRef = doc(db, 'published_archipelagos', targetArchipelagoId);
+
+    const isTargeted = targetUids && targetUids.length > 0;
 
     const publicData = {
       id: targetArchipelagoId,
@@ -972,7 +978,8 @@ export function useUserProgress() {
       })),
       authorId: user.uid,
       authorName: user.displayName || 'Explorer',
-      isPublic: true,
+      isPublic: !isTargeted,
+      sharedWith: isTargeted ? targetUids : [],
       downloads: 0,
       publishedAt: serverTimestamp(),
     };
@@ -1050,8 +1057,21 @@ export function useUserProgress() {
 
   const discoverArchipelagos = async (searchTerm?: string) => {
     try {
-      const snapshot = await getDocs(query(collection(db, 'published_archipelagos'), where('isPublic', '==', true), limit(100)));
-      let results = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }));
+      const publicQuery = query(collection(db, 'published_archipelagos'), where('isPublic', '==', true), limit(100));
+      const targetedQuery = user ? query(collection(db, 'published_archipelagos'), where('sharedWith', 'array-contains', user.uid), limit(100)) : null;
+
+      const [publicSnap, targetedSnap] = await Promise.all([
+        getDocs(publicQuery),
+        targetedQuery ? getDocs(targetedQuery) : Promise.resolve({ docs: [] })
+      ]);
+
+      const mergedMap = new Map();
+      publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+      if (targetedSnap) {
+        targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+      }
+      
+      let results = Array.from(mergedMap.values());
 
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
@@ -1123,8 +1143,21 @@ export function useUserProgress() {
 
   const discoverIslands = async (searchTerm?: string) => {
     try {
-      const snapshot = await getDocs(query(collection(db, 'published_islands'), where('isPublic', '==', true), limit(100)));
-      let results = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) })) as Island[];
+      const publicQuery = query(collection(db, 'published_islands'), where('isPublic', '==', true), limit(100));
+      const targetedQuery = user ? query(collection(db, 'published_islands'), where('sharedWith', 'array-contains', user.uid), limit(100)) : null;
+
+      const [publicSnap, targetedSnap] = await Promise.all([
+        getDocs(publicQuery),
+        targetedQuery ? getDocs(targetedQuery) : Promise.resolve({ docs: [] })
+      ]);
+
+      const mergedMap = new Map();
+      publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+      if (targetedSnap) {
+        targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+      }
+
+      let results = Array.from(mergedMap.values()) as Island[];
 
       if (searchTerm) {
         const term = searchTerm.toLowerCase();

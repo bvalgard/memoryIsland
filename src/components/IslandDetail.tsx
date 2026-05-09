@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Lock,
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
+import ShareModal from './ShareModal';
 
 interface IslandDetailProps {
   island: Island;
@@ -18,7 +19,7 @@ interface IslandDetailProps {
   onAddCards: (cards: Card[]) => void;
   onDeleteIsland?: () => void;
   onStartStudy: (mode: 'all' | 'struggling' | 'learning' | 'mastered') => void;
-  onShare?: (island: Island) => void;
+  onShare?: (island: Island, targetUids?: string[]) => void;
   onUnshare?: (island: Island) => void;
   onUpdateIsland?: (updates: Partial<Island>) => void;
 }
@@ -575,45 +576,20 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     </button>
 
                     <AnimatePresence>
-                      {showShareConfirm && (
-                        <>
-                          <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
-                            onClick={() => setShowShareConfirm(false)}
-                          />
-                          <motion.div 
-                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                            className="absolute top-full left-0 mt-3 w-64 glass p-5 rounded-[24px] border border-white/10 shadow-2xl z-[70]"
-                          >
-                            <p className="text-xs font-bold text-white mb-2">Submit for review?</p>
-                            <p className="text-[10px] text-brand-muted leading-relaxed mb-4">
-                              This island will be submitted to the moderation queue before it appears in community discovery.
-                            </p>
-                            <div className="flex gap-2">
-                              <button 
-                                onClick={() => {
-                                  onShare(island);
-                                  setShowShareConfirm(false);
-                                }}
-                                className="flex-1 bg-brand-primary text-white text-[10px] font-black uppercase tracking-widest py-2 rounded-xl hover:bg-brand-primary/90 transition-colors"
-                              >
-                                Submit
-                              </button>
-                              <button 
-                                onClick={() => setShowShareConfirm(false)}
-                                className="flex-1 bg-white/5 text-brand-muted text-[10px] font-black uppercase tracking-widest py-2 rounded-xl hover:bg-white/10 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </motion.div>
-                        </>
-                      )}
+                    {onShare && (
+                      <ShareModal
+                        isOpen={showShareConfirm}
+                        onClose={() => setShowShareConfirm(false)}
+                        title="Submit for review?"
+                        description="This island will be submitted to the moderation queue before it appears in community discovery."
+                        onSharePublic={() => {
+                          onShare(island);
+                        }}
+                        onShareTargeted={(uids) => {
+                          onShare(island, uids);
+                        }}
+                      />
+                    )}
                     </AnimatePresence>
 
                     <AnimatePresence>
