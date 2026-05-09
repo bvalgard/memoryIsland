@@ -227,8 +227,24 @@ export function useSocial() {
         limit(10)
       );
       const snapshot = await getDocs(q);
+      
+      // If we found results, return them
+      if (!snapshot.empty) {
+        setError(null);
+        return snapshot.docs.map(docSnap => normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+      }
+
+      // FALLBACK: If no results, try a case-sensitive search for older profiles 
+      // that don't have the displayNameLowercase field yet.
+      const qFallback = query(
+        collection(db, 'profiles'),
+        where('displayName', '>=', searchTerm),
+        where('displayName', '<=', searchTerm + '\uf8ff'),
+        limit(10)
+      );
+      const snapshotFallback = await getDocs(qFallback);
       setError(null);
-      return snapshot.docs.map(docSnap => normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+      return snapshotFallback.docs.map(docSnap => normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
     } catch (err: any) {
       console.error("Failed to search users", err);
       setError(err?.code === 'permission-denied'
