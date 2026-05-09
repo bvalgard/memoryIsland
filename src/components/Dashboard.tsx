@@ -181,14 +181,7 @@ export default function Dashboard() {
     }
   }, [activeModal, friendRequests, inboundSharedIslands, inboundSharedArchipelagos]);
 
-  // Mark notifications as seen when bell is opened
-  useEffect(() => {
-    if (isNotificationsOpen && notifications.length > 0) {
-      const newSeen = new Set(seenNotificationIds);
-      notifications.forEach(n => newSeen.add(n.id));
-      if (newSeen.size !== seenNotificationIds.size) setSeenNotificationIds(newSeen);
-    }
-  }, [isNotificationsOpen, notifications]);
+
 
   // Listener for shared content
   useEffect(() => {
@@ -377,6 +370,15 @@ export default function Dashboard() {
     }
     setIsNotificationsOpen(false);
   };
+
+  // Mark notifications as seen when bell is opened
+  useEffect(() => {
+    if (isNotificationsOpen && notifications.length > 0) {
+      const newSeen = new Set(seenNotificationIds);
+      notifications.forEach(n => newSeen.add(n.id));
+      if (newSeen.size !== seenNotificationIds.size) setSeenNotificationIds(newSeen);
+    }
+  }, [isNotificationsOpen, notifications]);
 
   const handleSignOut = () => signOut(auth);
 
