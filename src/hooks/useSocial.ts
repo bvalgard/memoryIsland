@@ -220,31 +220,35 @@ export function useSocial() {
     if (!searchTerm.trim()) return [];
     try {
       const lowerSearch = searchTerm.toLowerCase();
-      const q = query(
-        collection(db, 'profiles'),
-        where('displayNameLowercase', '>=', lowerSearch),
-        where('displayNameLowercase', '<=', lowerSearch + '\uf8ff'),
-        limit(10)
-      );
-      const snapshot = await getDocs(q);
+      const [snap, snapFallback] = await Promise.all([
+        getDocs(query(
+          collection(db, 'profiles'),
+          where('displayNameLowercase', '>=', lowerSearch),
+          where('displayNameLowercase', '<=', lowerSearch + '\uf8ff'),
+          limit(10)
+        )),
+        getDocs(query(
+          collection(db, 'profiles'),
+          where('displayName', '>=', searchTerm),
+          where('displayName', '<=', searchTerm + '\uf8ff'),
+          limit(10)
+        ))
+      ]);
       
-      // If we found results, return them
-      if (!snapshot.empty) {
-        setError(null);
-        return snapshot.docs.map(docSnap => normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
-      }
+      const resultsMap = new Map<string, UserProfile>();
+      
+      snap.docs.forEach(docSnap => {
+        resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+      });
+      
+      snapFallback.docs.forEach(docSnap => {
+        if (!resultsMap.has(docSnap.id)) {
+          resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+        }
+      });
 
-      // FALLBACK: If no results, try a case-sensitive search for older profiles 
-      // that don't have the displayNameLowercase field yet.
-      const qFallback = query(
-        collection(db, 'profiles'),
-        where('displayName', '>=', searchTerm),
-        where('displayName', '<=', searchTerm + '\uf8ff'),
-        limit(10)
-      );
-      const snapshotFallback = await getDocs(qFallback);
       setError(null);
-      return snapshotFallback.docs.map(docSnap => normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+      return Array.from(resultsMap.values());
     } catch (err: any) {
       console.error("Failed to search users", err);
       setError(err?.code === 'permission-denied'
