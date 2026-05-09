@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, MousePointerClick, Database, Zap, Library, XCircle, AlertCircle, Check, X } from 'lucide-react';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { cn } from '../lib/utils';
 
@@ -529,16 +528,6 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     }));
   };
 
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const items = Array.from(shuffledSequence);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    setShuffledSequence(items);
-  };
-
   const handleOptionSelect = (option: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!currentCard || selectedOption !== null) return; // Prevent multiple clicks
@@ -1059,62 +1048,51 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                 ) : currentCard?.type === 'sequencing' ? (
                   <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
                     <form onSubmit={handleSequenceSubmit} className="w-full flex flex-col gap-3">
-                      <DragDropContext onDragEnd={onDragEnd}>
-                        <Droppable droppableId="sequence-droppable">
-                          {(provided) => (
-                            <div 
-                              {...provided.droppableProps} 
-                              ref={provided.innerRef}
-                              className="w-full space-y-2"
+                      <Reorder.Group 
+                        axis="y" 
+                        values={shuffledSequence} 
+                        onReorder={setShuffledSequence}
+                        className="w-full space-y-2"
+                      >
+                        {shuffledSequence.map((item, idx) => {
+                          let btnClass = "bg-white/5 border border-white/10 text-white";
+                          let icon = null;
+
+                          if (isFlipped) {
+                            const correctOpt = currentCard.options![idx];
+                            if (item.text === correctOpt) {
+                              btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
+                              icon = <CheckCircle2 className="w-5 h-5" />;
+                            } else {
+                              btnClass = "bg-red-500/20 border-red-500/50 text-red-500";
+                              icon = <XCircle className="w-5 h-5" />;
+                            }
+                          }
+
+                          return (
+                            <Reorder.Item 
+                              key={item.id} 
+                              value={item}
+                              dragListener={!isFlipped}
+                              className={cn(
+                                "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed shrink-0 flex items-center gap-3",
+                                btnClass,
+                                !isFlipped && "cursor-grab active:cursor-grabbing hover:bg-white/10"
+                              )}
                             >
-                              {shuffledSequence.map((item, idx) => {
-                                let btnClass = "bg-white/5 border border-white/10 text-white";
-                                let icon = null;
-
-                                if (isFlipped) {
-                                  const correctOpt = currentCard.options![idx];
-                                  if (item.text === correctOpt) {
-                                    btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
-                                    icon = <CheckCircle2 className="w-5 h-5" />;
-                                  } else {
-                                    btnClass = "bg-red-500/20 border-red-500/50 text-red-500";
-                                    icon = <XCircle className="w-5 h-5" />;
-                                  }
-                                }
-
-                                return (
-                                  // @ts-expect-error - Draggable Props typings issue in React 18
-                                  <Draggable key={item.id} draggableId={item.id} index={idx} isDragDisabled={isFlipped}>
-                                    {(provided, snapshot) => (
-                                      <div
-                                        ref={provided.innerRef}
-                                        {...provided.draggableProps}
-                                        {...provided.dragHandleProps}
-                                        className={cn(
-                                          "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed shrink-0 flex items-center gap-3",
-                                          btnClass,
-                                          snapshot.isDragging ? "shadow-[0_20px_40px_rgba(0,0,0,0.4)] border-brand-primary/50" : ""
-                                        )}
-                                      >
-                                        <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-                                          {idx + 1}
-                                        </div>
-                                        <span className="flex-1">{item.text}</span>
-                                        {icon && (
-                                          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                            {icon}
-                                          </motion.div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </Draggable>
-                                );
-                              })}
-                              {provided.placeholder}
-                            </div>
-                          )}
-                        </Droppable>
-                      </DragDropContext>
+                              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0 pointer-events-none">
+                                {idx + 1}
+                              </div>
+                              <span className="flex-1 pointer-events-none">{item.text}</span>
+                              {icon && (
+                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+                                  {icon}
+                                </motion.div>
+                              )}
+                            </Reorder.Item>
+                          );
+                        })}
+                      </Reorder.Group>
                       {!isFlipped && (
                         <button type="submit" className="w-full mt-4 bg-brand-primary hover:bg-white text-black py-4 rounded-xl text-sm font-bold transition-colors">
                           Submit Sequence
