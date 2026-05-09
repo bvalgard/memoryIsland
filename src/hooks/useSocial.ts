@@ -220,7 +220,7 @@ export function useSocial() {
     if (!searchTerm.trim()) return [];
     try {
       const lowerSearch = searchTerm.toLowerCase();
-      const [snap, snapFallback] = await Promise.all([
+      const [snap, snapFallback, snapUsers] = await Promise.all([
         getDocs(query(
           collection(db, 'profiles'),
           where('displayNameLowercase', '>=', lowerSearch),
@@ -232,16 +232,30 @@ export function useSocial() {
           where('displayName', '>=', searchTerm),
           where('displayName', '<=', searchTerm + '\uf8ff'),
           limit(10)
+        )),
+        getDocs(query(
+          collection(db, 'users'),
+          where('displayName', '>=', searchTerm),
+          where('displayName', '<=', searchTerm + '\uf8ff'),
+          limit(10)
         ))
       ]);
       
       const resultsMap = new Map<string, UserProfile>();
       
+      // Process profiles first (higher priority / richer data)
       snap.docs.forEach(docSnap => {
         resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
       });
       
       snapFallback.docs.forEach(docSnap => {
+        if (!resultsMap.has(docSnap.id)) {
+          resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+        }
+      });
+
+      // Fallback to legacy users collection for accounts that haven't been "upgraded" to profiles yet
+      snapUsers.docs.forEach(docSnap => {
         if (!resultsMap.has(docSnap.id)) {
           resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
         }
