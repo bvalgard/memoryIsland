@@ -918,20 +918,38 @@ export function useUserProgress() {
   const shareIsland = async (island: Island, targetUids?: string[]) => {
     if (!user) return;
 
+    const isTargeted = targetUids && targetUids.length > 0;
+    const publishedId = island.publishedId || island.id;
+    const publishedRef = doc(db, 'published_islands', publishedId);
+
+    const publicData = {
+      id: publishedId,
+      name: island.name,
+      cards: island.cards.map(card => sanitizeCardForPublic(card)),
+      authorId: user.uid,
+      authorName: user.displayName || 'Explorer',
+      isPublic: !isTargeted,
+      sharedWith: isTargeted ? targetUids : [],
+      downloads: island.downloads || 0,
+      publishedAt: serverTimestamp(),
+    };
+
     try {
-      const isTargeted = targetUids && targetUids.length > 0;
+      // 1. Create/Update the community version
+      await setDoc(publishedRef, publicData);
+      
+      // 2. Update the local document to reflect sharing state
       await updateDoc(doc(db, 'islands', island.id), {
         isPublic: !isTargeted,
         sharedWith: isTargeted ? targetUids : [],
-        publishedId: island.publishedId || island.id,
+        publishedId: publishedId,
         authorId: user.uid,
         authorName: user.displayName || 'Explorer',
         approvalStatus: isTargeted ? 'approved' : 'pending',
         submittedAt: serverTimestamp(),
-        publishedAt: serverTimestamp(),
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `islands/${island.id}`);
+      handleFirestoreError(error, OperationType.WRITE, `published_islands/${publishedId}`);
     }
   };
 

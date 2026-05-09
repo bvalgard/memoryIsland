@@ -96,50 +96,82 @@ export default function Dashboard() {
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const [publicIslands, setPublicIslands] = useState<Island[]>([]);
   const [publicArchipelagos, setPublicArchipelagos] = useState<any[]>([]);
+  const [inboundSharedIslands, setInboundSharedIslands] = useState<any[]>([]);
+  const [inboundSharedArchipelagos, setInboundSharedArchipelagos] = useState<any[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
 
   useEffect(() => {
+    // Load inbound requests profiles (for notifications)
+    const loadRequests = async () => {
+      if (friendRequests.length > 0) {
+        const profiles = await fetchProfilesByUids(friendRequests);
+        setDiscoveryInboundRequests(profiles);
+      } else {
+        setDiscoveryInboundRequests([]);
+      }
+    };
+    loadRequests();
+  }, [friendRequests]);
+
+  useEffect(() => {
+    // Load current friends profiles
+    const loadFriends = async () => {
+      if (friends.length > 0) {
+        setIsLoadingFriends(true);
+        const profiles = await fetchProfilesByUids(friends);
+        setDiscoveryFriends(profiles);
+        setIsLoadingFriends(false);
+      } else {
+        setDiscoveryFriends([]);
+      }
+    };
     if (activeModal === 'users') {
-      // Default to explorers if no tab set
+      loadFriends();
+    }
+  }, [activeModal, friends]);
+
+  useEffect(() => {
+    if (activeModal === 'users') {
       if (discoveryTab !== 'explorers' && discoveryTab !== 'archipelagos' && discoveryTab !== 'islands') {
         setDiscoveryTab('explorers');
       }
-
-      // Load pending requests
-      const loadRequests = async () => {
-        if (friendRequests.length > 0) {
-          setIsLoadingRequests(true);
-          const profiles = await fetchProfilesByUids(friendRequests);
-          setDiscoveryInboundRequests(profiles);
-          setIsLoadingRequests(false);
-        } else {
-          setDiscoveryInboundRequests([]);
-        }
-      };
-
-      // Load current friends
-      const loadFriends = async () => {
-        if (friends.length > 0) {
-          setIsLoadingFriends(true);
-          const profiles = await fetchProfilesByUids(friends);
-          setDiscoveryFriends(profiles);
-          setIsLoadingFriends(false);
-        } else {
-          setDiscoveryFriends([]);
-        }
-      };
-
-      loadRequests();
-      loadFriends();
     } else if (activeModal === 'discover') {
       if (discoveryTab !== 'islands' && discoveryTab !== 'archipelagos') {
         setDiscoveryTab('islands');
       }
     }
-  }, [activeModal, friendRequests, friends]);
+  }, [activeModal]);
+
+  // Listener for shared content
+  useEffect(() => {
+    if (!user) return;
+
+    const islandQuery = query(
+      collection(db, 'published_islands'), 
+      where('sharedWith', 'array-contains', user.uid),
+      limit(20)
+    );
+    const archQuery = query(
+      collection(db, 'published_archipelagos'), 
+      where('sharedWith', 'array-contains', user.uid),
+      limit(20)
+    );
+
+    const unsubIslands = onSnapshot(islandQuery, (snap) => {
+      setInboundSharedIslands(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubArchs = onSnapshot(archQuery, (snap) => {
+      setInboundSharedArchipelagos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => {
+      unsubIslands();
+      unsubArchs();
+    };
+  }, [user]);
 
   useEffect(() => {
     if (activeModal === 'discover' || activeModal === 'users') {
@@ -252,13 +284,40 @@ export default function Dashboard() {
     type: 'info' as const
   }));
 
-  const notifications = [...memoryNotifications, ...friendRequestNotifications];
+  const islandShareNotifications = inboundSharedIslands.map(island => ({
+    id: `share_island_${island.id}`,
+    islandId: 'discover_islands',
+    title: "Island Shared",
+    message: `${island.authorName} shared the island "${island.name}" with you.`,
+    type: 'info' as const
+  }));
+
+  const archipelagoShareNotifications = inboundSharedArchipelagos.map(arch => ({
+    id: `share_arch_${arch.id}`,
+    islandId: 'discover_archipelagos',
+    title: "Archipelago Shared",
+    message: `${arch.authorName} shared the archipelago "${arch.name}" with you.`,
+    type: 'info' as const
+  }));
+
+  const notifications = [
+    ...memoryNotifications, 
+    ...friendRequestNotifications,
+    ...islandShareNotifications,
+    ...archipelagoShareNotifications
+  ];
   const unreadCount = notifications.length;
 
   const handleNotificationClick = (islandId: string) => {
     if (islandId === 'social') {
       setActiveModal('users');
       setDiscoveryTab('islands'); // This maps to the "Friend Requests" tab in our new Social modal
+    } else if (islandId === 'discover_islands') {
+      setActiveModal('discover');
+      setDiscoveryTab('islands');
+    } else if (islandId === 'discover_archipelagos') {
+      setActiveModal('discover');
+      setDiscoveryTab('archipelagos');
     } else {
       setSelectedIslandId(islandId);
     }
@@ -1205,9 +1264,15 @@ export default function Dashboard() {
           </button>
           <button 
             onClick={() => setActiveModal('discover')}
-            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+            className={cn(
+              "relative group transition-all flex items-center justify-center",
+              activeModal === 'discover' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+            )}
           >
             <Compass className="w-6 h-6" />
+            {(inboundSharedIslands.length > 0 || inboundSharedArchipelagos.length > 0) && (
+              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+            )}
             <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
               Discover
             </div>
@@ -1590,6 +1655,9 @@ export default function Dashboard() {
           className={cn("p-2 transition-all relative", activeModal === 'discover' ? "text-brand-primary scale-110" : "text-brand-muted")}
         >
           <Compass className="w-6 h-6" />
+          {(inboundSharedIslands.length > 0 || inboundSharedArchipelagos.length > 0) && (
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+          )}
         </button>
 
         {/* Social */}
