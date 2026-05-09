@@ -49,8 +49,8 @@ export default function Auth() {
     } catch (error: any) {
       console.error('Email auth error:', error);
       let message = 'An error occurred during authentication.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        message = 'Invalid email or password.';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        message = 'Invalid email or password. If you are new, please use Sign Up.';
       } else if (error.code === 'auth/email-already-in-use') {
         message = 'This email is already registered.';
       } else if (error.code === 'auth/weak-password') {
@@ -253,17 +253,23 @@ export default function Auth() {
                   </motion.button>
                 </form>
 
-                <div className="mt-6 text-center">
+                <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                  <p className="text-xs text-brand-muted mb-3">
+                    {mode === 'email-signin' 
+                      ? "New to Memory Island?" 
+                      : "Already have an account?"}
+                  </p>
                   <button 
+                    type="button"
                     onClick={() => {
                       setMode(mode === 'email-signin' ? 'email-signup' : 'email-signin');
                       setError(null);
                     }}
-                    className="text-xs text-brand-muted hover:text-white transition-colors"
+                    className="text-sm font-bold text-brand-primary hover:text-brand-primary/80 transition-all hover:scale-105 active:scale-95"
                   >
                     {mode === 'email-signin' 
-                      ? "Don't have an account? Sign Up" 
-                      : "Already have an account? Sign In"}
+                      ? "Create an explorer account" 
+                      : "Sign in to your account"}
                   </button>
                 </div>
               </motion.div>

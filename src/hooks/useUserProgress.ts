@@ -451,6 +451,22 @@ export function useUserProgress() {
           }
         }
 
+        // Sync displayName if it changed or was missing (fixes race condition in email signups)
+        if (user.displayName && data.displayName !== user.displayName) {
+          try {
+            const profileRef = doc(db, 'profiles', user.uid);
+            await Promise.all([
+              updateDoc(userRef, { displayName: user.displayName }),
+              setDoc(profileRef, { 
+                displayName: user.displayName,
+                displayNameLowercase: user.displayName.toLowerCase()
+              }, { merge: true })
+            ]);
+          } catch (error) {
+            console.warn('Silent sync of displayName failed:', error);
+          }
+        }
+
         setUserData(data);
         setUserLoaded(true);
       },
