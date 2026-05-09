@@ -22,25 +22,35 @@ export default function ShareModal({
   onSharePublic,
   onShareTargeted
 }: ShareModalProps) {
-  const { profiles, following, loadLeaderboard } = useSocial();
+  const { friends, fetchProfilesByUids } = useSocial();
   const [tab, setTab] = useState<'public' | 'targeted'>('public');
   const [selectedUids, setSelectedUids] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [friendProfiles, setFriendProfiles] = useState<UserProfile[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const currentUser = auth.currentUser;
 
   useEffect(() => {
     if (isOpen) {
-      loadLeaderboard();
       setSelectedUids(new Set());
       setTab('public');
       setIsSubmitting(false);
+      
+      const load = async () => {
+        setIsLoadingFriends(true);
+        const profiles = await fetchProfilesByUids(friends);
+        setFriendProfiles(profiles);
+        setIsLoadingFriends(false);
+      };
+      if (friends.length > 0) {
+        load();
+      } else {
+        setFriendProfiles([]);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, friends]);
 
   if (!isOpen) return null;
-
-  // We rely on profiles loaded from leaderboard, matching existing app behavior
-  const followingProfiles = profiles.filter(p => following.includes(p.uid));
 
   const toggleUser = (uid: string) => {
     const next = new Set(selectedUids);
@@ -129,13 +139,17 @@ export default function ShareModal({
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-widest text-brand-muted mb-3 px-2">Select Followers</p>
-              {followingProfiles.length === 0 ? (
+              <p className="text-xs font-bold uppercase tracking-widest text-brand-muted mb-3 px-2">Select Friends</p>
+              {isLoadingFriends ? (
                 <div className="text-center py-6 text-brand-muted text-sm">
-                  You aren't following anyone yet, or they don't have enough score to appear. Add friends via the Social tab.
+                  Loading friends...
+                </div>
+              ) : friendProfiles.length === 0 ? (
+                <div className="text-center py-6 text-brand-muted text-sm">
+                  You haven't added any friends yet. Add friends via the Community tab.
                 </div>
               ) : (
-                followingProfiles.map(profile => {
+                friendProfiles.map(profile => {
                   const isSelected = selectedUids.has(profile.uid);
                   return (
                     <div 

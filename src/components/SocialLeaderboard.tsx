@@ -1,44 +1,60 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Users, Search, UserPlus, UserCheck, X } from 'lucide-react';
+import { Trophy, Users, UserPlus, UserCheck, UserMinus, X, Check, Clock } from 'lucide-react';
 import { useSocial, UserProfile } from '../hooks/useSocial';
 import { cn } from '../lib/utils';
 import { auth } from '../firebase';
 
 export default function SocialLeaderboard({ onClose }: { onClose: () => void }) {
-  const { profiles, following, loading, error, loadLeaderboard, followUser, unfollowUser, searchUsers } = useSocial();
-  const [tab, setTab] = useState<'leaderboard' | 'friends' | 'search'>('leaderboard');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-  const [searching, setSearching] = useState(false);
+  const { 
+    profiles, 
+    friends, 
+    friendRequests, 
+    sentRequests, 
+    loading, 
+    error, 
+    loadLeaderboard, 
+    fetchProfilesByUids,
+    sendFriendRequest, 
+    acceptFriendRequest, 
+    removeFriend 
+  } = useSocial();
+  
+  const [tab, setTab] = useState<'leaderboard' | 'friends' | 'requests'>('leaderboard');
+  const [friendsData, setFriendsData] = useState<UserProfile[]>([]);
+  const [requestsData, setRequestsData] = useState<UserProfile[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
   
   const currentUser = auth.currentUser;
 
   useEffect(() => {
-    if (tab === 'leaderboard' || tab === 'friends') {
+    if (tab === 'leaderboard') {
       loadLeaderboard();
+    } else if (tab === 'friends') {
+      const load = async () => {
+        setLoadingData(true);
+        const data = await fetchProfilesByUids(friends);
+        setFriendsData(data.sort((a, b) => b.stats.dailyReviewed - a.stats.dailyReviewed));
+        setLoadingData(false);
+      };
+      load();
+    } else if (tab === 'requests') {
+      const load = async () => {
+        setLoadingData(true);
+        const data = await fetchProfilesByUids(friendRequests);
+        setRequestsData(data);
+        setLoadingData(false);
+      };
+      load();
     }
-  }, [tab]);
+  }, [tab, friends.length, friendRequests.length]); // re-run if arrays change length
 
-  useEffect(() => {
-    const doSearch = async () => {
-      if (searchQuery.length < 2) {
-        setSearchResults([]);
-        return;
-      }
-      setSearching(true);
-      const results = await searchUsers(searchQuery);
-      setSearchResults(results);
-      setSearching(false);
-    };
-    
-    const timeoutId = setTimeout(doSearch, 500);
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
-
-  const displayedProfiles = tab === 'friends' 
-    ? profiles.filter(p => following.includes(p.uid) || p.uid === currentUser?.uid).sort((a, b) => b.stats.dailyReviewed - a.stats.dailyReviewed)
-    : profiles;
+  const getRelationship = (uid: string) => {
+    if (friends.includes(uid)) return 'friend';
+    if (sentRequests.includes(uid)) return 'sent';
+    if (friendRequests.includes(uid)) return 'received';
+    return 'none';
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -67,8 +83,8 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
             <Trophy className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-xl font-medium text-white">Competitions</h2>
-            <p className="text-sm text-brand-muted">See how you rank against peers.</p>
+            <h2 className="text-xl font-medium text-white">Achievements</h2>
+            <p className="text-sm text-brand-muted">See how you rank and manage friends.</p>
           </div>
         </div>
 
@@ -89,92 +105,96 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
               tab === 'friends' ? "bg-white/10 text-white" : "text-brand-muted hover:text-white hover:bg-white/5"
             )}
           >
-            Following
+            Friends
           </button>
           <button
-            onClick={() => setTab('search')}
+            onClick={() => setTab('requests')}
             className={cn(
-              "px-4 py-2 rounded-xl text-sm font-medium transition-all w-32",
-              tab === 'search' ? "bg-white/10 text-white" : "text-brand-muted hover:text-white hover:bg-white/5"
+              "px-4 py-2 rounded-xl text-sm font-medium transition-all w-32 relative",
+              tab === 'requests' ? "bg-white/10 text-white" : "text-brand-muted hover:text-white hover:bg-white/5"
             )}
           >
-            Search
+            Requests
+            {friendRequests.length > 0 && (
+              <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-brand-primary" />
+            )}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-          {tab === 'search' && (
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" />
-                <input
-                  type="text"
-                  placeholder="Ask for their display name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white placeholder-white/30 focus:outline-none focus:border-brand-primary transition-colors"
-                />
-              </div>
-            </div>
-          )}
-
           {error ? (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-5 text-sm text-red-100">
-              <p className="font-medium">Social data couldn&apos;t load.</p>
+              <p className="font-medium">Social data couldn't load.</p>
               <p className="mt-1 text-red-100/80">{error}</p>
             </div>
-          ) : tab === 'search' ? (
-            <div className="space-y-3">
-              {searching ? (
-                <div className="text-center text-brand-muted py-8">Searching...</div>
-              ) : searchResults.length > 0 ? (
-                searchResults.map(profile => (
-                  <ProfileCard 
-                    key={profile.uid} 
-                    profile={profile} 
-                    isFollowing={following.includes(profile.uid)}
-                    isSelf={profile.uid === currentUser?.uid}
-                    onFollow={() => followUser(profile.uid)}
-                    onUnfollow={() => unfollowUser(profile.uid)}
-                  />
-                ))
-              ) : searchQuery.length >= 2 ? (
-                <div className="text-center text-brand-muted py-8">No users found.</div>
-              ) : (
-                <div className="text-center text-brand-muted py-8">Search for a username to add friends.</div>
-              )}
-            </div>
-          ) : loading ? (
-            <div className="text-center text-brand-muted py-8">Updating scores...</div>
-          ) : displayedProfiles.length > 0 ? (
-            displayedProfiles.map((profile, i) => (
-              <ProfileCard 
-                key={profile.uid} 
-                profile={profile} 
-                rank={i + 1}
-                isFollowing={following.includes(profile.uid)}
-                isSelf={profile.uid === currentUser?.uid}
-                onFollow={() => followUser(profile.uid)}
-                onUnfollow={() => unfollowUser(profile.uid)}
-              />
-            ))
-          ) : (
-             <div className="text-center text-brand-muted py-8">No ranks to display yet.</div>
-          )}
+          ) : (loading || loadingData) ? (
+            <div className="text-center text-brand-muted py-8">Loading profiles...</div>
+          ) : tab === 'leaderboard' ? (
+            profiles.length > 0 ? (
+              profiles.map((profile, i) => (
+                <ProfileCard 
+                  key={profile.uid} 
+                  profile={profile} 
+                  rank={i + 1}
+                  isSelf={profile.uid === currentUser?.uid}
+                  relationship={getRelationship(profile.uid)}
+                  onAdd={() => sendFriendRequest(profile.uid)}
+                  onRemove={() => removeFriend(profile.uid)}
+                  onAccept={() => acceptFriendRequest(profile.uid)}
+                />
+              ))
+            ) : <div className="text-center text-brand-muted py-8">No ranks to display yet.</div>
+          ) : tab === 'friends' ? (
+            friendsData.length > 0 ? (
+              friendsData.map((profile) => (
+                <ProfileCard 
+                  key={profile.uid} 
+                  profile={profile} 
+                  isSelf={profile.uid === currentUser?.uid}
+                  relationship="friend"
+                  onAdd={() => {}}
+                  onRemove={() => removeFriend(profile.uid)}
+                  onAccept={() => {}}
+                />
+              ))
+            ) : <div className="text-center text-brand-muted py-8">You haven't added any friends yet.</div>
+          ) : tab === 'requests' ? (
+            requestsData.length > 0 ? (
+              requestsData.map((profile) => (
+                <ProfileCard 
+                  key={profile.uid} 
+                  profile={profile} 
+                  isSelf={profile.uid === currentUser?.uid}
+                  relationship="received"
+                  onAdd={() => {}}
+                  onRemove={() => removeFriend(profile.uid)} // rejecting is same as removeFriend
+                  onAccept={() => acceptFriendRequest(profile.uid)}
+                />
+              ))
+            ) : <div className="text-center text-brand-muted py-8">No pending friend requests.</div>
+          ) : null}
         </div>
       </motion.div>
     </div>
   );
 }
 
-function ProfileCard({ profile, rank, isFollowing, isSelf, onFollow, onUnfollow }: { 
-  key?: string | number;
+function ProfileCard({ 
+  profile, 
+  rank, 
+  isSelf, 
+  relationship,
+  onAdd,
+  onRemove,
+  onAccept
+}: { 
   profile: UserProfile; 
   rank?: number; 
-  isFollowing: boolean;
   isSelf: boolean;
-  onFollow: () => void;
-  onUnfollow: () => void;
+  relationship: 'none' | 'friend' | 'sent' | 'received';
+  onAdd: () => void;
+  onRemove: () => void;
+  onAccept: () => void;
 }) {
   return (
     <div className={cn(
@@ -218,17 +238,53 @@ function ProfileCard({ profile, rank, isFollowing, isSelf, onFollow, onUnfollow 
       </div>
 
       {!isSelf && (
-        <button
-          onClick={isFollowing ? onUnfollow : onFollow}
-          className={cn(
-            "p-2 rounded-xl transition-all",
-            isFollowing 
-              ? "bg-white/5 text-white hover:bg-white/10 hover:text-red-400" 
-              : "bg-brand-primary text-white hover:bg-brand-primary/90"
+        <div className="flex items-center gap-2">
+          {relationship === 'none' && (
+            <button
+              onClick={onAdd}
+              className="p-2 rounded-xl bg-brand-primary text-white hover:bg-brand-primary/90 transition-all"
+              title="Add Friend"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
           )}
-        >
-          {isFollowing ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-        </button>
+          {relationship === 'sent' && (
+            <button
+              onClick={onRemove}
+              className="p-2 rounded-xl bg-white/5 text-brand-muted hover:text-white hover:bg-white/10 transition-all"
+              title="Cancel Request"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
+          )}
+          {relationship === 'friend' && (
+            <button
+              onClick={onRemove}
+              className="p-2 rounded-xl bg-white/5 text-brand-primary hover:bg-red-500/20 hover:text-red-400 transition-all"
+              title="Remove Friend"
+            >
+              <UserCheck className="w-4 h-4" />
+            </button>
+          )}
+          {relationship === 'received' && (
+            <>
+              <button
+                onClick={onAccept}
+                className="p-2 rounded-xl bg-brand-primary text-white hover:bg-brand-primary/90 transition-all"
+                title="Accept Request"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onRemove}
+                className="p-2 rounded-xl bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white transition-all"
+                title="Reject Request"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
