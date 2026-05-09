@@ -311,7 +311,8 @@ export default function Dashboard() {
       islandId: island.id,
       title: "Retention Warning",
       message: `Your retention for "${island.name}" is dropping (${Math.round(island.color_score || 0)}%). Time for a review?`,
-      type: island.color_score < 40 ? 'error' as const : 'warning' as const
+      type: island.color_score < 40 ? 'error' as const : 'warning' as const,
+      timestamp: island.updatedAt || Date.now()
     }));
 
   const friendRequestNotifications = (discoveryInboundRequests || []).map(profile => ({
@@ -319,7 +320,8 @@ export default function Dashboard() {
     islandId: 'social', // Special key to trigger social modal
     title: "Friend Request",
     message: `${profile.displayName} wants to be your explorer friend.`,
-    type: 'info' as const
+    type: 'info' as const,
+    timestamp: Date.now() // Profiles don't have request timestamp, but this ensures they appear near top
   }));
 
   const islandShareNotifications = inboundSharedIslands.map(island => ({
@@ -327,7 +329,8 @@ export default function Dashboard() {
     islandId: `share_island:${island.name}`,
     title: "Island Shared",
     message: `${island.authorName} shared the island "${island.name}" with you.`,
-    type: 'info' as const
+    type: 'info' as const,
+    timestamp: island.publishedAt?.toMillis ? island.publishedAt.toMillis() : (island.createdAt || Date.now())
   }));
 
   const archipelagoShareNotifications = inboundSharedArchipelagos.map(arch => ({
@@ -335,7 +338,8 @@ export default function Dashboard() {
     islandId: `share_arch:${arch.name}`,
     title: "Archipelago Shared",
     message: `${arch.authorName} shared the archipelago "${arch.name}" with you.`,
-    type: 'info' as const
+    type: 'info' as const,
+    timestamp: arch.publishedAt?.toMillis ? arch.publishedAt.toMillis() : (arch.createdAt || Date.now())
   }));
 
   const notifications = [
@@ -343,7 +347,7 @@ export default function Dashboard() {
     ...friendRequestNotifications,
     ...islandShareNotifications,
     ...archipelagoShareNotifications
-  ];
+  ].sort((a, b) => b.timestamp - a.timestamp);
   const unreadCount = notifications.filter(n => !seenNotificationIds.has(n.id)).length;
   const unreadSocialCount = friendRequests.filter(uid => !seenSocialIds.has(uid)).length;
   const unreadDiscoverCount = [
@@ -2106,7 +2110,7 @@ function NotificationsPanel({
           notifications.map((notif) => (
             <button
               key={notif.id}
-              onClick={() => handleNotificationClick(notif.islandId)}
+              onClick={() => onSelect(notif.islandId)}
               className="w-full text-left p-4 rounded-2xl hover:bg-white/5 transition-colors group flex gap-3 items-start"
             >
               <div className={cn(
