@@ -360,6 +360,7 @@ export function useUserProgress() {
               {
                 uid: user.uid,
                 displayName: user.displayName || 'Explorer',
+                displayNameLowercase: (user.displayName || 'Explorer').toLowerCase(),
                 photoURL: user.photoURL || null,
                 stats: defaultStats,
                 lastActive: serverTimestamp(),
@@ -561,6 +562,7 @@ export function useUserProgress() {
         {
           uid: user.uid,
           displayName: user.displayName || 'Explorer',
+          displayNameLowercase: (user.displayName || 'Explorer').toLowerCase(),
           photoURL: user.photoURL || null,
           stats: mergedStats,
           lastActive: serverTimestamp(),

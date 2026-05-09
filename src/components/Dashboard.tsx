@@ -86,7 +86,7 @@ export default function Dashboard() {
   }, [selectedArchipelagoId]);
 
   // Discovery State
-  const { searchUsers, sendFriendRequest, friends, sentRequests, friendRequests } = useSocial();
+  const { searchUsers, sendFriendRequest, friends, sentRequests, friendRequests, error: socialError } = useSocial();
   const [discoverySearch, setDiscoverySearch] = useState('');
   const [discoveryTab, setDiscoveryTab] = useState<'islands' | 'archipelagos' | 'explorers'>('islands');
   const [discoveryExplorers, setDiscoveryExplorers] = useState<any[]>([]);
@@ -110,9 +110,12 @@ export default function Dashboard() {
             return;
           }
           setIsDiscovering(true);
-          const explorers = await searchUsers(discoverySearch);
-          setDiscoveryExplorers(explorers);
-          setIsDiscovering(false);
+          try {
+            const explorers = await searchUsers(discoverySearch);
+            setDiscoveryExplorers(explorers);
+          } finally {
+            setIsDiscovering(false);
+          }
         };
         const timeoutId = setTimeout(loadExplorers, 500);
         return () => clearTimeout(timeoutId);
@@ -133,16 +136,22 @@ export default function Dashboard() {
 
   const loadPublicIslands = async () => {
     setIsDiscovering(true);
-    const islands = await discoverIslands(discoverySearch);
-    setPublicIslands(islands);
-    setIsDiscovering(false);
+    try {
+      const islands = await discoverIslands(discoverySearch);
+      setPublicIslands(islands);
+    } finally {
+      setIsDiscovering(false);
+    }
   };
 
   const loadPublicArchipelagos = async () => {
     setIsDiscovering(true);
-    const archipelagos = await discoverArchipelagos(discoverySearch);
-    setPublicArchipelagos(archipelagos);
-    setIsDiscovering(false);
+    try {
+      const archipelagos = await discoverArchipelagos(discoverySearch);
+      setPublicArchipelagos(archipelagos);
+    } finally {
+      setIsDiscovering(false);
+    }
   };
 
   // Exclude imported (anchored from community) islands from the main view and study
@@ -305,6 +314,12 @@ export default function Dashboard() {
               </div>
 
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                {socialError && (
+                  <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 text-xs flex items-center gap-3">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {socialError}
+                  </div>
+                )}
                 {isDiscovering ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-4">
                     <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
@@ -553,7 +568,7 @@ export default function Dashboard() {
                   ) : (
                     <div className="py-20 text-center opacity-40">
                       <p className="text-sm font-bold tracking-widest uppercase">
-                        {discoverySearch.length < 2 ? "Type a name to search for explorers." : "No explorers found."}
+                        {discoverySearch.length < 2 ? "Type a name to search for explorers." : "No explorers found matching that name."}
                       </p>
                     </div>
                   )

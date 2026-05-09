@@ -219,10 +219,11 @@ export function useSocial() {
   const searchUsers = async (searchTerm: string) => {
     if (!searchTerm.trim()) return [];
     try {
+      const lowerSearch = searchTerm.toLowerCase();
       const q = query(
         collection(db, 'profiles'),
-        where('displayName', '>=', searchTerm),
-        where('displayName', '<=', searchTerm + '\uf8ff'),
+        where('displayNameLowercase', '>=', lowerSearch),
+        where('displayNameLowercase', '<=', lowerSearch + '\uf8ff'),
         limit(10)
       );
       const snapshot = await getDocs(q);
