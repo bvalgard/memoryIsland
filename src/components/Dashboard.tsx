@@ -104,6 +104,32 @@ export default function Dashboard() {
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
 
+  // Persistence for "Read" state of badges
+  const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(new Set());
+  const [seenSocialIds, setSeenSocialIds] = useState<Set<string>>(new Set());
+  const [seenDiscoverIds, setSeenDiscoverIds] = useState<Set<string>>(new Set());
+
+  // Load seen IDs from localStorage
+  useEffect(() => {
+    const savedNotifs = localStorage.getItem('seen_notifs');
+    const savedSocial = localStorage.getItem('seen_social');
+    const savedDiscover = localStorage.getItem('seen_discover');
+    if (savedNotifs) setSeenNotificationIds(new Set(JSON.parse(savedNotifs)));
+    if (savedSocial) setSeenSocialIds(new Set(JSON.parse(savedSocial)));
+    if (savedDiscover) setSeenDiscoverIds(new Set(JSON.parse(savedDiscover)));
+  }, []);
+
+  // Update localStorage when seen IDs change
+  useEffect(() => {
+    localStorage.setItem('seen_notifs', JSON.stringify(Array.from(seenNotificationIds)));
+  }, [seenNotificationIds]);
+  useEffect(() => {
+    localStorage.setItem('seen_social', JSON.stringify(Array.from(seenSocialIds)));
+  }, [seenSocialIds]);
+  useEffect(() => {
+    localStorage.setItem('seen_discover', JSON.stringify(Array.from(seenDiscoverIds)));
+  }, [seenDiscoverIds]);
+
   useEffect(() => {
     // Load inbound requests profiles (for notifications)
     const loadRequests = async () => {
@@ -139,12 +165,30 @@ export default function Dashboard() {
       if (discoveryTab !== 'explorers' && discoveryTab !== 'archipelagos' && discoveryTab !== 'islands') {
         setDiscoveryTab('explorers');
       }
+      // Mark social items as seen when modal is open
+      const newSeen = new Set(seenSocialIds);
+      friendRequests.forEach(uid => newSeen.add(uid));
+      if (newSeen.size !== seenSocialIds.size) setSeenSocialIds(newSeen);
     } else if (activeModal === 'discover') {
       if (discoveryTab !== 'islands' && discoveryTab !== 'archipelagos') {
         setDiscoveryTab('islands');
       }
+      // Mark discovery items as seen
+      const newSeen = new Set(seenDiscoverIds);
+      inboundSharedIslands.forEach(i => newSeen.add(i.id));
+      inboundSharedArchipelagos.forEach(a => newSeen.add(a.id));
+      if (newSeen.size !== seenDiscoverIds.size) setSeenDiscoverIds(newSeen);
     }
-  }, [activeModal]);
+  }, [activeModal, friendRequests, inboundSharedIslands, inboundSharedArchipelagos]);
+
+  // Mark notifications as seen when bell is opened
+  useEffect(() => {
+    if (isNotificationsOpen && notifications.length > 0) {
+      const newSeen = new Set(seenNotificationIds);
+      notifications.forEach(n => newSeen.add(n.id));
+      if (newSeen.size !== seenNotificationIds.size) setSeenNotificationIds(newSeen);
+    }
+  }, [isNotificationsOpen, notifications]);
 
   // Listener for shared content
   useEffect(() => {
@@ -287,7 +331,7 @@ export default function Dashboard() {
 
   const islandShareNotifications = inboundSharedIslands.map(island => ({
     id: `share_island_${island.id}`,
-    islandId: 'discover_islands',
+    islandId: `share_island:${island.name}`,
     title: "Island Shared",
     message: `${island.authorName} shared the island "${island.name}" with you.`,
     type: 'info' as const
@@ -295,7 +339,7 @@ export default function Dashboard() {
 
   const archipelagoShareNotifications = inboundSharedArchipelagos.map(arch => ({
     id: `share_arch_${arch.id}`,
-    islandId: 'discover_archipelagos',
+    islandId: `share_arch:${arch.name}`,
     title: "Archipelago Shared",
     message: `${arch.authorName} shared the archipelago "${arch.name}" with you.`,
     type: 'info' as const
@@ -307,18 +351,27 @@ export default function Dashboard() {
     ...islandShareNotifications,
     ...archipelagoShareNotifications
   ];
-  const unreadCount = notifications.length;
+  const unreadCount = notifications.filter(n => !seenNotificationIds.has(n.id)).length;
+  const unreadSocialCount = friendRequests.filter(uid => !seenSocialIds.has(uid)).length;
+  const unreadDiscoverCount = [
+    ...inboundSharedIslands.map(i => i.id),
+    ...inboundSharedArchipelagos.map(a => a.id)
+  ].filter(id => !seenDiscoverIds.has(id)).length;
 
   const handleNotificationClick = (islandId: string) => {
     if (islandId === 'social') {
       setActiveModal('users');
-      setDiscoveryTab('islands'); // This maps to the "Friend Requests" tab in our new Social modal
-    } else if (islandId === 'discover_islands') {
+      setDiscoveryTab('islands');
+    } else if (islandId.startsWith('share_island:')) {
+      const name = islandId.split(':')[1];
       setActiveModal('discover');
       setDiscoveryTab('islands');
-    } else if (islandId === 'discover_archipelagos') {
+      setDiscoverySearch(name);
+    } else if (islandId.startsWith('share_arch:')) {
+      const name = islandId.split(':')[1];
       setActiveModal('discover');
       setDiscoveryTab('archipelagos');
+      setDiscoverySearch(name);
     } else {
       setSelectedIslandId(islandId);
     }
@@ -1271,7 +1324,7 @@ export default function Dashboard() {
             )}
           >
             <Compass className="w-6 h-6" />
-            {(inboundSharedIslands.length > 0 || inboundSharedArchipelagos.length > 0) && (
+            {unreadDiscoverCount > 0 && (
               <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
             )}
             <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
@@ -1283,7 +1336,7 @@ export default function Dashboard() {
             className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
           >
             <Users className="w-6 h-6" />
-            {friendRequests.length > 0 && (
+            {unreadSocialCount > 0 && (
               <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
             )}
             <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
@@ -1656,7 +1709,7 @@ export default function Dashboard() {
           className={cn("p-2 transition-all relative", activeModal === 'discover' ? "text-brand-primary scale-110" : "text-brand-muted")}
         >
           <Compass className="w-6 h-6" />
-          {(inboundSharedIslands.length > 0 || inboundSharedArchipelagos.length > 0) && (
+          {unreadDiscoverCount > 0 && (
             <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
           )}
         </button>
@@ -1667,7 +1720,7 @@ export default function Dashboard() {
           className={cn("p-2 transition-all relative", activeModal === 'users' ? "text-white scale-110" : "text-brand-muted")}
         >
           <Users className="w-6 h-6" />
-          {friendRequests.length > 0 && (
+          {unreadSocialCount > 0 && (
             <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
           )}
         </button>
