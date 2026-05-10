@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -583,7 +583,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       ) : (
                         <Lock className="w-3 h-3" />
                       )}
-                      {islandPrivacyState === 'public' ? 'Public' : islandPrivacyState === 'pending' ? 'Pending' : islandPrivacyState === 'shared' ? 'Shared' : 'Private'}
+                      {islandPrivacyState === 'public' ? 'Public' : islandPrivacyState === 'pending' ? 'Pending' : islandPrivacyState === 'shared' ? `Shared (${island.sharedWith?.length})` : 'Private'}
                     </button>
 
                     <AnimatePresence>

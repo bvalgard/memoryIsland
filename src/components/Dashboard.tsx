@@ -1500,7 +1500,7 @@ export default function Dashboard() {
                                     >
                                       {archipelagoPrivacyState === 'public' ? <Globe className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
                                       <span className="text-[10px] font-bold uppercase tracking-tight">
-                                        {archipelagoPrivacyState === 'public' ? 'Public' : archipelagoPrivacyState === 'shared' ? 'Shared' : 'Share'}
+                                        {archipelagoPrivacyState === 'public' ? 'Public' : archipelagoPrivacyState === 'shared' ? `Shared (${selectedArchipelago.sharedWith?.length})` : 'Share'}
                                       </span>
                                     </button>
                                   );

@@ -120,6 +120,7 @@ interface IslandDocumentData {
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
   submittedAt?: Timestamp;
   isImported?: boolean;
+  sharedWith?: string[];
 }
 
 interface CardDocumentData extends Card {
@@ -262,6 +263,7 @@ function toIslandDocument(island: Island, ownerId: string, ownerEmail?: string |
     createdAt: island.createdAt || Date.now(),
     approvalStatus: island.approvalStatus || (island.isPublic ? 'approved' : 'draft'),
     isImported: island.isImported || false,
+    sharedWith: island.sharedWith || [],
   });
 }
 
@@ -553,6 +555,7 @@ export function useUserProgress() {
         createdAt: data.createdAt,
         approvalStatus: data.approvalStatus,
         isImported: data.isImported || false,
+        sharedWith: data.sharedWith || [],
         cards: cardsByIsland.get(id) || [],
       }));
 
