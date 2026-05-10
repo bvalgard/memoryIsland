@@ -12,6 +12,8 @@ interface ShareModalProps {
   description: string;
   onSharePublic: () => Promise<void> | void;
   onShareTargeted: (uids: string[]) => Promise<void> | void;
+  initialSelectedUids?: string[];
+  initialTab?: 'public' | 'targeted';
 }
 
 export default function ShareModal({
@@ -20,7 +22,9 @@ export default function ShareModal({
   title,
   description,
   onSharePublic,
-  onShareTargeted
+  onShareTargeted,
+  initialSelectedUids = [],
+  initialTab = 'public'
 }: ShareModalProps) {
   const { friends, fetchProfilesByUids } = useSocial();
   const [tab, setTab] = useState<'public' | 'targeted'>('public');
@@ -32,8 +36,8 @@ export default function ShareModal({
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedUids(new Set());
-      setTab('public');
+      setSelectedUids(new Set(initialSelectedUids));
+      setTab(initialTab);
       setIsSubmitting(false);
       
       const load = async () => {
@@ -48,7 +52,7 @@ export default function ShareModal({
         setFriendProfiles([]);
       }
     }
-  }, [isOpen, friends]);
+  }, [isOpen, friends, initialSelectedUids, initialTab]);
 
   if (!isOpen) return null;
 

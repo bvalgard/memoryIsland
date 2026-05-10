@@ -1023,7 +1023,14 @@ export function useUserProgress() {
     try {
       await setDoc(publishedArchipelagosRef, publicData);
       const updatedArchipelagos = (progress.archipelagos || []).map((entry) =>
-        entry.id === archipelago.id ? { ...entry, isPublic: true, publishedId: targetArchipelagoId } : entry
+        entry.id === archipelago.id 
+          ? { 
+              ...entry, 
+              isPublic: !isTargeted, 
+              sharedWith: isTargeted ? targetUids : [], 
+              publishedId: targetArchipelagoId 
+            } 
+          : entry
       );
       await updateArchipelagos(updatedArchipelagos);
       return targetArchipelagoId;
@@ -1049,7 +1056,7 @@ export function useUserProgress() {
     try {
       await Promise.all(publishedIds.map((id) => deleteDoc(doc(db, 'published_archipelagos', id))));
       const updatedArchipelagos = (progress.archipelagos || []).map((entry) =>
-        entry.id === archipelago.id ? { ...entry, isPublic: false, publishedId: undefined } : entry
+        entry.id === archipelago.id ? { ...entry, isPublic: false, sharedWith: [], publishedId: undefined } : entry
       );
       await updateArchipelagos(updatedArchipelagos);
     } catch (error) {

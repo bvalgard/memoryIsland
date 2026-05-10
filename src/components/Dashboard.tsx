@@ -1478,16 +1478,33 @@ export default function Dashboard() {
                             <h3 className="text-xl font-bold">{archipelagoName} Study</h3>
                             {selectedArchipelagoId && (
                               <>
-                                <button 
-                                  onClick={() => selectedArchipelago?.isPublic ? setShowUnshareArchipelagoConfirm(true) : setShowShareArchipelagoConfirm(true)}
-                                  className="p-1.5 rounded-lg bg-white/5 border border-white/5 text-brand-muted hover:text-white hover:border-white/10 transition-all flex items-center gap-1.5"
-                                  title={selectedArchipelago?.isPublic ? "Remove this Archipelago from Community" : "Share this Archipelago"}
-                                >
-                                  <Globe className="w-3.5 h-3.5" />
-                                  <span className="text-[10px] font-bold uppercase tracking-tight">
-                                    {selectedArchipelago?.isPublic ? 'Public' : 'Share'}
-                                  </span>
-                                </button>
+                                 {(() => {
+                                  const archipelagoPrivacyState = selectedArchipelago.isPublic 
+                                    ? 'public' 
+                                    : (selectedArchipelago.sharedWith && selectedArchipelago.sharedWith.length > 0)
+                                      ? 'shared'
+                                      : 'private';
+                                  
+                                  return (
+                                    <button 
+                                      onClick={() => archipelagoPrivacyState === 'public' ? setShowUnshareArchipelagoConfirm(true) : setShowShareArchipelagoConfirm(true)}
+                                      className={cn(
+                                        "p-1.5 rounded-lg transition-all flex items-center gap-1.5",
+                                        archipelagoPrivacyState === 'public' 
+                                          ? "bg-brand-primary/10 border border-brand-primary/20 text-brand-primary" 
+                                          : archipelagoPrivacyState === 'shared'
+                                            ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-300"
+                                            : "bg-white/5 border border-white/5 text-brand-muted hover:text-white hover:border-white/10"
+                                      )}
+                                      title={archipelagoPrivacyState === 'public' ? "Remove this Archipelago from Community" : "Share this Archipelago"}
+                                    >
+                                      {archipelagoPrivacyState === 'public' ? <Globe className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                                      <span className="text-[10px] font-bold uppercase tracking-tight">
+                                        {archipelagoPrivacyState === 'public' ? 'Public' : archipelagoPrivacyState === 'shared' ? 'Shared' : 'Share'}
+                                      </span>
+                                    </button>
+                                  );
+                                })()}
                                 <button
                                   onClick={() => setShowDeleteArchipelagoConfirm(true)}
                                   className="p-1.5 rounded-lg bg-red-500/5 border border-red-500/10 text-red-400/60 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all flex items-center gap-1.5"
@@ -1783,6 +1800,8 @@ export default function Dashboard() {
             onClose={() => setShowShareArchipelagoConfirm(false)}
             title="Publish Archipelago?"
             description={`This will share "${selectedArchipelago.name}" and all its ${islandsInArchipelago.length} islands. Other explorers will be able to anchor this knowledge.`}
+            initialSelectedUids={selectedArchipelago.sharedWith || []}
+            initialTab={selectedArchipelago.sharedWith?.length ? 'targeted' : 'public'}
             onSharePublic={async () => {
               await shareArchipelago(selectedArchipelago);
             }}
@@ -1810,11 +1829,15 @@ export default function Dashboard() {
               className="relative w-full max-w-md glass p-8 rounded-[40px] border-red-500/30 shadow-[0_40px_100px_rgba(0,0,0,0.8)] text-center"
             >
               <div className="w-20 h-20 bg-red-500/15 rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-xl border border-red-500/30">
-                <Globe className="w-10 h-10 text-red-300" />
+                {selectedArchipelago.isPublic ? <Globe className="w-10 h-10 text-red-300" /> : <Users className="w-10 h-10 text-red-300" />}
               </div>
-              <h2 className="text-2xl font-bold mb-3 tracking-tight">Remove Archipelago?</h2>
+              <h2 className="text-2xl font-bold mb-3 tracking-tight">
+                {selectedArchipelago.isPublic ? 'Remove Archipelago?' : 'Stop Sharing?'}
+              </h2>
               <p className="text-brand-muted text-sm leading-relaxed mb-10 px-4">
-                This will remove <span className="text-white font-bold">"{selectedArchipelago.name}"</span> from the public discovery feed. People who already imported it will keep their copies.
+                {selectedArchipelago.isPublic 
+                  ? <>This will remove <span className="text-white font-bold">"{selectedArchipelago.name}"</span> from the public discovery feed. People who already imported it will keep their copies.</>
+                  : <>Your friends will no longer be able to discover or import <span className="text-white font-bold">"{selectedArchipelago.name}"</span>.</>}
               </p>
               <div className="flex flex-col gap-3">
                 <button 
@@ -1824,7 +1847,7 @@ export default function Dashboard() {
                   }}
                   className="w-full py-4 bg-red-500 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-lg shadow-red-500/20 active:scale-95 transition-transform"
                 >
-                  Remove from Community
+                  {selectedArchipelago.isPublic ? 'Remove from Community' : 'Stop Sharing'}
                 </button>
                 <button 
                   onClick={() => setShowUnshareArchipelagoConfirm(false)}

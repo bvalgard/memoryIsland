@@ -57,7 +57,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     ? 'pending'
     : island.approvalStatus === 'approved' && island.isPublic
       ? 'public'
-      : 'private';
+      : (island.sharedWith && island.sharedWith.length > 0)
+        ? 'shared'
+        : 'private';
   
   const resetCardForm = () => {
     setEditingCardIndex(null);
@@ -556,9 +558,10 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   <div className="relative">
                     <button 
                       onClick={() => {
-                        if (island.isPublic) {
+                        if (islandPrivacyState === 'public') {
                           setShowUnshareConfirm(true);
                         } else {
+                          // Allow re-opening share modal for private/shared to manage list
                           setShowShareConfirm(true);
                         }
                       }}
@@ -568,11 +571,19 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           ? "bg-brand-primary/20 text-brand-primary border border-brand-primary/30"
                           : islandPrivacyState === 'pending'
                             ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                          : "bg-white/5 text-brand-muted hover:text-white border border-white/5 hover:border-white/10"
+                            : islandPrivacyState === 'shared'
+                              ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                              : "bg-white/5 text-brand-muted hover:text-white border border-white/5 hover:border-white/10"
                       )}
                     >
-                      {islandPrivacyState === 'public' ? <Globe className="w-3 h-3" /> : islandPrivacyState === 'pending' ? <Check className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                      {islandPrivacyState === 'public' ? 'Public' : islandPrivacyState === 'pending' ? 'Pending' : 'Private'}
+                      {islandPrivacyState === 'public' ? (
+                        <Globe className="w-3 h-3" />
+                      ) : (islandPrivacyState === 'shared' || islandPrivacyState === 'pending') ? (
+                        <Users className="w-3 h-3" />
+                      ) : (
+                        <Lock className="w-3 h-3" />
+                      )}
+                      {islandPrivacyState === 'public' ? 'Public' : islandPrivacyState === 'pending' ? 'Pending' : islandPrivacyState === 'shared' ? 'Shared' : 'Private'}
                     </button>
 
                     <AnimatePresence>
@@ -580,8 +591,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       <ShareModal
                         isOpen={showShareConfirm}
                         onClose={() => setShowShareConfirm(false)}
-                        title="Submit for review?"
-                        description="This island will be submitted to the moderation queue before it appears in community discovery."
+                        title={islandPrivacyState === 'shared' ? "Update Sharing" : "Submit for review?"}
+                        description={islandPrivacyState === 'shared' 
+                          ? "Select more friends to share this island with."
+                          : "This island will be submitted to the moderation queue before it appears in community discovery."}
+                        initialSelectedUids={island.sharedWith || []}
+                        initialTab={islandPrivacyState === 'shared' ? 'targeted' : 'public'}
                         onSharePublic={() => {
                           onShare(island);
                         }}
@@ -608,9 +623,13 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                             exit={{ opacity: 0, scale: 0.9, y: 10 }}
                             className="absolute top-full left-0 mt-3 w-64 glass p-5 rounded-[24px] border border-white/10 shadow-2xl z-[70]"
                           >
-                            <p className="text-xs font-bold text-white mb-2">Remove from community?</p>
+                            <p className="text-xs font-bold text-white mb-2">
+                              {islandPrivacyState === 'shared' ? 'Stop sharing?' : 'Remove from community?'}
+                            </p>
                             <p className="text-[10px] text-brand-muted leading-relaxed mb-4">
-                              This island will no longer appear in community discovery for other explorers.
+                              {islandPrivacyState === 'shared' 
+                                ? "Your friends will no longer be able to discover or import this island."
+                                : "This island will no longer appear in community discovery for other explorers."}
                             </p>
                             <div className="flex gap-2">
                               <button 
