@@ -755,7 +755,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
   }
 
   return (
-    <div className="max-w-2xl mx-auto w-full flex flex-col items-center pb-32 md:pb-40">
+    <div className="max-w-2xl mx-auto w-full flex flex-col items-center pb-12">
       {/* Sparkles Layer */}
       <AnimatePresence>
         {sparkles.map(s => (
@@ -1329,7 +1329,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       )}
 
       {/* Live Session Tracker */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 z-40 bg-gradient-to-t from-brand-bg/90 via-brand-bg/50 to-transparent pointer-events-none">
+      <div className="w-full mt-12 px-4 md:px-0">
         <div className="max-w-2xl mx-auto grid grid-cols-4 gap-2 md:gap-4 pointer-events-auto">
           {/* Streak Counter */}
           <motion.div 
