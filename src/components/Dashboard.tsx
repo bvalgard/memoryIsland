@@ -405,7 +405,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-bg flex text-white relative">
+    <div className="min-h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative">
       <NewIslandModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -1371,7 +1371,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
+      <main className={cn("flex-1 flex flex-col min-w-0 md:pb-0", !isStudying && "pb-20")}>
         {/* Header */}
         <header className="h-14 border-b border-brand-border flex items-center justify-start px-6 md:px-12 bg-brand-bg/50 backdrop-blur-md sticky top-0 z-20">
           <div className="flex items-center gap-4 text-brand-muted group flex-1 max-w-sm">
@@ -1666,7 +1666,8 @@ export default function Dashboard() {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-1 left-4 right-4 bg-[#111]/90 backdrop-blur-xl border border-white/10 z-[100] flex items-center justify-between px-4 h-16 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.8)] pb-[calc(env(safe-area-inset-bottom)*0.5)]">
+      {!isStudying && (
+        <nav className="md:hidden fixed bottom-1 left-4 right-4 bg-[#111]/90 backdrop-blur-xl border border-white/10 z-[100] flex items-center justify-between px-4 h-16 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.8)] pb-[calc(env(safe-area-inset-bottom)*0.5)]">
         {/* Mobile Profile */}
         <div className="relative" ref={profileRef}>
           <button 
@@ -1791,6 +1792,7 @@ export default function Dashboard() {
           </AnimatePresence>
         </div>
       </nav>
+      )}
 
       {/* Share Archipelago Confirmation */}
       <AnimatePresence>

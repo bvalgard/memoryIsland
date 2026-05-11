@@ -16,7 +16,9 @@
 }
 
 @layer base {
-  body {
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
     background-color: var(--color-brand-bg);
     color: #ffffff;
     font-family: var(--font-sans);

@@ -755,7 +755,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
   }
 
   return (
-    <div className="max-w-2xl mx-auto w-full flex flex-col items-center pb-48 md:pb-60">
+    <div className="max-w-2xl mx-auto w-full flex flex-col items-center pb-32 md:pb-40">
       {/* Sparkles Layer */}
       <AnimatePresence>
         {sparkles.map(s => (
@@ -1330,7 +1330,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
 
       {/* Live Session Tracker */}
       <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 z-40 bg-gradient-to-t from-brand-bg/90 via-brand-bg/50 to-transparent pointer-events-none">
-        <div className="max-w-2xl mx-auto flex gap-2 md:gap-4 pointer-events-auto">
+        <div className="max-w-2xl mx-auto grid grid-cols-4 gap-2 md:gap-4 pointer-events-auto">
           {/* Streak Counter */}
           <motion.div 
             animate={{ 
@@ -1339,7 +1339,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
             }}
             transition={{ duration: 0.3 }}
             className={cn(
-              "flex-1 md:flex-initial md:min-w-[120px] rounded-2xl p-3 md:p-4 border border-white/5 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center gap-1",
+              "rounded-2xl p-2 md:p-4 border border-white/5 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center gap-1",
               streak >= 3 ? "border-amber-500/30" : "border-white/10"
             )}
           >
@@ -1347,48 +1347,46 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               <Zap className={cn("w-3 h-3 md:w-4 md:h-4", streak >= 3 ? "text-amber-400 fill-amber-400" : "text-brand-muted")} />
               <span className="text-xs md:text-sm font-black text-white">{streak}</span>
             </div>
-            <span className="text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-brand-muted">Streak</span>
+            <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-brand-muted text-center leading-none">Streak</span>
           </motion.div>
 
-          <div className="flex-1 grid grid-cols-3 gap-2 md:gap-4">
-            {/* Mastered */}
-            <div className="bg-emerald-500/10 rounded-2xl p-3 md:p-4 border border-emerald-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-              <motion.span 
-                key={sessionStats.mastered}
-                initial={{ scale: 1.5, color: '#10b981' }}
-                animate={{ scale: 1, color: '#ffffff' }}
-                className="text-xs md:text-sm font-black"
-              >
-                {sessionStats.mastered}
-              </motion.span>
-              <span className="text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">Mastered</span>
-            </div>
+          {/* Mastered */}
+          <div className="bg-emerald-500/10 rounded-2xl p-2 md:p-4 border border-emerald-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
+            <motion.span 
+              key={sessionStats.mastered}
+              initial={{ scale: 1.5, color: '#10b981' }}
+              animate={{ scale: 1, color: '#ffffff' }}
+              className="text-xs md:text-sm font-black"
+            >
+              {sessionStats.mastered}
+            </motion.span>
+            <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80 text-center leading-none">Mastered</span>
+          </div>
 
-            {/* Learning */}
-            <div className="bg-brand-primary/10 rounded-2xl p-3 md:p-4 border border-brand-primary/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-              <motion.span 
-                key={sessionStats.learning}
-                initial={{ scale: 1.5, color: '#3b82f6' }}
-                animate={{ scale: 1, color: '#ffffff' }}
-                className="text-xs md:text-sm font-black"
-              >
-                {sessionStats.learning}
-              </motion.span>
-              <span className="text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-brand-primary/80">Learning</span>
-            </div>
+          {/* Learning */}
+          <div className="bg-brand-primary/10 rounded-2xl p-2 md:p-4 border border-brand-primary/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
+            <motion.span 
+              key={sessionStats.learning}
+              initial={{ scale: 1.5, color: '#3b82f6' }}
+              animate={{ scale: 1, color: '#ffffff' }}
+              className="text-xs md:text-sm font-black"
+            >
+              {sessionStats.learning}
+            </motion.span>
+            <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-brand-primary/80 text-center leading-none">Learning</span>
+          </div>
 
-            {/* Struggling */}
-            <div className="bg-red-500/10 rounded-2xl p-3 md:p-4 border border-red-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-              <motion.span 
-                key={sessionStats.struggling}
-                initial={{ scale: 1.5, color: '#ef4444' }}
-                animate={{ scale: 1, color: '#ffffff' }}
-                className="text-xs md:text-sm font-black"
-              >
-                {sessionStats.struggling}
-              </motion.span>
-              <span className="text-[8px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80">Struggling</span>
-            </div>
+          {/* Struggling */}
+          <div className="bg-red-500/10 rounded-2xl p-2 md:p-4 border border-red-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
+            <motion.span 
+              key={sessionStats.struggling}
+              initial={{ scale: 1.5, color: '#ef4444' }}
+              animate={{ scale: 1, color: '#ffffff' }}
+              className="text-xs md:text-sm font-black"
+            >
+              {sessionStats.struggling}
+            </motion.span>
+            <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80 text-center leading-none">Struggling</span>
           </div>
         </div>
       </div>
