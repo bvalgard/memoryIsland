@@ -81,6 +81,7 @@ export interface UserStats {
 export interface UserSettings {
   learningStreakNeeded: number;
   masteryStreakNeeded: number;
+  showOnGlobalLeaderboard: boolean;
 }
 
 export interface UserProgress {
@@ -180,6 +181,7 @@ const defaultStats: UserStats = {
 const defaultSettings: UserSettings = {
   learningStreakNeeded: 1,
   masteryStreakNeeded: 3,
+  showOnGlobalLeaderboard: true,
 };
 
 function randomId() {
@@ -584,6 +586,7 @@ export function useUserProgress() {
           displayNameLowercase: (user.displayName || 'Explorer').toLowerCase(),
           photoURL: user.photoURL || null,
           stats: mergedStats,
+          showOnGlobalLeaderboard: progress.settings?.showOnGlobalLeaderboard ?? true,
           lastActive: serverTimestamp(),
         },
         { merge: true }
@@ -601,6 +604,17 @@ export function useUserProgress() {
         settings: mergedSettings,
         last_active: Timestamp.now(),
       });
+      
+      // Also sync to profile for leaderboard filtering
+      const profileRef = doc(db, 'profiles', user.uid);
+      await setDoc(
+        profileRef,
+        {
+          showOnGlobalLeaderboard: mergedSettings.showOnGlobalLeaderboard,
+          lastActive: serverTimestamp(),
+        },
+        { merge: true }
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }

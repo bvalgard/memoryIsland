@@ -1018,6 +1018,25 @@ export default function Dashboard() {
 
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                   <div>
+                    <p className="text-sm font-bold text-white mb-1">Public Ranking</p>
+                    <p className="text-xs text-brand-muted">Show up on the global leaderboard.</p>
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ showOnGlobalLeaderboard: !(progress?.settings?.showOnGlobalLeaderboard ?? true) })}
+                    className={cn(
+                      "w-10 h-6 rounded-full relative transition-colors",
+                      (progress?.settings?.showOnGlobalLeaderboard ?? true) ? "bg-brand-primary" : "bg-white/10"
+                    )}
+                  >
+                    <motion.div 
+                      animate={{ x: (progress?.settings?.showOnGlobalLeaderboard ?? true) ? 16 : 4 }}
+                      className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm" 
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div>
                     <p className="text-sm font-bold text-white mb-1">Dark Mode</p>
                     <p className="text-xs text-brand-muted">The only acceptable mode.</p>
                   </div>

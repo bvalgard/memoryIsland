@@ -130,7 +130,15 @@ export function useSocial() {
         limit(50)
       );
       const snapshot = await getDocs(q);
-      const fetchedProfiles = snapshot.docs.map(docSnap => normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
+      const fetchedProfiles = snapshot.docs
+        .map(docSnap => {
+          const data = docSnap.data() as any;
+          return {
+            ...normalizeProfile(data as Partial<UserProfile>, docSnap.id),
+            showOnGlobalLeaderboard: data.showOnGlobalLeaderboard ?? true
+          };
+        })
+        .filter(profile => profile.showOnGlobalLeaderboard !== false);
       setProfiles(fetchedProfiles);
     } catch (err: any) {
       console.error("Failed to load leaderboard", err);
