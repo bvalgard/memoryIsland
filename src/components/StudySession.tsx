@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, MousePointerClick, Database, Zap, Library, XCircle, AlertCircle, Check, X } from 'lucide-react';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
+import { SessionMeta } from '../achievements';
 import { cn } from '../lib/utils';
 
 // Reliable Fisher-Yates shuffle to prevent duplicate/dropped card bugs caused by Math.random() in sort()
@@ -57,13 +58,14 @@ interface StudySessionProps {
   island: Island;
   mode?: 'all' | 'struggling' | 'learning' | 'mastered';
   settings?: UserSettings;
-  onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number) => void;
-  onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number) => void;
-  onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number) => void;
-  onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number) => void;
+  onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
 }
 
 export default function StudySession({ island, mode = 'all', settings, onFinish, onManage, onBackToMap, onSwitchMode }: StudySessionProps) {
+  const sessionStartTime = useRef<number>(Date.now());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [direction, setDirection] = useState(0); // 1 for right, -1 for left
@@ -159,6 +161,13 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
   }, [mode]);
 
   const currentCard = shuffledCards[currentIndex];
+
+  const buildMeta = (): SessionMeta => ({
+    sessionDurationMs: Date.now() - sessionStartTime.current,
+    cardCount: shuffledCards.length,
+    correctCount: Object.values<{ status: CardStatus }>(cardUpdates as any).filter(c => c.status !== 'struggling').length,
+    sessionStartHour: new Date(sessionStartTime.current).getHours(),
+  });
 
   const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
@@ -363,9 +372,21 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       setStreak(0);
       setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
 
-      setCardUpdates(prev => ({ 
-        ...prev, 
-        [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+      const isBeingDemotedFib =
+        status === 'struggling' &&
+        (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+      setCardUpdates(prev => ({
+        ...prev,
+        [currentCard.front]: {
+          status,
+          consecutiveCorrect,
+          lastReviewed: Date.now(),
+          ...(isBeingDemotedFib && {
+            wasDemoted: true,
+            demotionCount: currentCard.demotionCount || 0,
+          }),
+        },
       }));
       setDirection(-1);
     }
@@ -398,13 +419,21 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       setStreak(0);
     }
 
-    setCardUpdates(prev => ({ 
-      ...prev, 
-      [currentCard.front]: { 
-        status, 
+    const isBeingDemoted =
+      status === 'struggling' &&
+      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        status,
         consecutiveCorrect: status === 'mastered' ? 0 : (status === 'learning' ? 1 : 0),
-        lastReviewed: Date.now()
-      } 
+        lastReviewed: Date.now(),
+        ...(isBeingDemoted && {
+          wasDemoted: true,
+          demotionCount: currentCard.demotionCount || 0,
+        }),
+      },
     }));
     setDirection(status !== 'struggling' ? 1 : -1);
     nextCard();
@@ -487,15 +516,27 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     }
 
     const { status, consecutiveCorrect } = getNextStatusAndStreak(isCorrect, currentCard?.status, currentCard?.consecutiveCorrect);
-    
+
     setSessionStats(prev => ({
       ...prev,
       [status]: prev[status as keyof typeof prev] + 1
     }));
-    
-    setCardUpdates(prev => ({ 
-      ...prev, 
-      [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+
+    const isBeingDemotedMs =
+      status === 'struggling' &&
+      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        status,
+        consecutiveCorrect,
+        lastReviewed: Date.now(),
+        ...(isBeingDemotedMs && {
+          wasDemoted: true,
+          demotionCount: currentCard.demotionCount || 0,
+        }),
+      },
     }));
   };
 
@@ -516,15 +557,27 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     }
 
     const { status, consecutiveCorrect } = getNextStatusAndStreak(isCorrect, currentCard?.status, currentCard?.consecutiveCorrect);
-    
+
     setSessionStats(prev => ({
       ...prev,
       [status]: prev[status as keyof typeof prev] + 1
     }));
-    
-    setCardUpdates(prev => ({ 
-      ...prev, 
-      [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+
+    const isBeingDemotedSeq =
+      status === 'struggling' &&
+      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        status,
+        consecutiveCorrect,
+        lastReviewed: Date.now(),
+        ...(isBeingDemotedSeq && {
+          wasDemoted: true,
+          demotionCount: currentCard.demotionCount || 0,
+        }),
+      },
     }));
   };
 
@@ -559,15 +612,27 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     } else {
       setStreak(0);
       const { status, consecutiveCorrect } = getNextStatusAndStreak(false, currentCard?.status, currentCard?.consecutiveCorrect);
-      
+
       setSessionStats(prev => ({
         ...prev,
         [status]: prev[status as keyof typeof prev] + 1
       }));
-      
-      setCardUpdates(prev => ({ 
-        ...prev, 
-        [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+
+      const isBeingDemotedMcq =
+        status === 'struggling' &&
+        (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+      setCardUpdates(prev => ({
+        ...prev,
+        [currentCard.front]: {
+          status,
+          consecutiveCorrect,
+          lastReviewed: Date.now(),
+          ...(isBeingDemotedMcq && {
+            wasDemoted: true,
+            demotionCount: currentCard.demotionCount || 0,
+          }),
+        },
       }));
     }
   };
@@ -664,24 +729,36 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               [status]: prev[status as keyof typeof prev] + 1
             }));
 
-            setCardUpdates(prev => ({ 
-              ...prev, 
-              [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+            setCardUpdates(prev => ({
+              ...prev,
+              [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() },
             }));
-            setScoreDelta(prev => prev + 1); // 1 point for perfectly answering
+            setScoreDelta(prev => prev + 1);
             setDirection(1);
           } else {
             const { status, consecutiveCorrect } = getNextStatusAndStreak(false, currentCard?.status, currentCard?.consecutiveCorrect);
-            
+
             setStreak(0);
             setSessionStats(prev => ({
               ...prev,
               [status]: prev[status as keyof typeof prev] + 1
             }));
 
-            setCardUpdates(prev => ({ 
-              ...prev, 
-              [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+            const isBeingDemotedMatch =
+              status === 'struggling' &&
+              (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+            setCardUpdates(prev => ({
+              ...prev,
+              [currentCard.front]: {
+                status,
+                consecutiveCorrect,
+                lastReviewed: Date.now(),
+                ...(isBeingDemotedMatch && {
+                  wasDemoted: true,
+                  demotionCount: currentCard.demotionCount || 0,
+                }),
+              },
             }));
             setDirection(-1);
           }
@@ -745,7 +822,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         </div>
 
         <button 
-          onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak)}
+          onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak, buildMeta())}
           className="w-full btn-primary h-16 text-lg"
         >
           Return to Map
@@ -781,7 +858,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           <NavAction 
             icon={ArrowLeft} 
             label="To Map" 
-            onClick={() => onBackToMap(scoreDelta, cardUpdates, maxStreak)} 
+            onClick={() => onBackToMap(scoreDelta, cardUpdates, maxStreak, buildMeta())}
           />
           
           <div className="hidden sm:flex items-center gap-3 glass px-4 py-2 rounded-full border-white/5 shadow-lg ml-2">
@@ -804,7 +881,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           <NavAction 
             icon={Database} 
             label="Manage Cards" 
-            onClick={() => onManage(scoreDelta, cardUpdates, maxStreak)} 
+            onClick={() => onManage(scoreDelta, cardUpdates, maxStreak, buildMeta())}
           />
 
           <NavAction 
@@ -820,7 +897,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               icon={mode === 'all' ? Zap : Library}
               label={mode === 'all' ? 'Struggling' : 'All Cards'}
               variant="primary"
-              onClick={() => onSwitchMode(mode === 'all' ? 'struggling' : 'all', scoreDelta, cardUpdates, maxStreak)}
+              onClick={() => onSwitchMode(mode === 'all' ? 'struggling' : 'all', scoreDelta, cardUpdates, maxStreak, buildMeta())}
             />
           )}
           <div className="flex items-center gap-2 glass px-3 md:px-4 py-2 rounded-full border-white/5 shadow-lg group relative">

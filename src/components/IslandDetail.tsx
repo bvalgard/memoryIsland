@@ -435,12 +435,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
   const imageSrc = masteryLevel === 'struggling' ? `${basePath}/struggling.jpeg` : masteryLevel === 'learning' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
 
-  const radius = 16;
-  const circumference = 2 * Math.PI * radius;
-  const safeScore = Math.max(0, Math.min(100, island.color_score));
-  const dashoffset = circumference - (safeScore / 100) * circumference;
-  const colorClass = island.color_score > 80 ? 'text-emerald-400 stroke-emerald-400' : island.color_score > 40 ? 'text-amber-400 stroke-amber-400' : 'text-red-400 stroke-red-400';
-
   const displayCards = useMemo(() => {
     const roots: { card: Card, originalIdx: number }[] = [];
     const childrenMap = new Map<string, { card: Card, originalIdx: number }[]>();
@@ -521,39 +515,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight break-words">{island.name}</h2>
               
               <div className="flex items-center gap-3 shrink-0">
-                {/* Circular Progress Indicator for Island Retention Score */}
-                <div 
-                  className="w-10 h-10 rounded-2xl flex items-center justify-center relative shadow-sm shrink-0" 
-                  title={`Retention Score: ${Math.round(island.color_score)}`}
-                >
-                  <svg className="w-9 h-9 -rotate-90 transform absolute inset-0.5" viewBox="0 0 40 40">
-                    <circle
-                      className="stroke-white/10"
-                      strokeWidth="4"
-                      fill="transparent"
-                      r={radius}
-                      cx="20"
-                      cy="20"
-                    />
-                    <circle
-                      className={cn("transition-all duration-1000 ease-out", colorClass.split(' ')[1])}
-                      strokeWidth="4"
-                      strokeLinecap="round"
-                      fill="transparent"
-                      r={radius}
-                      cx="20"
-                      cy="20"
-                      style={{
-                        strokeDasharray: circumference,
-                        strokeDashoffset: dashoffset
-                      }}
-                    />
-                  </svg>
-                  <span className={cn("text-[10px] font-black tracking-tighter relative z-10", colorClass.split(' ')[0])}>
-                    {Math.round(island.color_score)}
-                  </span>
-                </div>
-
                 {onShare && (
                   <div className="relative">
                     <button 

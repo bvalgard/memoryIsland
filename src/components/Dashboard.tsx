@@ -1,18 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, Info, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
 import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
+import { useAchievements } from '../hooks/useAchievements';
+import { Achievement, SessionMeta } from '../achievements';
 import { cn } from '../lib/utils';
+import AchievementToast from './AchievementToast';
+import TrophyRoom from './TrophyRoom';
 import NewIslandModal from './NewIslandModal';
 import NewArchipelagoModal from './NewArchipelagoModal';
 import IslandDetail from './IslandDetail';
 import StudySession from './StudySession';
 import ShareModal from './ShareModal';
 import { useSocial } from '../hooks/useSocial';
+import ConfirmDialog from './ConfirmDialog';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -41,6 +46,7 @@ export default function Dashboard() {
     importArchipelago,
     deletePublishedIsland,
     deletePublishedArchipelago,
+    dismissShare,
     removeArchipelago,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
@@ -53,9 +59,19 @@ export default function Dashboard() {
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const appLoadCheckDone = useRef(false);
+
+  // Achievement system
+  const { checkAndAwardAchievements } = useAchievements();
+  const [toastQueue, setToastQueue] = useState<Achievement[]>([]);
+  const [currentToast, setCurrentToast] = useState<Achievement | null>(null);
+
+  const enqueueToasts = (achievements: Achievement[]) => {
+    setToastQueue(prev => [...prev, ...achievements]);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -69,6 +85,24 @@ export default function Dashboard() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Advance toast queue
+  useEffect(() => {
+    if (!currentToast && toastQueue.length > 0) {
+      const [next, ...rest] = toastQueue;
+      setCurrentToast(next);
+      setToastQueue(rest);
+    }
+  }, [currentToast, toastQueue]);
+
+  // One-shot achievement check on first data load
+  useEffect(() => {
+    if (progress && !appLoadCheckDone.current) {
+      appLoadCheckDone.current = true;
+      checkAndAwardAchievements({ progress, trigger: 'app-load' })
+        .then(unlocked => { if (unlocked.length) enqueueToasts(unlocked); });
+    }
+  }, [progress]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'alpha-asc' | 'alpha-desc' | 'creation'>(() => {
     return (localStorage.getItem('islandSortOrder') as 'alpha-asc' | 'alpha-desc' | 'creation') || 'alpha-asc';
@@ -103,32 +137,40 @@ export default function Dashboard() {
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
-  // Persistence for "Read" state of badges
-  const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(new Set());
-  const [seenSocialIds, setSeenSocialIds] = useState<Set<string>>(new Set());
-  const [seenDiscoverIds, setSeenDiscoverIds] = useState<Set<string>>(new Set());
+  // Persistence for "Read" state of badges (user-specific, loaded synchronously to avoid race)
+  const uid = user?.uid ?? 'guest';
+  const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem(`seen_notifs_${uid}`);
+    return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+  });
+  const [seenSocialIds, setSeenSocialIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem(`seen_social_${uid}`);
+    return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+  });
+  const [seenDiscoverIds, setSeenDiscoverIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem(`seen_discover_${uid}`);
+    return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+  });
 
-  // Load seen IDs from localStorage
+  // Persist seen IDs to localStorage
   useEffect(() => {
-    const savedNotifs = localStorage.getItem('seen_notifs');
-    const savedSocial = localStorage.getItem('seen_social');
-    const savedDiscover = localStorage.getItem('seen_discover');
-    if (savedNotifs) setSeenNotificationIds(new Set(JSON.parse(savedNotifs)));
-    if (savedSocial) setSeenSocialIds(new Set(JSON.parse(savedSocial)));
-    if (savedDiscover) setSeenDiscoverIds(new Set(JSON.parse(savedDiscover)));
-  }, []);
-
-  // Update localStorage when seen IDs change
+    localStorage.setItem(`seen_notifs_${uid}`, JSON.stringify(Array.from(seenNotificationIds)));
+  }, [seenNotificationIds, uid]);
   useEffect(() => {
-    localStorage.setItem('seen_notifs', JSON.stringify(Array.from(seenNotificationIds)));
-  }, [seenNotificationIds]);
+    localStorage.setItem(`seen_social_${uid}`, JSON.stringify(Array.from(seenSocialIds)));
+  }, [seenSocialIds, uid]);
   useEffect(() => {
-    localStorage.setItem('seen_social', JSON.stringify(Array.from(seenSocialIds)));
-  }, [seenSocialIds]);
-  useEffect(() => {
-    localStorage.setItem('seen_discover', JSON.stringify(Array.from(seenDiscoverIds)));
-  }, [seenDiscoverIds]);
+    localStorage.setItem(`seen_discover_${uid}`, JSON.stringify(Array.from(seenDiscoverIds)));
+  }, [seenDiscoverIds, uid]);
 
   useEffect(() => {
     // Load inbound requests profiles (for notifications)
@@ -303,18 +345,6 @@ export default function Dashboard() {
   const globalLearningCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
 
-  // Derived state for notifications
-  const memoryNotifications = currentIslands
-    .filter(i => i.color_score < 80)
-    .map(island => ({
-      id: island.id,
-      islandId: island.id,
-      title: "Retention Warning",
-      message: `Your retention for "${island.name}" is dropping (${Math.round(island.color_score || 0)}%). Time for a review?`,
-      type: island.color_score < 40 ? 'error' as const : 'warning' as const,
-      timestamp: island.updatedAt || Date.now()
-    }));
-
   const friendRequestNotifications = (discoveryInboundRequests || []).map(profile => ({
     id: `friend_req_${profile.uid}`,
     islandId: 'social', // Special key to trigger social modal
@@ -343,7 +373,6 @@ export default function Dashboard() {
   }));
 
   const notifications = [
-    ...memoryNotifications, 
     ...friendRequestNotifications,
     ...islandShareNotifications,
     ...archipelagoShareNotifications
@@ -388,20 +417,24 @@ export default function Dashboard() {
 
   const selectedIsland = selectedIslandId === 'archipelago' ? archipelagoIsland : currentIslands.find(i => i.id === selectedIslandId);
 
-  const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0) => {
+  const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
     if (selectedIslandId === 'archipelago') {
       await processArchipelagoResults(delta, cardUpdates, maxStreak);
     } else if (selectedIslandId) {
       await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
     }
+    if (progress && sessionMeta) {
+      const unlocked = await checkAndAwardAchievements({
+        progress,
+        cardUpdates,
+        sessionMeta,
+        trigger: 'session-complete',
+        islandId: selectedIslandId || undefined,
+      });
+      if (unlocked.length) enqueueToasts(unlocked);
+    }
     setIsStudying(false);
     setSelectedIslandId(null);
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score > 80) return 'text-emerald-400';
-    if (score > 40) return 'text-amber-400';
-    return 'text-red-400';
   };
 
   return (
@@ -776,6 +809,10 @@ export default function Dashboard() {
                                     if (localVersion) {
                                       await shareIsland(localVersion);
                                       loadPublicIslands();
+                                      if (progress) {
+                                        const unlocked = await checkAndAwardAchievements({ progress, trigger: 'island-shared' });
+                                        if (unlocked.length) enqueueToasts(unlocked);
+                                      }
                                     } else {
                                       alert("Could not find the local version of this island to update.");
                                     }
@@ -800,7 +837,31 @@ export default function Dashboard() {
                                 </button>
                               </>
                             )}
-                            <button 
+                            {(island as any).sharedWith?.includes(user?.uid) && !isAlreadyImported && (
+                              <button
+                                onClick={() => setConfirmDialog({
+                                  open: true,
+                                  title: 'Dismiss shared island?',
+                                  message: `This will permanently remove "${island.name}" from your shared list. You won't be able to access it again unless the sender shares it with you again.`,
+                                  confirmLabel: 'Remove',
+                                  danger: true,
+                                  onConfirm: async () => {
+                                    setConfirmDialog(d => ({ ...d, open: false }));
+                                    try {
+                                      await dismissShare('published_islands', island.id!);
+                                      setPublicIslands(prev => prev.filter(i => i.id !== island.id));
+                                    } catch {
+                                      alert('Could not dismiss this share. Please try again.');
+                                    }
+                                  },
+                                })}
+                                className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 text-brand-muted hover:bg-red-500/10 hover:text-red-400 font-bold transition-all active:scale-95"
+                                title="Dismiss"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
                               onClick={() => {
                                 importIsland(island);
                                 setActiveModal(null);
@@ -808,8 +869,8 @@ export default function Dashboard() {
                               disabled={isAlreadyImported && island.authorId !== user?.uid}
                               className={cn(
                                 "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
-                                isAlreadyImported 
-                                  ? "bg-white/5 text-brand-muted cursor-default" 
+                                isAlreadyImported
+                                  ? "bg-white/5 text-brand-muted cursor-default"
                                   : "bg-white text-black hover:bg-white/90 shadow-lg active:scale-95"
                               )}
                             >
@@ -896,7 +957,31 @@ export default function Dashboard() {
                                 </button>
                               </>
                             )}
-                            <button 
+                            {arch.sharedWith?.includes(user?.uid) && !isAlreadyImported && (
+                              <button
+                                onClick={() => setConfirmDialog({
+                                  open: true,
+                                  title: 'Dismiss shared archipelago?',
+                                  message: `This will permanently remove "${arch.name}" from your shared list. You won't be able to access it again unless the sender shares it with you again.`,
+                                  confirmLabel: 'Remove',
+                                  danger: true,
+                                  onConfirm: async () => {
+                                    setConfirmDialog(d => ({ ...d, open: false }));
+                                    try {
+                                      await dismissShare('published_archipelagos', arch.id);
+                                      setPublicArchipelagos(prev => prev.filter(a => a.id !== arch.id));
+                                    } catch {
+                                      alert('Could not dismiss this share. Please try again.');
+                                    }
+                                  },
+                                })}
+                                className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 text-brand-muted hover:bg-red-500/10 hover:text-red-400 font-bold transition-all active:scale-95"
+                                title="Dismiss"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
                               onClick={() => {
                                 importArchipelago(arch);
                                 setActiveModal(null);
@@ -904,8 +989,8 @@ export default function Dashboard() {
                               disabled={isAlreadyImported && arch.authorId !== user?.uid}
                               className={cn(
                                 "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
-                                isAlreadyImported 
-                                  ? "bg-white/5 text-brand-muted cursor-default" 
+                                isAlreadyImported
+                                  ? "bg-white/5 text-brand-muted cursor-default"
                                   : "bg-white text-black hover:bg-white/90 shadow-lg active:scale-95"
                               )}
                             >
@@ -1064,6 +1149,26 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Trophy Room Modal */}
+      <AnimatePresence>
+        {activeModal === 'trophies' && (
+          <TrophyRoom
+            onClose={() => setActiveModal(null)}
+            unlockedIds={progress?.achievements || []}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Achievement Toast */}
+      <AnimatePresence>
+        {currentToast && (
+          <AchievementToast
+            achievement={currentToast}
+            onDismiss={() => setCurrentToast(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Stats Modal */}
       <AnimatePresence>
         {activeModal === 'stats' && (
@@ -1181,7 +1286,7 @@ export default function Dashboard() {
                       <Zap className="w-5 h-5 fill-current" />
                       Streak Achievements
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div className="bg-amber-500/5 rounded-2xl p-6 border border-amber-500/20 border-b-2 border-b-amber-500/40 relative overflow-hidden group">
                         <div className="absolute -right-4 -bottom-4 opacity-10 text-amber-500 group-hover:scale-110 transition-transform"><Zap className="w-24 h-24 fill-current" /></div>
                         <div className="text-4xl font-black text-amber-400 mb-1 relative z-10">{progress.stats.dailyStreak || 0}</div>
@@ -1194,6 +1299,10 @@ export default function Dashboard() {
                       <div className="bg-brand-primary/5 rounded-2xl p-6 border border-brand-primary/20 border-b-2 border-b-brand-primary/40 relative overflow-hidden group">
                         <div className="text-4xl font-black text-brand-primary mb-1 relative z-10">{progress.stats.longestSessionStreak || 0}</div>
                         <div className="text-[10px] font-bold tracking-widest uppercase text-brand-primary/80 relative z-10">Best Card Streak</div>
+                      </div>
+                      <div className="bg-sky-500/5 rounded-2xl p-6 border border-sky-500/20 border-b-2 border-b-sky-500/40 relative overflow-hidden group">
+                        <div className="text-4xl font-black text-sky-400 mb-1 relative z-10">{progress.stats.recordReviewed || 0}</div>
+                        <div className="text-[10px] font-bold tracking-widest uppercase text-sky-500/80 relative z-10">Record Daily Reviewed</div>
                       </div>
                     </div>
                   </div>
@@ -1221,9 +1330,6 @@ export default function Dashboard() {
                                 </>
                               )}
                             </div>
-                            <span className="text-[10px] tracking-widest uppercase font-bold text-brand-muted whitespace-nowrap">
-                              {island.color_score} / 100 Score
-                            </span>
                           </div>
                         </div>
                         <div className="flex gap-4 shrink-0">
@@ -1377,13 +1483,22 @@ export default function Dashboard() {
               Statistics
             </div>
           </button>
-          <button 
+          <button
             onClick={() => setActiveModal('leaderboard')}
             className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
           >
             <Trophy className="w-6 h-6" />
             <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
               Competitions
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveModal('trophies')}
+            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+          >
+            <Award className="w-6 h-6" />
+            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+              Captain's Quarters
             </div>
           </button>
         </nav>
@@ -1421,20 +1536,41 @@ export default function Dashboard() {
                   mode={studyMode}
                   settings={progress?.settings}
                   onFinish={handleFinishStudy}
-                  onManage={async (delta, cardUpdates, maxStreak) => {
+                  onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak);
                     else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+                    if (progress && sessionMeta) {
+                      const unlocked = await checkAndAwardAchievements({
+                        progress, cardUpdates, sessionMeta, trigger: 'session-abandon',
+                        islandId: selectedIslandId || undefined,
+                      });
+                      if (unlocked.length) enqueueToasts(unlocked);
+                    }
                     setIsStudying(false);
                   }}
-                  onBackToMap={async (delta, cardUpdates, maxStreak) => {
+                  onBackToMap={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak);
                     else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+                    if (progress && sessionMeta) {
+                      const unlocked = await checkAndAwardAchievements({
+                        progress, cardUpdates, sessionMeta, trigger: 'session-abandon',
+                        islandId: selectedIslandId || undefined,
+                      });
+                      if (unlocked.length) enqueueToasts(unlocked);
+                    }
                     setIsStudying(false);
                     setSelectedIslandId(null);
                   }}
-                  onSwitchMode={async (newMode, delta, cardUpdates, maxStreak) => {
+                  onSwitchMode={async (newMode, delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak);
                     else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+                    if (progress && sessionMeta) {
+                      const unlocked = await checkAndAwardAchievements({
+                        progress, cardUpdates, sessionMeta, trigger: 'session-complete',
+                        islandId: selectedIslandId || undefined,
+                      });
+                      if (unlocked.length) enqueueToasts(unlocked);
+                    }
                     setStudyMode(newMode);
                   }}
                 />
@@ -1471,7 +1607,7 @@ export default function Dashboard() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-brand-muted font-normal text-sm sm:text-base">Manage your knowledge base and track retention.</p>
+                    <p className="text-brand-muted font-normal text-sm sm:text-base">Manage your knowledge base.</p>
                   </div>
                   <button 
                     onClick={() => setIsModalOpen(true)}
@@ -1662,7 +1798,13 @@ export default function Dashboard() {
                   archipelagos={progress?.archipelagos || []}
                   onUpdateIsland={(updates) => updateIsland(selectedIsland.id, updates)}
                   onBack={() => setSelectedIslandId(null)}
-                  onAddCard={(card) => addCardToIsland(selectedIsland.id, card)}
+                  onAddCard={async (card) => {
+                    await addCardToIsland(selectedIsland.id, card);
+                    if (progress) {
+                      const unlocked = await checkAndAwardAchievements({ progress, trigger: 'card-created' });
+                      if (unlocked.length) enqueueToasts(unlocked);
+                    }
+                  }}
                   onUpdateCard={(cardIndex, card) => updateCardInIsland(selectedIsland.id, cardIndex, card)}
                   onDeleteCard={(cardIndex) => removeCardFromIsland(selectedIsland.id, cardIndex)}
                   onMoveCard={(cardIndex, targetIslandId) => moveCardBetweenIslands(selectedIsland.id, targetIslandId, cardIndex)}
@@ -1670,8 +1812,20 @@ export default function Dashboard() {
                     removeIsland(selectedIsland.id);
                     setSelectedIslandId(null);
                   }}
-                  onAddCards={(cards) => addCardsToIsland(selectedIsland.id, cards)}
-                  onShare={shareIsland}
+                  onAddCards={async (cards) => {
+                    await addCardsToIsland(selectedIsland.id, cards);
+                    if (progress) {
+                      const unlocked = await checkAndAwardAchievements({ progress, trigger: 'card-created' });
+                      if (unlocked.length) enqueueToasts(unlocked);
+                    }
+                  }}
+                  onShare={async (island, targetUids) => {
+                    await shareIsland(island, targetUids);
+                    if (progress) {
+                      const unlocked = await checkAndAwardAchievements({ progress, trigger: 'island-shared' });
+                      if (unlocked.length) enqueueToasts(unlocked);
+                    }
+                  }}
                   onUnshare={unshareIsland}
                   onStartStudy={(mode) => {
                     setStudyMode(mode);
@@ -1777,11 +1931,19 @@ export default function Dashboard() {
         </button>
 
         {/* Competitions */}
-        <button 
-          onClick={() => setActiveModal('leaderboard')} 
+        <button
+          onClick={() => setActiveModal('leaderboard')}
           className={cn("p-2 transition-all relative", activeModal === 'leaderboard' ? "text-brand-primary scale-110" : "text-brand-muted")}
         >
           <Trophy className="w-6 h-6" />
+        </button>
+
+        {/* Captain's Quarters */}
+        <button
+          onClick={() => setActiveModal('trophies')}
+          className={cn("p-2 transition-all relative", activeModal === 'trophies' ? "text-brand-primary scale-110" : "text-brand-muted")}
+        >
+          <Award className="w-6 h-6" />
         </button>
 
         {/* Mobile Notifications */}
@@ -1929,6 +2091,16 @@ export default function Dashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        danger={confirmDialog.danger}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, open: false }))}
+      />
     </div>
   );
 }
@@ -2004,106 +2176,6 @@ function IslandCard({ island, masteryLevel, islandImageSrc, onClick }: IslandCar
         </p>
       </div>
     </motion.div>
-  );
-}
-
-function RetentionTooltip({ score }: { score: number }) {
-  const [show, setShow] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setShow(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const getStatus = (s: number) => {
-    if (s > 80) return { label: 'High Retention', desc: 'Solid consistency. You know this material well.' };
-    if (s > 40) return { label: 'Moderate Retention', desc: 'Starting to slip. A review session is recommended.' };
-    return { label: 'Low Retention', desc: 'Significant attention needed. Study now to rebuild knowledge.' };
-  };
-
-  const status = getStatus(score);
-  
-  const radius = 18;
-  const circumference = 2 * Math.PI * radius;
-  const safeScore = Math.max(0, Math.min(100, score));
-  const dashoffset = circumference - (safeScore / 100) * circumference;
-  
-  const colorClass = score > 80 ? 'text-emerald-400 stroke-emerald-400' : score > 40 ? 'text-amber-400 stroke-amber-400' : 'text-red-400 stroke-red-400';
-
-  return (
-    <div ref={containerRef} className="relative inline-block w-fit self-start z-10" onClick={(e) => e.stopPropagation()}>
-      <div 
-        onClick={() => setShow(!show)}
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 hover:bg-white/10 transition-colors cursor-help group relative"
-      >
-        <svg className="w-10 h-10 -rotate-90 transform absolute inset-1" viewBox="0 0 40 40">
-          <circle
-            className="stroke-white/10"
-            strokeWidth="3.5"
-            fill="transparent"
-            r={radius}
-            cx="20"
-            cy="20"
-          />
-          <circle
-            className={cn("transition-all duration-1000 ease-out", colorClass.split(' ')[1])}
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            fill="transparent"
-            r={radius}
-            cx="20"
-            cy="20"
-            style={{
-              strokeDasharray: circumference,
-              strokeDashoffset: dashoffset
-            }}
-          />
-        </svg>
-        <span className={cn("text-[11px] font-black tracking-tighter relative z-10", colorClass.split(' ')[0])}>
-          {Math.round(score)}
-        </span>
-      </div>
-
-      <AnimatePresence>
-        {show && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-            className="absolute bottom-full left-0 mb-4 w-64 glass p-5 rounded-[24px] shadow-[0_30px_60px_rgba(0,0,0,0.8)] z-[100] pointer-events-none md:pointer-events-auto border border-white/10"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center">
-                <Info className="w-4 h-4 text-brand-primary" />
-              </div>
-              <div>
-                <p className="text-[10px] text-brand-muted uppercase tracking-widest font-black leading-none mb-1">Retention</p>
-                <p className={cn("text-xs font-bold", colorClass.split(' ')[0])}>
-                  {status.label}
-                </p>
-              </div>
-            </div>
-            <p className="text-xs text-brand-muted leading-relaxed mb-3">
-              {status.desc}
-            </p>
-            <div className="pt-3 border-t border-white/5">
-              <p className="text-[9px] text-brand-muted/50 leading-tight">
-                Complete study sessions to increase your score and reach <span className="text-white">Mastery</span>.
-              </p>
-            </div>
-            <div className="absolute bottom-[-6px] left-6 w-3 h-3 bg-[#111] border-r border-b border-brand-border rotate-45" />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 }
 

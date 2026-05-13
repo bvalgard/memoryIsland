@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Timestamp,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -19,7 +21,13 @@ import {
 import { auth, db, isConfigPlaceholder } from '../firebase';
 
 export type CardStatus = 'learning' | 'struggling' | 'mastered';
-export type CardUpdateRecord = Record<string, { status: CardStatus; consecutiveCorrect?: number; lastReviewed?: number }>;
+export type CardUpdateRecord = Record<string, {
+  status: CardStatus;
+  consecutiveCorrect?: number;
+  lastReviewed?: number;
+  wasDemoted?: boolean;
+  demotionCount?: number;
+}>;
 
 export interface Card {
   id?: string;
@@ -37,6 +45,7 @@ export interface Card {
   prevTierCardId?: string;
   tier?: number;
   hint?: string;
+  demotionCount?: number;
 }
 
 export interface Archipelago {
@@ -90,6 +99,7 @@ export interface UserProgress {
   archipelagos?: Archipelago[];
   stats?: UserStats;
   settings?: UserSettings;
+  achievements?: string[];
 }
 
 interface UserDocumentData {
@@ -104,6 +114,7 @@ interface UserDocumentData {
   stats?: UserStats;
   settings?: UserSettings;
   dataModelVersion?: number;
+  achievements?: string[];
 }
 
 interface IslandDocumentData {
@@ -538,6 +549,7 @@ export function useUserProgress() {
           prevTierCardId: data.prevTierCardId,
           tier: data.tier,
           hint: data.hint || '',
+          demotionCount: data.demotionCount,
         });
         cardsByIsland.set(data.islandId, existing);
       });
@@ -567,6 +579,7 @@ export function useUserProgress() {
       stats: { ...defaultStats, ...(userData.stats || {}) },
       settings: { ...defaultSettings, ...(userData.settings || {}) },
       islands: assembledIslands,
+      achievements: userData.achievements || [],
     });
     setLoading(false);
   }, [userLoaded, islandsLoaded, cardsLoaded, userData, islandDocs, cardDocs]);
@@ -894,18 +907,18 @@ export function useUserProgress() {
     island.cards.forEach((card) => {
       const update = cardUpdates[card.front];
       if (update && card.id) {
-        batch.update(doc(db, 'cards', card.id), {
+        const cardPayload: Record<string, unknown> = {
           status: update.status,
           consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
           needsWork: update.status === 'struggling',
           lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
-        });
+        };
+        if (update.wasDemoted) {
+          cardPayload.demotionCount = (card.demotionCount || 0) + 1;
+        }
+        batch.update(doc(db, 'cards', card.id), cardPayload);
       }
     });
-    batch.update(doc(db, 'islands', islandId), {
-      color_score: Math.min(100, Math.max(0, island.color_score + delta)),
-    });
-
     try {
       await batch.commit();
       await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak);
@@ -919,25 +932,22 @@ export function useUserProgress() {
 
     const batch = writeBatch(db);
     progress.islands.forEach((island) => {
-      let islandUpdated = false;
       island.cards.forEach((card) => {
         const update = cardUpdates[card.front];
         if (update && card.id) {
-          islandUpdated = true;
-          batch.update(doc(db, 'cards', card.id), {
+          const cardPayload: Record<string, unknown> = {
             status: update.status,
             consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
             needsWork: update.status === 'struggling',
             lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
-          });
+          };
+          if (update.wasDemoted) {
+            cardPayload.demotionCount = (card.demotionCount || 0) + 1;
+          }
+          batch.update(doc(db, 'cards', card.id), cardPayload);
         }
       });
 
-      if (islandUpdated) {
-        batch.update(doc(db, 'islands', island.id), {
-          color_score: Math.min(100, Math.max(0, island.color_score + delta)),
-        });
-      }
     });
 
     try {
@@ -1278,6 +1288,13 @@ export function useUserProgress() {
     }
   };
 
+  const dismissShare = async (collection_name: 'published_islands' | 'published_archipelagos', docId: string) => {
+    if (!user) throw new Error('Not signed in');
+    await updateDoc(doc(db, collection_name, docId), {
+      sharedWith: arrayRemove(user.uid),
+    });
+  };
+
   const moveCardBetweenIslands = async (sourceIslandId: string, targetIslandId: string, cardIndex: number) => {
     if (!progress) return;
 
@@ -1341,5 +1358,13 @@ export function useUserProgress() {
     importArchipelago,
     deletePublishedIsland,
     deletePublishedArchipelago,
+    dismissShare,
   };
 }
+
+export const saveUnlockedAchievements = async (uid: string, newIds: string[]) => {
+  if (!newIds.length) return;
+  await updateDoc(doc(db, 'users', uid), {
+    achievements: arrayUnion(...newIds),
+  });
+};
