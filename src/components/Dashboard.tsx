@@ -1583,9 +1583,9 @@ export default function Dashboard() {
                 exit={{ opacity: 0, scale: 1.01 }}
                 transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               >
-                <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-12 gap-6">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-8 sm:mb-12 gap-4 sm:gap-6">
                   <div>
-                    <div className="flex items-center gap-4 mb-2">
+                    <div className="flex flex-wrap items-center gap-3 mb-2">
                       <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight">Memory Islands</h2>
                       <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl p-1">
                         <select
@@ -1620,62 +1620,60 @@ export default function Dashboard() {
 
                 {/* Archipelago Study Section */}
                 {allCards.length > 0 && (
-                  <div className="mb-12 glass p-8 rounded-[40px] border-brand-primary/20 relative overflow-hidden group">
+                  <div className="mb-8 sm:mb-12 glass p-5 sm:p-8 rounded-[32px] sm:rounded-[40px] border-brand-primary/20 relative overflow-hidden group">
                     <div className="absolute top-[-100px] right-[-100px] w-[300px] h-[300px] bg-brand-primary/10 rounded-full blur-[80px] group-hover:bg-brand-primary/15 transition-colors" />
-                    
-                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-8 relative z-10">
-                      <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-brand-primary/10 rounded-3xl flex items-center justify-center border border-brand-primary/20 shrink-0">
-                          <Map className="w-8 h-8 text-brand-primary" />
+
+                    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 sm:gap-8 relative z-10">
+                      <div className="flex items-center gap-4 sm:gap-6">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-brand-primary/10 rounded-2xl sm:rounded-3xl flex items-center justify-center border border-brand-primary/20 shrink-0">
+                          <Map className="w-6 h-6 sm:w-8 sm:h-8 text-brand-primary" />
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-1">
-                            <h3 className="text-xl font-bold">{archipelagoName} Study</h3>
-                            {selectedArchipelagoId && (
-                              <>
-                                 {(() => {
-                                  const archipelagoPrivacyState = selectedArchipelago.isPublic 
-                                    ? 'public' 
-                                    : (selectedArchipelago.sharedWith && selectedArchipelago.sharedWith.length > 0)
-                                      ? 'shared'
-                                      : 'private';
-                                  
-                                  return (
-                                    <button 
-                                      onClick={() => archipelagoPrivacyState === 'public' ? setShowUnshareArchipelagoConfirm(true) : setShowShareArchipelagoConfirm(true)}
-                                      className={cn(
-                                        "p-1.5 rounded-lg transition-all flex items-center gap-1.5",
-                                        archipelagoPrivacyState === 'public' 
-                                          ? "bg-brand-primary/10 border border-brand-primary/20 text-brand-primary" 
-                                          : archipelagoPrivacyState === 'shared'
-                                            ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-300"
-                                            : "bg-white/5 border border-white/5 text-brand-muted hover:text-white hover:border-white/10"
-                                      )}
-                                      title={archipelagoPrivacyState === 'public' ? "Remove this Archipelago from Community" : "Share this Archipelago"}
-                                    >
-                                      {archipelagoPrivacyState === 'public' ? <Globe className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                                      <span className="text-[10px] font-bold uppercase tracking-tight">
-                                        {archipelagoPrivacyState === 'public' ? 'Public' : archipelagoPrivacyState === 'shared' ? `Shared (${selectedArchipelago.sharedWith?.length})` : 'Share'}
-                                      </span>
-                                    </button>
-                                  );
-                                })()}
-                                <button
-                                  onClick={() => setShowDeleteArchipelagoConfirm(true)}
-                                  className="p-1.5 rounded-lg bg-red-500/5 border border-red-500/10 text-red-400/60 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all flex items-center gap-1.5"
-                                  title="Delete this Archipelago"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span className="text-[10px] font-bold uppercase tracking-tight">Delete</span>
-                                </button>
-                              </>
-                            )}
-                          </div>
-                          <p className="text-brand-muted text-sm max-w-sm">Review your entire knowledge base across all anchored islands.</p>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base sm:text-xl font-bold truncate mb-1">{archipelagoName} Study</h3>
+                          {selectedArchipelagoId && (
+                            <div className="flex items-center gap-2 mb-1">
+                              {(() => {
+                                const archipelagoPrivacyState = selectedArchipelago.isPublic
+                                  ? 'public'
+                                  : (selectedArchipelago.sharedWith && selectedArchipelago.sharedWith.length > 0)
+                                    ? 'shared'
+                                    : 'private';
+
+                                return (
+                                  <button
+                                    onClick={() => archipelagoPrivacyState === 'public' ? setShowUnshareArchipelagoConfirm(true) : setShowShareArchipelagoConfirm(true)}
+                                    className={cn(
+                                      "p-1.5 rounded-lg transition-all flex items-center gap-1.5",
+                                      archipelagoPrivacyState === 'public'
+                                        ? "bg-brand-primary/10 border border-brand-primary/20 text-brand-primary"
+                                        : archipelagoPrivacyState === 'shared'
+                                          ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-300"
+                                          : "bg-white/5 border border-white/5 text-brand-muted hover:text-white hover:border-white/10"
+                                    )}
+                                    title={archipelagoPrivacyState === 'public' ? "Remove this Archipelago from Community" : "Share this Archipelago"}
+                                  >
+                                    {archipelagoPrivacyState === 'public' ? <Globe className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                                    <span className="text-[10px] font-bold uppercase tracking-tight">
+                                      {archipelagoPrivacyState === 'public' ? 'Public' : archipelagoPrivacyState === 'shared' ? `Shared (${selectedArchipelago.sharedWith?.length})` : 'Share'}
+                                    </span>
+                                  </button>
+                                );
+                              })()}
+                              <button
+                                onClick={() => setShowDeleteArchipelagoConfirm(true)}
+                                className="p-1.5 rounded-lg bg-red-500/5 border border-red-500/10 text-red-400/60 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all flex items-center gap-1.5"
+                                title="Delete this Archipelago"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-bold uppercase tracking-tight">Delete</span>
+                              </button>
+                            </div>
+                          )}
+                          <p className="text-brand-muted text-xs sm:text-sm hidden sm:block max-w-sm">Review your entire knowledge base across all anchored islands.</p>
                         </div>
                       </div>
 
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                         <div className="flex flex-wrap bg-white/5 rounded-2xl p-1 border border-white/10 shadow-lg">
                           <button 
                             onClick={() => setStudyMode('all')}
