@@ -887,9 +887,12 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               className="w-full relative grid"
             >
               {/* Front */}
-              <div 
-                className="[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center justify-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px]"
+              <div
+                className="[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center justify-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px] relative"
               >
+                <span className="absolute top-4 right-5 text-[10px] text-white/40 font-medium tabular-nums select-none">
+                  {currentCard?.consecutiveCorrect ?? 0}✓
+                </span>
                 <p className="text-brand-muted uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-4 sm:mb-6 shrink-0">
                   {currentCard?.type === 'mcq' ? 'Select the Correct Answer' : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? 'Fill in the Blank' : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : 'Front Side'}
                   {tierInfo && (
@@ -921,7 +924,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                               isMatched ? "bg-emerald-500/10 text-emerald-500/60 border border-emerald-500/20" :
                               isSelected ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]" :
                               isError ? "bg-red-500/20 text-red-500 border border-red-500/50" :
-                              "bg-white/5 border border-white/10 hover:bg-white/10 text-white"
+                              "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                             )}
                           >
                             <span className={cn(isMatched && "line-through decoration-emerald-500/30")}>{left.text}</span>
@@ -946,7 +949,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                               isMatched ? "bg-emerald-500/10 text-emerald-500/60 border border-emerald-500/20" :
                               isSelected ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]" :
                               isError ? "bg-red-500/20 text-red-500 border border-red-500/50" :
-                              "bg-white/5 border border-white/10 hover:bg-white/10 text-white"
+                              "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                             )}
                           >
                             <span className={cn(isMatched && "line-through decoration-emerald-500/30")}>{right.text}</span>
@@ -1000,11 +1003,11 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                     <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
                       {shuffledOptions.map((opt, idx) => {
                         const isSelected = selectedMultiOptions.has(opt);
-                        let btnClass = "bg-white/5 border border-white/10 text-brand-muted";
+                        let btnClass = "bg-white/5 border border-white/10 text-white/70";
                         let icon = null;
 
                         if (!isFlipped) {
-                          btnClass = isSelected ? "bg-brand-primary/20 border-brand-primary/50 text-white" : "bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-brand-muted";
+                          btnClass = isSelected ? "bg-brand-primary/20 border-brand-primary/50 text-white" : "bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-white/70";
                         } else {
                           const isCorrectOpt = currentCard.correctOptions?.includes(opt);
                           if (isCorrectOpt) {
@@ -1055,7 +1058,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         className="w-full space-y-2"
                       >
                         {shuffledSequence.map((item, idx) => {
-                          let btnClass = "bg-white/5 border border-white/10 text-white";
+                          let btnClass = "bg-white/5 border border-white/10 text-white/80";
                           let icon = null;
 
                           if (isFlipped) {
@@ -1103,7 +1106,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                 ) : currentCard?.type === 'mcq' ? (
                   <div className="w-full flex-1 flex flex-col justify-center gap-3 pb-4">
                     {shuffledOptions.map((opt, idx) => {
-                      let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-brand-muted hover:text-white";
+                      let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white";
                       let statusText = null;
 
                       if (selectedOption) {
@@ -1135,7 +1138,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                           >
                             <div className="flex justify-between items-start gap-4">
                               <div className="flex items-start gap-3 flex-1">
-                                <span className="font-bold opacity-50 shrink-0">{letter}.</span>
+                                <span className="font-bold text-white/70 shrink-0">{letter}.</span>
                                 <span className={cn(
                                   "font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1",
                                   !selectedOption && "group-hover:translate-x-1 transition-transform"
