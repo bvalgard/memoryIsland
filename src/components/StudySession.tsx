@@ -918,7 +918,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
             custom={direction}
             variants={{
               enter: (direction: number) => ({
-                x: direction * 400,
+                x: direction > 0 ? '110%' : '-110%',
                 opacity: 0,
                 scale: 0.8,
                 rotate: direction * 10
@@ -932,7 +932,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               },
               exit: (direction: number) => ({
                 zIndex: 10,
-                x: direction * -400,
+                x: direction > 0 ? '-110%' : '110%',
                 opacity: 0,
                 scale: 0.8,
                 rotate: direction * -10

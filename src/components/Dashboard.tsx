@@ -1521,7 +1521,7 @@ export default function Dashboard() {
         </header>
 
         {/* Content Area */}
-        <div className="p-6 md:p-12 max-w-7xl mx-auto w-full">
+        <div className="p-6 md:p-12 max-w-7xl mx-auto w-full overflow-x-hidden">
           <AnimatePresence mode="wait">
             {isStudying && selectedIsland ? (
               <motion.div
