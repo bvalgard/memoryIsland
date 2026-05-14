@@ -5,6 +5,7 @@ import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, MousePointerCli
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn } from '../lib/utils';
+import LightboxImage from './LightboxImage';
 
 // Reliable Fisher-Yates shuffle to prevent duplicate/dropped card bugs caused by Math.random() in sort()
 function shuffleArray<T>(array: T[]): T[] {
@@ -978,6 +979,12 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                     </span>
                   )}
                 </p>
+                {currentCard?.imageUrl && (
+                  <LightboxImage
+                    src={currentCard.imageUrl}
+                    className="w-full max-h-48 object-contain rounded-xl mb-4"
+                  />
+                )}
                 <h2 className={cn("font-bold leading-snug tracking-tight mb-6 sm:mb-8 whitespace-pre-wrap", currentCard?.type === 'mcq' ? "text-lg sm:text-xl md:text-2xl" : "text-xl sm:text-2xl md:text-3xl")}>
                   {currentCard?.front}
                 </h2>
@@ -1341,7 +1348,15 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                     )}
                   </div>
                 ) : (
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
+                  <>
+                    {currentCard?.backImageUrl && (
+                      <LightboxImage
+                        src={currentCard.backImageUrl}
+                        className="w-full max-h-48 object-contain rounded-xl mb-4"
+                      />
+                    )}
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
+                  </>
                 )}
               </div>
             </motion.div>

@@ -30,6 +30,8 @@ function sanitizePublicCard(card) {
     explanations: card.explanations || {},
     pairs: card.pairs || [],
     hint: card.hint || '',
+    ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
+    ...(card.backImageUrl ? { backImageUrl: card.backImageUrl } : {}),
   };
 }
 

@@ -6,6 +6,7 @@ import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
 import ShareModal from './ShareModal';
+import ImageUpload from './ImageUpload';
 
 interface IslandDetailProps {
   island: Island;
@@ -48,6 +49,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     { id: Date.now().toString() + '1', text: '' },
     { id: Date.now().toString() + '2', text: '' }
   ]);
+  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
+  const [backImageUrl, setBackImageUrl] = useState<string | undefined>(undefined);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
@@ -71,6 +74,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setDistractorExplanations('');
     setCorrectAnswerExplanation('');
     setHint('');
+    setImageUrl(undefined);
+    setBackImageUrl(undefined);
     setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
     setMultiSelectOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: false },
@@ -110,6 +115,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       if (hint.trim()) {
         newCard.hint = hint.trim();
       }
+
+      if (imageUrl) newCard.imageUrl = imageUrl;
+      if (backImageUrl) newCard.backImageUrl = backImageUrl;
 
       if (cardType === 'mcq') {
         const optionLines = distractors.split('\n').map(l => l.trim()).filter(l => l);
@@ -189,6 +197,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setFront(card.front);
     setBack(card.back);
     setHint(card.hint || '');
+    setImageUrl(card.imageUrl);
+    setBackImageUrl(card.backImageUrl);
     if (card.type === 'mcq' && card.options) {
       // Options format is [correctAnswer, ...distractors]
       const currentDistractors = card.options.filter(opt => opt !== card.back);
@@ -414,7 +424,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       const file = e.dataTransfer.files[0];
       if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
         parseCSV(file);
-      } else {
+      } else if (!file.type.startsWith('image/')) {
         alert("Please drop a valid CSV file.");
       }
     }
@@ -922,6 +932,23 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     rows={cardType === 'mcq' ? 2 : 3}
                     className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
                   />
+                </div>
+              )}
+
+              {(cardType === 'flashcard' || cardType === 'mcq' || cardType === 'fill-in-the-blank') && (
+                <div className="space-y-4">
+                  <ImageUpload
+                    label={cardType === 'flashcard' ? 'Front Image (optional)' : 'Question Image (optional)'}
+                    value={imageUrl}
+                    onChange={setImageUrl}
+                  />
+                  {cardType === 'flashcard' && (
+                    <ImageUpload
+                      label="Back Image (optional)"
+                      value={backImageUrl}
+                      onChange={setBackImageUrl}
+                    />
+                  )}
                 </div>
               )}
 

@@ -134,6 +134,8 @@ export default function Dashboard() {
   const [inboundSharedIslands, setInboundSharedIslands] = useState<any[]>([]);
   const [inboundSharedArchipelagos, setInboundSharedArchipelagos] = useState<any[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [importingIslandId, setImportingIslandId] = useState<string | null>(null);
+  const [importingArchipelagoId, setImportingArchipelagoId] = useState<string | null>(null);
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
@@ -862,11 +864,18 @@ export default function Dashboard() {
                               </button>
                             )}
                             <button
-                              onClick={() => {
-                                importIsland(island);
-                                setActiveModal(null);
+                              onClick={async () => {
+                                setImportingIslandId(island.id!);
+                                try {
+                                  await importIsland(island);
+                                } catch {
+                                  // Error already surfaced via alert in importIsland
+                                } finally {
+                                  setImportingIslandId(null);
+                                  setActiveModal(null);
+                                }
                               }}
-                              disabled={isAlreadyImported && island.authorId !== user?.uid}
+                              disabled={(isAlreadyImported && island.authorId !== user?.uid) || importingIslandId === island.id}
                               className={cn(
                                 "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
                                 isAlreadyImported
@@ -878,6 +887,11 @@ export default function Dashboard() {
                                 <>
                                   <Check className="w-3.5 h-3.5" />
                                   Anchored
+                                </>
+                              ) : importingIslandId === island.id ? (
+                                <>
+                                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                                  Importing...
                                 </>
                               ) : (
                                 <>
@@ -982,11 +996,18 @@ export default function Dashboard() {
                               </button>
                             )}
                             <button
-                              onClick={() => {
-                                importArchipelago(arch);
-                                setActiveModal(null);
+                              onClick={async () => {
+                                setImportingArchipelagoId(arch.id);
+                                try {
+                                  await importArchipelago(arch);
+                                } catch {
+                                  // Error already surfaced via alert in importArchipelago
+                                } finally {
+                                  setImportingArchipelagoId(null);
+                                  setActiveModal(null);
+                                }
                               }}
-                              disabled={isAlreadyImported && arch.authorId !== user?.uid}
+                              disabled={(isAlreadyImported && arch.authorId !== user?.uid) || importingArchipelagoId === arch.id}
                               className={cn(
                                 "flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs transition-all",
                                 isAlreadyImported
@@ -998,6 +1019,11 @@ export default function Dashboard() {
                                 <>
                                   <Check className="w-3.5 h-3.5" />
                                   Imported
+                                </>
+                              ) : importingArchipelagoId === arch.id ? (
+                                <>
+                                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                                  Importing...
                                 </>
                               ) : (
                                 <>

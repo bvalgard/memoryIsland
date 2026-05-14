@@ -46,6 +46,8 @@ export interface Card {
   tier?: number;
   hint?: string;
   demotionCount?: number;
+  imageUrl?: string;
+  backImageUrl?: string;
 }
 
 export interface Archipelago {
@@ -258,6 +260,8 @@ function sanitizeCardForPublic(card: Card) {
     explanations: card.explanations || {},
     pairs: card.pairs || [],
     hint: card.hint || '',
+    ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
+    ...(card.backImageUrl ? { backImageUrl: card.backImageUrl } : {}),
   };
 }
 
@@ -550,6 +554,8 @@ export function useUserProgress() {
           tier: data.tier,
           hint: data.hint || '',
           demotionCount: data.demotionCount,
+          imageUrl: data.imageUrl,
+          backImageUrl: data.backImageUrl,
         });
         cardsByIsland.set(data.islandId, existing);
       });
@@ -1179,7 +1185,6 @@ export function useUserProgress() {
       createdAt: Date.now(),
       isPublic: false,
       approvalStatus: 'draft',
-      isImported: true,
     }));
 
     try {
@@ -1208,7 +1213,7 @@ export function useUserProgress() {
       console.warn('Could not increment download count.');
     }
 
-    await updateArchipelagos([...(progress.archipelagos || []), { ...newArchipelago, isImported: true }]);
+    await updateArchipelagos([...(progress.archipelagos || []), newArchipelago]);
   };
 
   const discoverIslands = async (searchTerm?: string) => {
@@ -1253,14 +1258,18 @@ export function useUserProgress() {
     const newIslandId = randomId();
     const importedCards = (island.cards || []).map((card, index) => normalizeCard(card, index));
     const newIsland: Island = {
-      ...island,
       id: newIslandId,
+      name: island.name,
       cards: importedCards,
       color_score: 50,
       isPublic: false,
       approvalStatus: 'draft',
+      authorId: island.authorId,
+      authorName: island.authorName,
       downloads: (island.downloads || 0) + 1,
       createdAt: Date.now(),
+      isImported: false,
+      sharedWith: [],
     };
 
     try {
