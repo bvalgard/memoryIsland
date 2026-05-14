@@ -55,7 +55,7 @@ export default function Dashboard() {
     return localStorage.getItem('selectedArchipelagoId') || null;
   });
   const [isStudying, setIsStudying] = useState(false);
-  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered'>('all');
+  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -349,6 +349,7 @@ export default function Dashboard() {
   const globalStrugglingCount = allCards.filter(c => c.status === 'struggling' || c.needsWork).length;
   const globalLearningCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
+  const globalDueCount = allCards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
 
   const friendRequestNotifications = (discoveryInboundRequests || []).map(profile => ({
     id: `friend_req_${profile.uid}`,
@@ -424,9 +425,9 @@ export default function Dashboard() {
 
   const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
     if (selectedIslandId === 'archipelago') {
-      await processArchipelagoResults(delta, cardUpdates, maxStreak);
+      await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
     } else if (selectedIslandId) {
-      await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+      await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
     }
     if (progress && sessionMeta) {
       const unlocked = await checkAndAwardAchievements({
@@ -1328,7 +1329,20 @@ export default function Dashboard() {
                         <div className="text-3xl font-black text-white mb-1 relative z-10">{progress.stats.totalCardsCreated}</div>
                         <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted relative z-10">Cards Authored</div>
                       </div>
-                      
+
+                      {/* Calibration Score */}
+                      {(progress.stats.calibrationTotal ?? 0) > 0 && (
+                        <div className="bg-violet-500/5 rounded-2xl p-4 border border-violet-500/20 border-b-2 border-b-violet-500/40 relative overflow-hidden group col-span-2 sm:col-span-1">
+                          <div className="text-3xl font-black text-violet-400 mb-1 relative z-10">
+                            {Math.round((progress.stats.calibrationCorrect ?? 0) / (progress.stats.calibrationTotal ?? 1) * 100)}%
+                          </div>
+                          <div className="text-[10px] font-bold tracking-widest uppercase text-violet-500/80 relative z-10">Calibration</div>
+                          <div className="text-[10px] text-brand-muted/60 relative z-10 mt-0.5">
+                            {progress.stats.calibrationCorrect ?? 0} / {progress.stats.calibrationTotal ?? 0} predictions
+                          </div>
+                        </div>
+                      )}
+
                     </div>
                   </div>
                 )}
@@ -1591,8 +1605,8 @@ export default function Dashboard() {
                   settings={progress?.settings}
                   onFinish={handleFinishStudy}
                   onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
-                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak);
-                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
                     if (progress && sessionMeta) {
                       const unlocked = await checkAndAwardAchievements({
                         progress, cardUpdates, sessionMeta, trigger: 'session-abandon',
@@ -1603,8 +1617,8 @@ export default function Dashboard() {
                     setIsStudying(false);
                   }}
                   onBackToMap={async (delta, cardUpdates, maxStreak, sessionMeta) => {
-                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak);
-                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
                     if (progress && sessionMeta) {
                       const unlocked = await checkAndAwardAchievements({
                         progress, cardUpdates, sessionMeta, trigger: 'session-abandon',
@@ -1616,8 +1630,8 @@ export default function Dashboard() {
                     setSelectedIslandId(null);
                   }}
                   onSwitchMode={async (newMode, delta, cardUpdates, maxStreak, sessionMeta) => {
-                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak);
-                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak);
+                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
                     if (progress && sessionMeta) {
                       const unlocked = await checkAndAwardAchievements({
                         progress, cardUpdates, sessionMeta, trigger: 'session-complete',
@@ -1761,7 +1775,7 @@ export default function Dashboard() {
 
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                         <div className="flex flex-wrap bg-white/5 rounded-2xl p-1 border border-white/10 shadow-lg">
-                          <button 
+                          <button
                             onClick={() => setStudyMode('all')}
                             className={cn(
                               "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-all font-black text-[10px] tracking-wider uppercase whitespace-nowrap",
@@ -1770,7 +1784,17 @@ export default function Dashboard() {
                           >
                             All ({allCards.length})
                           </button>
-                          <button 
+                          <button
+                            onClick={() => setStudyMode('due')}
+                            disabled={globalDueCount === 0}
+                            className={cn(
+                              "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
+                              studyMode === 'due' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" : "text-brand-muted hover:text-sky-400"
+                            )}
+                          >
+                            Due ({globalDueCount})
+                          </button>
+                          <button
                             onClick={() => setStudyMode('struggling')}
                             disabled={globalStrugglingCount === 0}
                             className={cn(
@@ -1780,7 +1804,7 @@ export default function Dashboard() {
                           >
                             Struggling ({globalStrugglingCount})
                           </button>
-                          <button 
+                          <button
                             onClick={() => setStudyMode('learning')}
                             disabled={globalLearningCount === 0}
                             className={cn(
@@ -1790,7 +1814,7 @@ export default function Dashboard() {
                           >
                             Learning ({globalLearningCount})
                           </button>
-                          <button 
+                          <button
                             onClick={() => setStudyMode('mastered')}
                             disabled={globalMasteredCount === 0}
                             className={cn(

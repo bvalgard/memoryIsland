@@ -20,6 +20,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isConfigPlaceholder } from '../firebase';
+import { SessionMeta } from '../achievements';
 
 export type CardStatus = 'learning' | 'struggling' | 'mastered';
 export type CardUpdateRecord = Record<string, {
@@ -28,6 +29,10 @@ export type CardUpdateRecord = Record<string, {
   lastReviewed?: number;
   wasDemoted?: boolean;
   demotionCount?: number;
+  srsInterval?: number;
+  srsEaseFactor?: number;
+  srsNextReview?: number;
+  srsRepetitions?: number;
 }>;
 
 export interface Card {
@@ -51,6 +56,10 @@ export interface Card {
   backImageUrl?: string;
   imageCredit?: string;
   backImageCredit?: string;
+  srsInterval?: number;
+  srsEaseFactor?: number;
+  srsNextReview?: number;
+  srsRepetitions?: number;
 }
 
 export interface Archipelago {
@@ -90,6 +99,8 @@ export interface UserStats {
   dailyStreak: number;
   longestDailyStreak: number;
   longestSessionStreak: number;
+  calibrationCorrect?: number;
+  calibrationTotal?: number;
 }
 
 export interface UserSettings {
@@ -588,6 +599,10 @@ export function useUserProgress() {
           backImageUrl: data.backImageUrl,
           imageCredit: data.imageCredit,
           backImageCredit: data.backImageCredit,
+          srsInterval: data.srsInterval,
+          srsEaseFactor: data.srsEaseFactor,
+          srsNextReview: data.srsNextReview,
+          srsRepetitions: data.srsRepetitions,
         });
         cardsByIsland.set(data.islandId, existing);
       });
@@ -909,7 +924,7 @@ export function useUserProgress() {
     }
   };
 
-  const handleStudyStatsUpdate = async (cardUpdates: CardUpdateRecord, sessionHighestStreak = 0) => {
+  const handleStudyStatsUpdate = async (cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress?.stats) return;
     const reviewedCount = Object.keys(cardUpdates).length;
     const masteredCount = Object.values(cardUpdates).filter((entry) => entry.status === 'mastered').length;
@@ -933,10 +948,14 @@ export function useUserProgress() {
       dailyStreak: newDailyStreak,
       longestDailyStreak: Math.max(progress.stats.longestDailyStreak || 0, newDailyStreak),
       longestSessionStreak: Math.max(progress.stats.longestSessionStreak || 0, sessionHighestStreak),
+      ...(sessionMeta?.calibrationTotal ? {
+        calibrationCorrect: (progress.stats.calibrationCorrect || 0) + (sessionMeta.calibrationCorrect || 0),
+        calibrationTotal: (progress.stats.calibrationTotal || 0) + sessionMeta.calibrationTotal,
+      } : {}),
     });
   };
 
-  const processSessionResults = async (islandId: string, delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0) => {
+  const processSessionResults = async (islandId: string, delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress) return;
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
@@ -954,18 +973,24 @@ export function useUserProgress() {
         if (update.wasDemoted) {
           cardPayload.demotionCount = (card.demotionCount || 0) + 1;
         }
+        if (update.srsInterval !== undefined) {
+          cardPayload.srsInterval = update.srsInterval;
+          cardPayload.srsEaseFactor = update.srsEaseFactor;
+          cardPayload.srsNextReview = update.srsNextReview;
+          cardPayload.srsRepetitions = update.srsRepetitions;
+        }
         batch.update(doc(db, 'cards', card.id), cardPayload);
       }
     });
     try {
       await batch.commit();
-      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak);
+      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
     }
   };
 
-  const processArchipelagoResults = async (delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0) => {
+  const processArchipelagoResults = async (delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress) return;
 
     const batch = writeBatch(db);
@@ -982,6 +1007,12 @@ export function useUserProgress() {
           if (update.wasDemoted) {
             cardPayload.demotionCount = (card.demotionCount || 0) + 1;
           }
+          if (update.srsInterval !== undefined) {
+            cardPayload.srsInterval = update.srsInterval;
+            cardPayload.srsEaseFactor = update.srsEaseFactor;
+            cardPayload.srsNextReview = update.srsNextReview;
+            cardPayload.srsRepetitions = update.srsRepetitions;
+          }
           batch.update(doc(db, 'cards', card.id), cardPayload);
         }
       });
@@ -990,7 +1021,7 @@ export function useUserProgress() {
 
     try {
       await batch.commit();
-      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak);
+      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'archipelago-session');
     }

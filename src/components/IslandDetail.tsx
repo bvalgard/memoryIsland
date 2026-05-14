@@ -20,7 +20,7 @@ interface IslandDetailProps {
   onMoveCard?: (cardIndex: number, targetIslandId: string) => void;
   onAddCards: (cards: Card[]) => void;
   onDeleteIsland?: () => void;
-  onStartStudy: (mode: 'all' | 'struggling' | 'learning' | 'mastered') => void;
+  onStartStudy: (mode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due') => void;
   onShare?: (island: Island, targetUids?: string[]) => void;
   onUnshare?: (island: Island) => void;
   onUpdateIsland?: (updates: Partial<Island>) => void;
@@ -30,7 +30,7 @@ interface IslandDetailProps {
 
 export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, friends = [], fetchProfilesByUids = async () => [] }: IslandDetailProps) {
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
-  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered'>('all');
+  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>('all');
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -445,6 +445,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
   const learningCount = island.cards.filter(c => !c.status || c.status === 'learning').length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
+  const dueCount = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
 
   let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
   if (strugglingCount > 0) {
@@ -740,7 +741,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           {island.cards.length > 0 && (
             <>
               <div className="flex flex-wrap bg-white/5 rounded-2xl p-1 border border-white/10 shadow-lg self-stretch sm:self-auto">
-                <button 
+                <button
                   onClick={() => setStudyMode('all')}
                   className={cn(
                     "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-all font-black text-[10px] tracking-wider uppercase whitespace-nowrap",
@@ -753,7 +754,18 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
                 <div className="hidden sm:block w-px h-4 bg-white/10 mx-1 self-center" />
 
-                <button 
+                <button
+                  onClick={() => setStudyMode('due')}
+                  disabled={dueCount === 0}
+                  className={cn(
+                    "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
+                    studyMode === 'due' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" : "text-brand-muted hover:text-sky-400"
+                  )}
+                  title={`${dueCount} cards due for review`}
+                >
+                  Due ({dueCount})
+                </button>
+                <button
                   onClick={() => setStudyMode('struggling')}
                   disabled={strugglingCount === 0}
                   className={cn(
@@ -763,7 +775,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 >
                   Struggling ({strugglingCount})
                 </button>
-                <button 
+                <button
                   onClick={() => setStudyMode('learning')}
                   disabled={learningCount === 0}
                   className={cn(
@@ -773,7 +785,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 >
                   Learning ({learningCount})
                 </button>
-                <button 
+                <button
                   onClick={() => setStudyMode('mastered')}
                   disabled={masteredCount === 0}
                   className={cn(

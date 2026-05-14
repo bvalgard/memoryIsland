@@ -3,6 +3,8 @@ export interface SessionMeta {
   cardCount: number;
   correctCount: number;
   sessionStartHour: number;
+  calibrationCorrect?: number;
+  calibrationTotal?: number;
 }
 
 export type AchievementCategory = 'resilience' | 'motivating' | 'quirky';

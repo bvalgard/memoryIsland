@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, MousePointerClick, Database, Zap, Library, XCircle, AlertCircle, Check, X } from 'lucide-react';
+import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X } from 'lucide-react';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn } from '../lib/utils';
@@ -17,7 +17,38 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-// Extracts only the active card for each conceptual lineage 
+function computeSM2(
+  quality: number,
+  prevRepetitions: number,
+  prevInterval: number,
+  prevEaseFactor: number
+): { interval: number; repetitions: number; easeFactor: number; nextReview: number } {
+  const MIN_EF = 1.3;
+  let reps = prevRepetitions;
+  let interval = prevInterval;
+  let ef = prevEaseFactor;
+
+  if (quality >= 3) {
+    if (reps === 0) interval = 1;
+    else if (reps === 1) interval = 6;
+    else interval = Math.round(prevInterval * ef);
+    reps += 1;
+  } else {
+    reps = 0;
+    interval = 1;
+  }
+  ef = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  if (ef < MIN_EF) ef = MIN_EF;
+
+  return {
+    interval,
+    repetitions: reps,
+    easeFactor: ef,
+    nextReview: Date.now() + interval * 24 * 60 * 60 * 1000,
+  };
+}
+
+// Extracts only the active card for each conceptual lineage
 function getActiveTierCards(allCards: Card[]): Card[] {
   const cardsById = new Map<string, Card>();
   allCards.forEach(c => {
@@ -57,12 +88,12 @@ function getActiveTierCards(allCards: Card[]): Card[] {
 
 interface StudySessionProps {
   island: Island;
-  mode?: 'all' | 'struggling' | 'learning' | 'mastered';
+  mode?: 'all' | 'struggling' | 'learning' | 'mastered' | 'due';
   settings?: UserSettings;
   onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
-  onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
 }
 
 export default function StudySession({ island, mode = 'all', settings, onFinish, onManage, onBackToMap, onSwitchMode }: StudySessionProps) {
@@ -83,6 +114,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     learning: 0,
     struggling: 0
   });
+
+  // Confidence calibration state
+  const [pendingConfidence, setPendingConfidence] = useState<number | null>(null);
+  const [sessionCalibration, setSessionCalibration] = useState({ correct: 0, total: 0 });
 
   // Matching Game State
   const [matchingLefts, setMatchingLefts] = useState<{ id: string, text: string }[]>([]);
@@ -131,31 +166,41 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
   
   const [shuffledCards, setShuffledCards] = useState(() => {
     const activeTierCards = getActiveTierCards(island.cards);
+    const now = Date.now();
     let targetCards = activeTierCards;
     if (mode === 'struggling') targetCards = activeTierCards.filter(c => c.status === 'struggling' || c.needsWork);
     else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
-    
-    // Shuffle first to randomize among cards with the same lastReviewed
+    else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now);
+
     const shuffled = shuffleArray(targetCards);
-    // Then sort by lastReviewed ascending to ensure least recently reviewed cards come first 
-    shuffled.sort((a, b) => (a.lastReviewed || 0) - (b.lastReviewed || 0));
+    if (mode === 'due') {
+      shuffled.sort((a, b) => (a.srsNextReview || 0) - (b.srsNextReview || 0));
+    } else {
+      shuffled.sort((a, b) => (a.lastReviewed || 0) - (b.lastReviewed || 0));
+    }
     return shuffled;
   });
 
   const [sessionComplete, setSessionComplete] = useState(shuffledCards.length === 0);
 
-  // Re-initialize the deck only on mount or when the user explicitly switches the study Mode, 
+  // Re-initialize the deck only on mount or when the user explicitly switches the study Mode,
   // explicitly skipping island.cards so background db snapshots don't reset their deck mid-session.
   useEffect(() => {
     const activeTierCards = getActiveTierCards(island.cards);
+    const now = Date.now();
     let targetCards = activeTierCards;
     if (mode === 'struggling') targetCards = activeTierCards.filter(c => c.status === 'struggling' || c.needsWork);
     else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
-    
+    else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now);
+
     const shuffled = shuffleArray(targetCards);
-    shuffled.sort((a, b) => (a.lastReviewed || 0) - (b.lastReviewed || 0));
+    if (mode === 'due') {
+      shuffled.sort((a, b) => (a.srsNextReview || 0) - (b.srsNextReview || 0));
+    } else {
+      shuffled.sort((a, b) => (a.lastReviewed || 0) - (b.lastReviewed || 0));
+    }
     setShuffledCards(shuffled);
     setCurrentIndex(0);
     setSessionComplete(shuffled.length === 0);
@@ -168,6 +213,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     cardCount: shuffledCards.length,
     correctCount: Object.values<{ status: CardStatus }>(cardUpdates as any).filter(c => c.status !== 'struggling').length,
     sessionStartHour: new Date(sessionStartTime.current).getHours(),
+    calibrationCorrect: sessionCalibration.correct,
+    calibrationTotal: sessionCalibration.total,
   });
 
   const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
@@ -272,6 +319,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     setSelectedOption(null);
     setShowHint(false);
     setIsFlipped(false);
+    setPendingConfidence(null);
     
     // Fill in the blank reset
     setFibInput('');
@@ -356,9 +404,24 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       setScoreDelta(prev => prev + points);
       setSessionStats(prev => ({ ...prev, [newStatus]: prev[newStatus as keyof typeof prev] + 1 }));
 
-      setCardUpdates(prev => ({ 
-        ...prev, 
-        [currentCard.front]: { status: newStatus, consecutiveCorrect: newConsecutive, lastReviewed: Date.now() } 
+      const srsFib = computeSM2(
+        usedClues ? 3 : 4,
+        currentCard.srsRepetitions ?? 0,
+        currentCard.srsInterval ?? 1,
+        currentCard.srsEaseFactor ?? 2.5
+      );
+
+      setCardUpdates(prev => ({
+        ...prev,
+        [currentCard.front]: {
+          status: newStatus,
+          consecutiveCorrect: newConsecutive,
+          lastReviewed: Date.now(),
+          srsInterval: srsFib.interval,
+          srsEaseFactor: srsFib.easeFactor,
+          srsNextReview: srsFib.nextReview,
+          srsRepetitions: srsFib.repetitions,
+        },
       }));
 
       // Trigger sparkle and next card using markcard logic slightly modified
@@ -377,6 +440,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         status === 'struggling' &&
         (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+      const srsFibWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+
       setCardUpdates(prev => ({
         ...prev,
         [currentCard.front]: {
@@ -387,32 +452,34 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
             wasDemoted: true,
             demotionCount: currentCard.demotionCount || 0,
           }),
+          srsInterval: srsFibWrong.interval,
+          srsEaseFactor: srsFibWrong.easeFactor,
+          srsNextReview: srsFibWrong.nextReview,
+          srsRepetitions: srsFibWrong.repetitions,
         },
       }));
       setDirection(-1);
     }
   };
 
-  const handleMarkCard = (status: CardStatus, e?: React.MouseEvent) => {
+  const handleFlashcardGrade = (isCorrect: boolean, e: React.MouseEvent) => {
     if (!currentCard) return;
-    if (e && window.navigator?.vibrate && status === 'mastered') {
-      window.navigator.vibrate(50);
+    if (isCorrect && window.navigator?.vibrate) window.navigator.vibrate(50);
+    if (isCorrect) triggerSparkle(e);
+
+    if (pendingConfidence !== null) {
+      const predictedCorrect = pendingConfidence >= 3;
+      setSessionCalibration(prev => ({
+        correct: prev.correct + (predictedCorrect === isCorrect ? 1 : 0),
+        total: prev.total + 1,
+      }));
+      setPendingConfidence(null);
     }
-    if (e && status !== 'struggling') {
-      triggerSparkle(e);
-    }
 
-    let points = 0;
-    if (status === 'mastered') points = 3;
-    else if (status === 'learning') points = 1;
-    setScoreDelta(prev => prev + points);
+    const { status, consecutiveCorrect } = getNextStatusAndStreak(isCorrect, currentCard.status, currentCard.consecutiveCorrect);
 
-    setSessionStats(prev => ({
-      ...prev,
-      [status]: prev[status as keyof typeof prev] + 1
-    }));
-
-    if (status !== 'struggling') {
+    if (isCorrect) {
+      setScoreDelta(prev => prev + 1);
       const newStreak = streak + 1;
       setStreak(newStreak);
       setMaxStreak(prev => Math.max(prev, newStreak));
@@ -420,23 +487,39 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       setStreak(0);
     }
 
+    setSessionStats(prev => ({
+      ...prev,
+      [status]: prev[status as keyof typeof prev] + 1
+    }));
+
     const isBeingDemoted =
       status === 'struggling' &&
       (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+    const srs = computeSM2(
+      isCorrect ? 4 : 0,
+      currentCard.srsRepetitions ?? 0,
+      currentCard.srsInterval ?? 1,
+      currentCard.srsEaseFactor ?? 2.5
+    );
 
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
         status,
-        consecutiveCorrect: status === 'mastered' ? 0 : (status === 'learning' ? 1 : 0),
+        consecutiveCorrect,
         lastReviewed: Date.now(),
         ...(isBeingDemoted && {
           wasDemoted: true,
           demotionCount: currentCard.demotionCount || 0,
         }),
+        srsInterval: srs.interval,
+        srsEaseFactor: srs.easeFactor,
+        srsNextReview: srs.nextReview,
+        srsRepetitions: srs.repetitions,
       },
     }));
-    setDirection(status !== 'struggling' ? 1 : -1);
+    setDirection(isCorrect ? 1 : -1);
     nextCard();
   };
 
@@ -527,6 +610,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       status === 'struggling' &&
       (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+    const srsMs = computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -537,6 +622,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           wasDemoted: true,
           demotionCount: currentCard.demotionCount || 0,
         }),
+        srsInterval: srsMs.interval,
+        srsEaseFactor: srsMs.easeFactor,
+        srsNextReview: srsMs.nextReview,
+        srsRepetitions: srsMs.repetitions,
       },
     }));
   };
@@ -568,6 +657,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       status === 'struggling' &&
       (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+    const srsSeq = computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -578,6 +669,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           wasDemoted: true,
           demotionCount: currentCard.demotionCount || 0,
         }),
+        srsInterval: srsSeq.interval,
+        srsEaseFactor: srsSeq.easeFactor,
+        srsNextReview: srsSeq.nextReview,
+        srsRepetitions: srsSeq.repetitions,
       },
     }));
   };
@@ -606,9 +701,18 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         [status]: prev[status as keyof typeof prev] + 1
       }));
 
-      setCardUpdates(prev => ({ 
-        ...prev, 
-        [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() } 
+      const srsMcqCorrect = computeSM2(4, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+      setCardUpdates(prev => ({
+        ...prev,
+        [currentCard.front]: {
+          status,
+          consecutiveCorrect,
+          lastReviewed: Date.now(),
+          srsInterval: srsMcqCorrect.interval,
+          srsEaseFactor: srsMcqCorrect.easeFactor,
+          srsNextReview: srsMcqCorrect.nextReview,
+          srsRepetitions: srsMcqCorrect.repetitions,
+        },
       }));
     } else {
       setStreak(0);
@@ -623,6 +727,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         status === 'struggling' &&
         (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+      const srsMcqWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+
       setCardUpdates(prev => ({
         ...prev,
         [currentCard.front]: {
@@ -633,6 +739,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
             wasDemoted: true,
             demotionCount: currentCard.demotionCount || 0,
           }),
+          srsInterval: srsMcqWrong.interval,
+          srsEaseFactor: srsMcqWrong.easeFactor,
+          srsNextReview: srsMcqWrong.nextReview,
+          srsRepetitions: srsMcqWrong.repetitions,
         },
       }));
     }
@@ -730,9 +840,18 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               [status]: prev[status as keyof typeof prev] + 1
             }));
 
+            const srsMatchCorrect = computeSM2(5, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
             setCardUpdates(prev => ({
               ...prev,
-              [currentCard.front]: { status, consecutiveCorrect, lastReviewed: Date.now() },
+              [currentCard.front]: {
+                status,
+                consecutiveCorrect,
+                lastReviewed: Date.now(),
+                srsInterval: srsMatchCorrect.interval,
+                srsEaseFactor: srsMatchCorrect.easeFactor,
+                srsNextReview: srsMatchCorrect.nextReview,
+                srsRepetitions: srsMatchCorrect.repetitions,
+              },
             }));
             setScoreDelta(prev => prev + 1);
             setDirection(1);
@@ -749,6 +868,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               status === 'struggling' &&
               (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+            const srsMatchWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+
             setCardUpdates(prev => ({
               ...prev,
               [currentCard.front]: {
@@ -759,6 +880,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                   wasDemoted: true,
                   demotionCount: currentCard.demotionCount || 0,
                 }),
+                srsInterval: srsMatchWrong.interval,
+                srsEaseFactor: srsMatchWrong.easeFactor,
+                srsNextReview: srsMatchWrong.nextReview,
+                srsRepetitions: srsMatchWrong.repetitions,
               },
             }));
             setDirection(-1);
@@ -946,9 +1071,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
               x: { type: "spring", stiffness: 300, damping: 30 },
               opacity: { duration: 0.2 }
             }}
-            className={cn("w-full group", (!currentCard?.type || currentCard.type === 'flashcard') && "cursor-pointer")}
+            className="w-full group"
             onClick={() => {
-              if (!currentCard?.type || currentCard.type === 'flashcard') {
+              // For flashcards, confidence buttons or Skip handle the flip — tap does nothing
+              if (currentCard?.type && currentCard.type !== 'flashcard') {
                 setIsFlipped(!isFlipped);
               }
             }}
@@ -966,7 +1092,10 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
             >
               {/* Front */}
               <div
-                className="[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center justify-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px] relative"
+                className={cn(
+                  "[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px] relative",
+                  (!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped ? "justify-between" : "justify-center"
+                )}
               >
                 <span className="absolute top-4 right-5 text-[10px] text-white/40 font-medium tabular-nums select-none">
                   {currentCard?.consecutiveCorrect ?? 0}✓
@@ -979,22 +1108,77 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                     </span>
                   )}
                 </p>
-                {currentCard?.imageUrl && (
-                  <div className="mb-4">
-                    <LightboxImage
-                      src={currentCard.imageUrl}
-                      className="w-full max-h-48 object-contain rounded-xl"
-                    />
-                    {currentCard.imageCredit && (
-                      <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
-                        {currentCard.imageCredit}
-                      </p>
+
+                {/* For flashcards: wrap question in flex-1 so confidence section anchors to bottom */}
+                {(!currentCard?.type || currentCard.type === 'flashcard') ? (
+                  <div className="flex-1 flex flex-col items-center justify-center w-full">
+                    {currentCard?.imageUrl && (
+                      <div className="mb-4">
+                        <LightboxImage src={currentCard.imageUrl} className="w-full max-h-48 object-contain rounded-xl" />
+                        {currentCard.imageCredit && (
+                          <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">{currentCard.imageCredit}</p>
+                        )}
+                      </div>
                     )}
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight whitespace-pre-wrap">
+                      {currentCard?.front}
+                    </h2>
+                  </div>
+                ) : (
+                  <>
+                    {currentCard?.imageUrl && (
+                      <div className="mb-4">
+                        <LightboxImage
+                          src={currentCard.imageUrl}
+                          className="w-full max-h-48 object-contain rounded-xl"
+                        />
+                        {currentCard.imageCredit && (
+                          <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                            {currentCard.imageCredit}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <h2 className={cn("font-bold leading-snug tracking-tight mb-6 sm:mb-8 whitespace-pre-wrap", currentCard?.type === 'mcq' ? "text-lg sm:text-xl md:text-2xl" : "text-xl sm:text-2xl md:text-3xl")}>
+                      {currentCard?.front}
+                    </h2>
+                  </>
+                )}
+
+                {/* Confidence rating — inside card front, flashcard only, pre-flip */}
+                {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && (
+                  <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
+                    <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
+                      Rate confidence to flip
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { level: 1, label: 'Not Confident',      active: 'bg-red-500/15 border-red-500/30 text-red-400',     hover: 'hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400' },
+                        { level: 2, label: 'Somewhat Confident', active: 'bg-amber-500/15 border-amber-500/30 text-amber-400', hover: 'hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-400' },
+                        { level: 3, label: 'Confident',          active: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400', hover: 'hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-400' },
+                      ] as const).map(({ level, label, active, hover }) => (
+                        <button
+                          key={level}
+                          onClick={(e) => { e.stopPropagation(); setPendingConfidence(level); setIsFlipped(true); }}
+                          className={cn(
+                            "border h-12 rounded-xl flex items-center justify-center transition-all",
+                            pendingConfidence === level
+                              ? active
+                              : cn("bg-white/5 border-white/5 text-brand-muted", hover)
+                          )}
+                        >
+                          <span className="text-[10px] font-bold uppercase tracking-widest leading-none">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
+                      className="mt-3 w-full text-center text-brand-muted/25 hover:text-brand-muted/50 text-[9px] uppercase tracking-[0.2em] transition-colors"
+                    >
+                      Skip →
+                    </button>
                   </div>
                 )}
-                <h2 className={cn("font-bold leading-snug tracking-tight mb-6 sm:mb-8 whitespace-pre-wrap", currentCard?.type === 'mcq' ? "text-lg sm:text-xl md:text-2xl" : "text-xl sm:text-2xl md:text-3xl")}>
-                  {currentCard?.front}
-                </h2>
                 
                 {currentCard?.type === 'matching' ? (
                   <div className="w-full flex-1 flex flex-col md:flex-row gap-4 mt-2 sm:mt-6 pb-4">
@@ -1298,79 +1482,105 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="mt-auto pt-8 flex flex-col items-center gap-2 opacity-40 group-hover:opacity-100 transition-all duration-300">
-                    <MousePointerClick className="w-5 h-5 text-brand-muted" />
-                    <span className="text-[9px] uppercase tracking-[0.3em] font-black text-brand-muted">Tap to Flip</span>
-                  </div>
-                )}
+                ) : null}
               </div>
 
               {/* Back */}
-              <div 
+              <div
                 style={{ transform: "rotateY(180deg)" }}
-                className="[grid-area:1/1] backface-hidden glass rounded-[40px] p-8 sm:p-10 md:p-12 flex flex-col items-center justify-center text-center shadow-2xl overflow-hidden min-h-[50vh] sm:min-h-[500px]"
+                className={cn(
+                  "[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center text-center shadow-2xl overflow-hidden min-h-[50vh] sm:min-h-[500px]",
+                  (!currentCard?.type || currentCard?.type === 'flashcard') ? "justify-between" : "justify-center"
+                )}
               >
                 {/* Subtle Texture/Pattern for back side */}
                 <div className="absolute inset-0 opacity-10 pointer-events-none">
                   <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] bg-[size:24px_24px]" />
                 </div>
-                
-                <p className="text-brand-primary uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-6 sm:mb-8 relative z-10">
-                  {currentCard?.type === 'fill-in-the-blank' && isFibCorrect !== null ? (isFibCorrect ? 'Excellent Work' : 'Correction Analysis') : 'Anchored Response'}
-                </p>
-                {currentCard?.type === 'fill-in-the-blank' && isFibCorrect !== null ? (
-                  <div className="flex flex-col gap-6 relative z-10 w-full max-w-sm">
-                    {isFibCorrect === false && (
-                      <div className="flex flex-col gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
-                        <div className="flex items-center gap-2 mb-1">
-                          <X className="w-4 h-4 text-red-500" />
-                          <span className="text-[10px] uppercase tracking-widest font-bold text-red-500">Not quite</span>
-                        </div>
-                        <p className="text-lg font-medium text-white line-through opacity-70 mb-1">{lastFibSubmitted}</p>
-                      </div>
-                    )}
-                    
-                    <div className={cn(
-                      "flex flex-col gap-2 p-5 rounded-2xl border",
-                      isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-500/5 border-emerald-500/30"
-                    )}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Check className="w-4 h-4 text-emerald-500" />
-                        <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-500">
-                          {isFibCorrect ? 'Perfectly Answered' : 'Correct Answer'}
-                        </span>
-                      </div>
-                      <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">{currentCard?.back}</p>
-                    </div>
 
-                    {isFibCorrect && (
-                       <motion.div 
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="text-emerald-400 text-xs font-bold uppercase tracking-[0.2em]"
-                       >
-                         Progress +1
-                       </motion.div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {currentCard?.backImageUrl && (
-                      <div className="mb-4">
-                        <LightboxImage
-                          src={currentCard.backImageUrl}
-                          className="w-full max-h-48 object-contain rounded-xl"
-                        />
-                        {currentCard.backImageCredit && (
-                          <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
-                            {currentCard.backImageCredit}
-                          </p>
-                        )}
+                {/* Answer content */}
+                <div className="flex-1 flex flex-col items-center justify-center w-full">
+                  <p className="text-brand-primary uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-6 sm:mb-8 relative z-10">
+                    {currentCard?.type === 'fill-in-the-blank' && isFibCorrect !== null ? (isFibCorrect ? 'Excellent Work' : 'Correction Analysis') : 'Anchored Response'}
+                  </p>
+                  {currentCard?.type === 'fill-in-the-blank' && isFibCorrect !== null ? (
+                    <div className="flex flex-col gap-6 relative z-10 w-full max-w-sm">
+                      {isFibCorrect === false && (
+                        <div className="flex flex-col gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
+                          <div className="flex items-center gap-2 mb-1">
+                            <X className="w-4 h-4 text-red-500" />
+                            <span className="text-[10px] uppercase tracking-widest font-bold text-red-500">Not quite</span>
+                          </div>
+                          <p className="text-lg font-medium text-white line-through opacity-70 mb-1">{lastFibSubmitted}</p>
+                        </div>
+                      )}
+
+                      <div className={cn(
+                        "flex flex-col gap-2 p-5 rounded-2xl border",
+                        isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-500/5 border-emerald-500/30"
+                      )}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Check className="w-4 h-4 text-emerald-500" />
+                          <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-500">
+                            {isFibCorrect ? 'Perfectly Answered' : 'Correct Answer'}
+                          </span>
+                        </div>
+                        <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">{currentCard?.back}</p>
                       </div>
-                    )}
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
-                  </>
+
+                      {isFibCorrect && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="text-emerald-400 text-xs font-bold uppercase tracking-[0.2em]"
+                        >
+                          Progress +1
+                        </motion.div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      {currentCard?.backImageUrl && (
+                        <div className="mb-4">
+                          <LightboxImage
+                            src={currentCard.backImageUrl}
+                            className="w-full max-h-48 object-contain rounded-xl"
+                          />
+                          {currentCard.backImageCredit && (
+                            <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                              {currentCard.backImageCredit}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
+                    </>
+                  )}
+                </div>
+
+                {/* Yes/No grading — inside card back, flashcard only */}
+                {(!currentCard?.type || currentCard?.type === 'flashcard') && (
+                  <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
+                    <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
+                      Did you get it correct?
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(false, e); }}
+                        className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-2 transition-all"
+                      >
+                        <X className="w-4 h-4" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">No</span>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(true, e); }}
+                        className="bg-white/5 border border-white/5 hover:bg-emerald-500/15 hover:border-emerald-500/30 hover:text-emerald-400 text-white h-12 rounded-xl flex items-center justify-center gap-2 transition-all"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -1378,38 +1588,6 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         </AnimatePresence>
       </div>
 
-      {(!currentCard?.type || currentCard?.type === 'flashcard') && (
-        <>
-          {/* Controller - 3 Tiers */}
-          <div className="w-full mt-8 sm:mt-12 grid grid-cols-3 gap-3">
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleMarkCard('struggling'); }}
-              className="bg-white/5 border border-white/5 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-14 sm:h-16 rounded-2xl flex flex-col items-center justify-center gap-1 group transition-all"
-            >
-              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-y-0.5 transition-transform" />
-              <span className="text-[10px] font-bold uppercase tracking-widest leading-none">Struggling</span>
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleMarkCard('learning'); }}
-              className="bg-white/5 border border-white/5 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-400 text-white h-14 sm:h-16 rounded-2xl flex flex-col items-center justify-center gap-1 group transition-all"
-            >
-              <Check className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-y-0.5 transition-transform" />
-              <span className="text-[10px] font-bold uppercase tracking-widest leading-none">Got it</span>
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleMarkCard('mastered', e); }}
-              className="bg-white/5 border border-white/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-400 text-white h-14 sm:h-16 rounded-2xl flex flex-col items-center justify-center gap-1 group transition-all"
-            >
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-y-0.5 transition-transform" />
-              <span className="text-[10px] font-bold uppercase tracking-widest leading-none">Mastered</span>
-            </button>
-          </div>
-          
-          <p className="mt-8 text-center text-brand-muted/40 text-[10px] uppercase tracking-[0.2em] font-bold">
-            Tap card to reveal response
-          </p>
-        </>
-      )}
       {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank') && (
         <div className="w-full mt-8 sm:mt-12 flex justify-center min-h-[64px] relative z-[60]">
           <AnimatePresence>
