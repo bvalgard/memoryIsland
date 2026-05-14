@@ -43,6 +43,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [distractorExplanations, setDistractorExplanations] = useState('');
   const [correctAnswerExplanation, setCorrectAnswerExplanation] = useState('');
   const [hint, setHint] = useState('');
+  const [explanation, setExplanation] = useState('');
   const [matchingPairs, setMatchingPairs] = useState<{ id: string; left: string; rights: string }[]>([{ id: Date.now().toString(), left: '', rights: '' }]);
   const [multiSelectOptions, setMultiSelectOptions] = useState<{ id: string; text: string; isCorrect: boolean }[]>([
     { id: Date.now().toString() + '1', text: '', isCorrect: false },
@@ -81,6 +82,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setDistractorExplanations('');
     setCorrectAnswerExplanation('');
     setHint('');
+    setExplanation('');
     setImageUrl(undefined);
     setBackImageUrl(undefined);
     setImageCredit('');
@@ -123,6 +125,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       
       if (hint.trim()) {
         newCard.hint = hint.trim();
+      }
+      if (explanation.trim()) {
+        newCard.explanation = explanation.trim();
       }
 
       if (imageUrl) newCard.imageUrl = imageUrl;
@@ -208,6 +213,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setFront(card.front);
     setBack(card.back);
     setHint(card.hint || '');
+    setExplanation(card.explanation || '');
     setImageUrl(card.imageUrl);
     setBackImageUrl(card.backImageUrl);
     setImageCredit(card.imageCredit || '');
@@ -1216,6 +1222,19 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   </div>
                 </motion.div>
               )}
+
+              <div>
+                <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
+                  Explanation <span className="text-brand-muted/40 normal-case tracking-normal">(shown after incorrect answers)</span>
+                </label>
+                <textarea
+                  value={explanation}
+                  onChange={(e) => setExplanation(e.target.value)}
+                  placeholder="Explain why the answer is correct..."
+                  rows={2}
+                  className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
+                />
+              </div>
 
               <div className="flex gap-3">
                 {editingCardIndex !== null && (

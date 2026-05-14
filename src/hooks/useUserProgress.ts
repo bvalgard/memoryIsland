@@ -45,6 +45,7 @@ export interface Card {
   options?: string[];
   correctOptions?: string[];
   explanations?: Record<string, string>;
+  explanation?: string;
   pairs?: { id: string; left: string; rights: string[] }[];
   needsWork?: boolean;
   status?: CardStatus;
@@ -252,6 +253,7 @@ function normalizeCard(card: Card, fallbackIndex: number): Card {
     options: card.options || [],
     correctOptions: card.correctOptions || [],
     explanations: card.explanations || {},
+    explanation: card.explanation || '',
     pairs: card.pairs || [],
     hint: card.hint || '',
   };
@@ -264,6 +266,7 @@ function sanitizeCardForStorage(card: Card): Card {
     options: card.options || [],
     correctOptions: card.correctOptions || [],
     explanations: card.explanations || {},
+    explanation: card.explanation || '',
     pairs: card.pairs || [],
     hint: card.hint || '',
   });
@@ -277,6 +280,7 @@ function sanitizeCardForPublic(card: Card) {
     options: card.options || [],
     correctOptions: card.correctOptions || [],
     explanations: card.explanations || {},
+    ...(card.explanation ? { explanation: card.explanation } : {}),
     pairs: card.pairs || [],
     hint: card.hint || '',
     ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
@@ -591,6 +595,7 @@ export function useUserProgress() {
           options: data.options || [],
           correctOptions: data.correctOptions || [],
           explanations: data.explanations || {},
+          explanation: data.explanation || '',
           pairs: data.pairs || [],
           needsWork: data.needsWork,
           status: data.status,

@@ -1340,6 +1340,18 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         </button>
                       )}
                     </form>
+                    {isFlipped && currentCard?.explanation &&
+                      !(selectedMultiOptions.size === (currentCard.correctOptions?.length ?? 0) &&
+                        Array.from(selectedMultiOptions).every(o => currentCard.correctOptions?.includes(o))) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                        <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                      </motion.div>
+                    )}
                   </div>
                 ) : currentCard?.type === 'sequencing' ? (
                   <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
@@ -1395,6 +1407,17 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         </button>
                       )}
                     </form>
+                    {isFlipped && currentCard?.explanation &&
+                      !shuffledSequence.every((item, idx) => item.text === currentCard.options![idx]) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                        <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                      </motion.div>
+                    )}
                   </div>
                 ) : currentCard?.type === 'mcq' ? (
                   <div className="w-full flex-1 flex flex-col justify-center gap-3 pb-4">
@@ -1499,6 +1522,16 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         )}
                       </div>
                     )}
+                    {selectedOption && selectedOption !== currentCard?.back && currentCard?.explanation && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                        <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                      </motion.div>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -1546,6 +1579,16 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">{currentCard?.back}</p>
                       </div>
 
+                      {isFibCorrect === false && currentCard?.explanation && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"
+                        >
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                          <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                        </motion.div>
+                      )}
                       {isFibCorrect && (
                         <motion.div
                           initial={{ opacity: 0, scale: 0.9 }}
@@ -1572,6 +1615,17 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         </div>
                       )}
                       <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
+                      {currentCard?.explanation && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.15 }}
+                          className="mt-4 w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left"
+                        >
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                          <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                        </motion.div>
+                      )}
                     </>
                   )}
                 </div>
