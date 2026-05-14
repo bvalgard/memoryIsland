@@ -429,6 +429,31 @@ export function useUserProgress() {
           return;
         }
 
+        if ((data.dataModelVersion || 0) < 3 && !migrationInProgress.current) {
+          migrationInProgress.current = true;
+          try {
+            const islandsRef = collection(db, 'islands');
+            const q = query(islandsRef, where('ownerId', '==', user.uid), where('isImported', '==', true));
+            const badIslands = await getDocs(q);
+            const needsArchipelagoFix = (data.archipelagos || []).some((a: any) => a.isImported);
+            const batch = writeBatch(db);
+            badIslands.docs.forEach(islandDoc => {
+              batch.update(islandDoc.ref, { isImported: false });
+            });
+            const userUpdate: Record<string, unknown> = { dataModelVersion: 3 };
+            if (needsArchipelagoFix) {
+              userUpdate.archipelagos = (data.archipelagos || []).map((a: any) => ({ ...a, isImported: false }));
+            }
+            batch.update(userRef, userUpdate);
+            await batch.commit();
+          } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, path);
+          } finally {
+            migrationInProgress.current = false;
+          }
+          return;
+        }
+
         const stats = { ...defaultStats, ...(data.stats || {}) };
         const settings = { ...defaultSettings, ...(data.settings || {}) };
         const lastActive = data.last_active || Timestamp.now();
