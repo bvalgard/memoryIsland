@@ -159,6 +159,23 @@ export const ACHIEVEMENTS: Achievement[] = [
     hidden: true,
     icon: '🪵',
   },
+  // SOS Flare — peer rescue rewards
+  {
+    id: 'life-saver',
+    name: 'Life Saver',
+    description: 'Your memory trick helped a fellow explorer escape the Struggling zone.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🛟',
+  },
+  {
+    id: 'coast-guard',
+    name: 'Coast Guard',
+    description: '10 of your hints have been marked helpful by other explorers.',
+    category: 'motivating',
+    hidden: false,
+    icon: '⛵',
+  },
 ];
 
 export const ACHIEVEMENT_MAP = new Map(ACHIEVEMENTS.map(a => [a.id, a]));

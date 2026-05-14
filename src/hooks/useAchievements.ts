@@ -6,8 +6,9 @@ interface CheckContext {
   progress: UserProgress;
   cardUpdates?: CardUpdateRecord;
   sessionMeta?: SessionMeta;
-  trigger: 'session-complete' | 'session-abandon' | 'island-shared' | 'card-created' | 'app-load';
+  trigger: 'session-complete' | 'session-abandon' | 'island-shared' | 'card-created' | 'app-load' | 'flare-resolved';
   islandId?: string;
+  totalRescues?: number;
 }
 
 export function useAchievements() {
@@ -109,6 +110,13 @@ export function useAchievements() {
 
     if (ctx.trigger === 'session-abandon' && ctx.cardUpdates) {
       if (Object.keys(ctx.cardUpdates).length < 5) tryUnlock('shipwrecked');
+    }
+
+    // --- PEER RESCUE ---
+    if (ctx.trigger === 'flare-resolved') {
+      const rescues = ctx.totalRescues ?? 0;
+      if (rescues >= 1) tryUnlock('life-saver');
+      if (rescues >= 10) tryUnlock('coast-guard');
     }
 
     // Persist newly unlocked to Firestore

@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X } from 'lucide-react';
+import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X, Flame } from 'lucide-react';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn } from '../lib/utils';
 import LightboxImage from './LightboxImage';
+import FlareModal from './FlareModal';
+import { useFlares, type Flare } from '../hooks/useFlares';
 
 // Reliable Fisher-Yates shuffle to prevent duplicate/dropped card bugs caused by Math.random() in sort()
 function shuffleArray<T>(array: T[]): T[] {
@@ -90,13 +92,16 @@ interface StudySessionProps {
   island: Island;
   mode?: 'all' | 'struggling' | 'learning' | 'mastered' | 'due';
   settings?: UserSettings;
+  friends?: string[];
+  islandId?: string;
+  currentUserName?: string;
   onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, onFinish, onManage, onBackToMap, onSwitchMode }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, friends = [], islandId = '', currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -141,6 +146,15 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
 
   // Sequencing State
   const [shuffledSequence, setShuffledSequence] = useState<{ id: string, text: string }[]>([]);
+
+  // SOS Flare state
+  const [showFlareButton, setShowFlareButton] = useState(false);
+  const [flareModalOpen, setFlareModalOpen] = useState(false);
+  const [flareJustSent, setFlareJustSent] = useState(false);
+  const [isSendingFlare, setIsSendingFlare] = useState(false);
+  const [cardFlares, setCardFlares] = useState<Flare[]>([]);
+
+  const { sendFlare, fetchCardFlares, resolveFlare } = useFlares();
 
   // Helper for responsive nav buttons
   const NavAction = ({ icon: Icon, label, onClick, variant = 'muted' }: { icon: any, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) => (
@@ -330,7 +344,21 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
 
     // Multi-select reset
     setSelectedMultiOptions(new Set());
+
+    // SOS flare reset
+    setShowFlareButton(false);
+    setFlareModalOpen(false);
+    setFlareJustSent(false);
+    setCardFlares([]);
   }, [currentIndex, currentCard]);
+
+  useEffect(() => {
+    if (!isFlipped || !currentCard?.id) {
+      setCardFlares([]);
+      return;
+    }
+    fetchCardFlares(currentCard.id).then(setCardFlares);
+  }, [isFlipped, currentCard?.id]);
 
   const triggerSparkle = (e: React.MouseEvent) => {
     const newSparkle = {
@@ -436,6 +464,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       setIsFlipped(true);
       const { status, consecutiveCorrect } = getNextStatusAndStreak(false, currentCard.status, currentCard.consecutiveCorrect);
       setStreak(0);
+      setShowFlareButton(true);
       setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
 
       const isBeingDemotedFib =
@@ -603,6 +632,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       setMaxStreak(prev => Math.max(prev, newStreak));
     } else {
       setStreak(0);
+      setShowFlareButton(true);
     }
 
     const { status, consecutiveCorrect } = getNextStatusAndStreak(isCorrect, currentCard?.status, currentCard?.consecutiveCorrect);
@@ -728,6 +758,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
       }));
     } else {
       setStreak(0);
+      setShowFlareButton(true);
       const { status, consecutiveCorrect } = getNextStatusAndStreak(false, currentCard?.status, currentCard?.consecutiveCorrect);
 
       setSessionStats(prev => ({
@@ -796,6 +827,20 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
     const isCorrect = selectedOption === currentCard?.back;
     setDirection(isCorrect ? 1 : -1);
     nextCard();
+  };
+
+  const handleSendFlare = async (visibility: 'friends' | 'global') => {
+    if (!currentCard) return;
+    setIsSendingFlare(true);
+    await sendFlare(currentCard, islandId || island.id || '', visibility, friends, currentUserName);
+    setFlareJustSent(true);
+    setFlareModalOpen(false);
+    setIsSendingFlare(false);
+  };
+
+  const handleThisSavedMe = async (flare: Flare, preserverIndex: number) => {
+    await resolveFlare(flare, preserverIndex);
+    setCardFlares([]);
   };
 
   const handleMatchingSelect = (side: 'left' | 'right', id: string, e: React.MouseEvent) => {
@@ -976,6 +1021,7 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
   }
 
   return (
+    <>
     <div className="max-w-2xl mx-auto w-full flex flex-col items-center pb-12">
       {/* Sparkles Layer */}
       <AnimatePresence>
@@ -1352,6 +1398,44 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
                       </motion.div>
                     )}
+                    {/* Life preservers — multi-select wrong answer */}
+                    {showFlareButton && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                      <div className="flex flex-col gap-2 w-full mt-2">
+                        {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                          <motion.div
+                            key={`${fi}-${li}`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: li * 0.08 }}
+                            className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
+                            <p className="text-sm text-white/70">{lp.hintText}</p>
+                            {!lp.isHelpful && (
+                              <button
+                                onClick={() => handleThisSavedMe(f, li)}
+                                className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                              >
+                                This Saved Me!
+                              </button>
+                            )}
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                    {showFlareButton && !flareJustSent && (
+                      <motion.button
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        onClick={(e) => { e.stopPropagation(); setFlareModalOpen(true); }}
+                        className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
+                      >
+                        <Flame className="w-3.5 h-3.5" /> Send SOS Flare
+                      </motion.button>
+                    )}
+                    {flareJustSent && (
+                      <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Flare launched!</p>
+                    )}
                   </div>
                 ) : currentCard?.type === 'sequencing' ? (
                   <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
@@ -1532,6 +1616,45 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
                       </motion.div>
                     )}
+                    {/* Life preservers from crew */}
+                    {showFlareButton && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                      <div className="flex flex-col gap-2 w-full mt-2">
+                        {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                          <motion.div
+                            key={`${fi}-${li}`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: li * 0.08 }}
+                            className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
+                            <p className="text-sm text-white/70">{lp.hintText}</p>
+                            {!lp.isHelpful && (
+                              <button
+                                onClick={() => handleThisSavedMe(f, li)}
+                                className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                              >
+                                This Saved Me!
+                              </button>
+                            )}
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                    {/* SOS Flare button — MCQ wrong answer */}
+                    {showFlareButton && !flareJustSent && (
+                      <motion.button
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        onClick={(e) => { e.stopPropagation(); setFlareModalOpen(true); }}
+                        className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
+                      >
+                        <Flame className="w-3.5 h-3.5" /> Send SOS Flare
+                      </motion.button>
+                    )}
+                    {flareJustSent && (
+                      <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Flare launched!</p>
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -1598,6 +1721,44 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                           Progress +1
                         </motion.div>
                       )}
+                      {/* Life preservers from crew — FIB wrong answer */}
+                      {isFibCorrect === false && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                        <div className="flex flex-col gap-2">
+                          {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                            <motion.div
+                              key={`${fi}-${li}`}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: li * 0.08 }}
+                              className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
+                            >
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
+                              <p className="text-sm text-white/70">{lp.hintText}</p>
+                              {!lp.isHelpful && (
+                                <button
+                                  onClick={() => handleThisSavedMe(f, li)}
+                                  className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                                >
+                                  This Saved Me!
+                                </button>
+                              )}
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                      {isFibCorrect === false && !flareJustSent && (
+                        <motion.button
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          onClick={() => setFlareModalOpen(true)}
+                          className="w-full flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
+                        >
+                          <Flame className="w-3.5 h-3.5" /> Send SOS Flare
+                        </motion.button>
+                      )}
+                      {isFibCorrect === false && flareJustSent && (
+                        <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">🔥 Flare launched!</p>
+                      )}
                     </div>
                   ) : (
                     <>
@@ -1630,6 +1791,32 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                   )}
                 </div>
 
+                {/* Life preservers from crew — flashcard */}
+                {(!currentCard?.type || currentCard?.type === 'flashcard') && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                  <div className="w-full flex flex-col gap-2 mb-3" onClick={e => e.stopPropagation()}>
+                    {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                      <motion.div
+                        key={`${fi}-${li}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: li * 0.08 }}
+                        className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
+                        <p className="text-sm text-white/70">{lp.hintText}</p>
+                        {!lp.isHelpful && (
+                          <button
+                            onClick={() => handleThisSavedMe(f, li)}
+                            className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                          >
+                            This Saved Me!
+                          </button>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Yes/No grading — inside card back, flashcard only */}
                 {(!currentCard?.type || currentCard?.type === 'flashcard') && (
                   <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
@@ -1652,6 +1839,20 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                         <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
                       </button>
                     </div>
+                    {/* SOS Flare button — flashcard back face */}
+                    {!flareJustSent ? (
+                      <motion.button
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.4 }}
+                        onClick={() => setFlareModalOpen(true)}
+                        className="w-full mt-3 flex items-center justify-center gap-2 text-orange-400/50 hover:text-orange-400 transition-colors text-[10px] font-bold uppercase tracking-widest py-2"
+                      >
+                        <Flame className="w-3 h-3" /> Send SOS Flare
+                      </motion.button>
+                    ) : (
+                      <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Flare launched!</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1750,5 +1951,14 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         </div>
       </div>
     </div>
+
+    <FlareModal
+      isOpen={flareModalOpen}
+      friendCount={friends.length}
+      isSending={isSendingFlare}
+      onClose={() => setFlareModalOpen(false)}
+      onSend={handleSendFlare}
+    />
+    </>
   );
 }

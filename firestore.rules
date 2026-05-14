@@ -155,5 +155,33 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isSignedIn();
     }
+
+    // 4. SOS Flares — peer mentorship
+    match /flares/{flareId} {
+      // Flares are intentionally shared social content — any signed-in user can read.
+      // Privacy is enforced at query time (visibleTo array-contains for friends-only flares).
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.askerId == request.auth.uid &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.lifePreservers.size() == 0 &&
+        request.resource.data.frontText is string &&
+        request.resource.data.frontText.size() <= 500;
+      allow update: if isSignedIn() && (
+        resource.data.askerId == request.auth.uid ||
+        (
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.askerId == resource.data.askerId &&
+          request.resource.data.lifePreservers.size() == resource.data.lifePreservers.size() + 1
+        )
+      );
+      allow delete: if isSignedIn() && resource.data.askerId == request.auth.uid;
+    }
+
+    // 5. Rescue stats — cross-user increment for helper rewards
+    match /rescue_stats/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
   }
 }

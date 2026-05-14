@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -18,6 +18,7 @@ import StudySession from './StudySession';
 import ShareModal from './ShareModal';
 import { useSocial } from '../hooks/useSocial';
 import ConfirmDialog from './ConfirmDialog';
+import DistressSignalsFeed from './DistressSignalsFeed';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -60,7 +61,7 @@ export default function Dashboard() {
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const appLoadCheckDone = useRef(false);
@@ -1245,6 +1246,34 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Distress Signals Modal */}
+      <AnimatePresence>
+        {activeModal === 'distress' && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setActiveModal(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            >
+              <DistressSignalsFeed
+                onClose={() => setActiveModal(null)}
+                currentUserId={user?.uid || ''}
+                ownedIslandIds={progress?.islands.map(i => i.id).filter(Boolean) as string[] || []}
+                friends={friends}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Achievement Toast */}
       <AnimatePresence>
         {currentToast && (
@@ -1661,6 +1690,15 @@ export default function Dashboard() {
               Captain's Quarters
             </div>
           </button>
+          <button
+            onClick={() => setActiveModal('distress')}
+            className="relative group text-orange-400/50 hover:text-orange-400 transition-all flex items-center justify-center"
+          >
+            <Radio className="w-6 h-6" />
+            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+              Distress Signals
+            </div>
+          </button>
         </nav>
       </aside>
 
@@ -1691,10 +1729,13 @@ export default function Dashboard() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="flex items-center justify-center min-h-[60vh]"
               >
-                <StudySession 
+                <StudySession
                   island={selectedIsland}
                   mode={studyMode}
                   settings={progress?.settings}
+                  friends={friends}
+                  islandId={selectedIslandId || selectedIsland.id}
+                  currentUserName={user?.displayName || 'Explorer'}
                   onFinish={handleFinishStudy}
                   onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
@@ -2146,6 +2187,14 @@ export default function Dashboard() {
           className={cn("p-2 transition-all relative", activeModal === 'trophies' ? "text-brand-primary scale-110" : "text-brand-muted")}
         >
           <Award className="w-6 h-6" />
+        </button>
+
+        {/* Distress Signals */}
+        <button
+          onClick={() => setActiveModal('distress')}
+          className={cn("p-2 transition-all relative", activeModal === 'distress' ? "text-orange-400 scale-110" : "text-orange-400/40")}
+        >
+          <Radio className="w-6 h-6" />
         </button>
 
         {/* Mobile Notifications */}
