@@ -7,6 +7,7 @@ import Papa from 'papaparse';
 import { cn } from '../lib/utils';
 import ShareModal from './ShareModal';
 import ImageUpload from './ImageUpload';
+import { UserProfile } from '../hooks/useSocial';
 
 interface IslandDetailProps {
   island: Island;
@@ -23,9 +24,11 @@ interface IslandDetailProps {
   onShare?: (island: Island, targetUids?: string[]) => void;
   onUnshare?: (island: Island) => void;
   onUpdateIsland?: (updates: Partial<Island>) => void;
+  friends?: string[];
+  fetchProfilesByUids?: (uids: string[]) => Promise<UserProfile[]>;
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, friends = [], fetchProfilesByUids = async () => [] }: IslandDetailProps) {
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered'>('all');
   const [showShareConfirm, setShowShareConfirm] = useState(false);
@@ -51,6 +54,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   ]);
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [backImageUrl, setBackImageUrl] = useState<string | undefined>(undefined);
+  const [imageCredit, setImageCredit] = useState('');
+  const [backImageCredit, setBackImageCredit] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
@@ -76,6 +81,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setHint('');
     setImageUrl(undefined);
     setBackImageUrl(undefined);
+    setImageCredit('');
+    setBackImageCredit('');
     setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
     setMultiSelectOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: false },
@@ -118,6 +125,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
       if (imageUrl) newCard.imageUrl = imageUrl;
       if (backImageUrl) newCard.backImageUrl = backImageUrl;
+      if (imageCredit.trim()) newCard.imageCredit = imageCredit.trim();
+      if (backImageCredit.trim()) newCard.backImageCredit = backImageCredit.trim();
 
       if (cardType === 'mcq') {
         const optionLines = distractors.split('\n').map(l => l.trim()).filter(l => l);
@@ -199,6 +208,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setHint(card.hint || '');
     setImageUrl(card.imageUrl);
     setBackImageUrl(card.backImageUrl);
+    setImageCredit(card.imageCredit || '');
+    setBackImageCredit(card.backImageCredit || '');
     if (card.type === 'mcq' && card.options) {
       // Options format is [correctAnswer, ...distractors]
       const currentDistractors = card.options.filter(opt => opt !== card.back);
@@ -557,13 +568,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       {islandPrivacyState === 'public' ? 'Public' : islandPrivacyState === 'pending' ? 'Pending' : islandPrivacyState === 'shared' ? `Shared (${island.sharedWith?.length})` : 'Private'}
                     </button>
 
-                    <AnimatePresence>
                     {onShare && (
                       <ShareModal
                         isOpen={showShareConfirm}
                         onClose={() => setShowShareConfirm(false)}
                         title={islandPrivacyState === 'shared' ? "Update Sharing" : "Submit for review?"}
-                        description={islandPrivacyState === 'shared' 
+                        description={islandPrivacyState === 'shared'
                           ? "Select more friends to share this island with."
                           : "This island will be submitted to the moderation queue before it appears in community discovery."}
                         initialSelectedUids={island.sharedWith || []}
@@ -574,9 +584,10 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                         onShareTargeted={(uids) => {
                           onShare(island, uids);
                         }}
+                        friends={friends}
+                        fetchProfilesByUids={fetchProfilesByUids}
                       />
                     )}
-                    </AnimatePresence>
 
                     <AnimatePresence>
                       {showUnshareConfirm && (
@@ -942,12 +953,32 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     value={imageUrl}
                     onChange={setImageUrl}
                   />
-                  {cardType === 'flashcard' && (
-                    <ImageUpload
-                      label="Back Image (optional)"
-                      value={backImageUrl}
-                      onChange={setBackImageUrl}
+                  {imageUrl && (
+                    <input
+                      type="text"
+                      value={imageCredit}
+                      onChange={(e) => setImageCredit(e.target.value)}
+                      placeholder="Image credit (optional)"
+                      className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-brand-primary/50 transition-colors placeholder:text-brand-muted/50"
                     />
+                  )}
+                  {cardType === 'flashcard' && (
+                    <>
+                      <ImageUpload
+                        label="Back Image (optional)"
+                        value={backImageUrl}
+                        onChange={setBackImageUrl}
+                      />
+                      {backImageUrl && (
+                        <input
+                          type="text"
+                          value={backImageCredit}
+                          onChange={(e) => setBackImageCredit(e.target.value)}
+                          placeholder="Back image credit (optional)"
+                          className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-brand-primary/50 transition-colors placeholder:text-brand-muted/50"
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               )}

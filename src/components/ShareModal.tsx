@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Globe, Users, X, Check } from 'lucide-react';
-import { useSocial, UserProfile } from '../hooks/useSocial';
+import { UserProfile } from '../hooks/useSocial';
 import { cn } from '../lib/utils';
-import { auth } from '../firebase';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -14,6 +13,8 @@ interface ShareModalProps {
   onShareTargeted: (uids: string[]) => Promise<void> | void;
   initialSelectedUids?: string[];
   initialTab?: 'public' | 'targeted';
+  friends: string[];
+  fetchProfilesByUids: (uids: string[]) => Promise<UserProfile[]>;
 }
 
 export default function ShareModal({
@@ -24,15 +25,15 @@ export default function ShareModal({
   onSharePublic,
   onShareTargeted,
   initialSelectedUids = [],
-  initialTab = 'public'
+  initialTab = 'public',
+  friends,
+  fetchProfilesByUids,
 }: ShareModalProps) {
-  const { friends, fetchProfilesByUids } = useSocial();
   const [tab, setTab] = useState<'public' | 'targeted'>('public');
   const [selectedUids, setSelectedUids] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [friendProfiles, setFriendProfiles] = useState<UserProfile[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
-  const currentUser = auth.currentUser;
 
   useEffect(() => {
     if (isOpen) {

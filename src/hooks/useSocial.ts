@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { 
-  collection, 
-  query, 
-  getDocs, 
+import {
+  collection,
+  query,
+  getDocs,
   where,
   orderBy,
   limit,
@@ -10,8 +10,10 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../firebase';
 
 export interface UserProfile {
@@ -32,7 +34,7 @@ export interface Friendship {
   users: string[];
   status: 'pending' | 'accepted';
   requesterId: string;
-  createdAt: number;
+  createdAt: Timestamp | number;
 }
 
 const defaultStats: UserProfile['stats'] = {
@@ -64,61 +66,72 @@ export function useSocial() {
   const [friends, setFriends] = useState<string[]>([]);
   const [friendRequests, setFriendRequests] = useState<string[]>([]); // Inbound
   const [sentRequests, setSentRequests] = useState<string[]>([]); // Outbound
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const user = auth.currentUser;
 
   useEffect(() => {
-    if (!user) {
-      setFriends([]);
-      setFriendRequests([]);
-      setSentRequests([]);
-      setLoading(false);
-      return;
-    }
+    let unsubFriendships: (() => void) | null = null;
 
-    setLoading(true);
-    setError(null);
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubFriendships) {
+        unsubFriendships();
+        unsubFriendships = null;
+      }
 
-    const friendshipsRef = collection(db, 'friendships');
-    const q = query(friendshipsRef, where('users', 'array-contains', user.uid));
+      if (!user) {
+        setFriends([]);
+        setFriendRequests([]);
+        setSentRequests([]);
+        setLoading(false);
+        return;
+      }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newFriends: string[] = [];
-      const newInbound: string[] = [];
-      const newOutbound: string[] = [];
+      setLoading(true);
+      setError(null);
 
-      snapshot.docs.forEach(docSnap => {
-        const data = docSnap.data() as Omit<Friendship, 'id'>;
-        const otherUserId = data.users.find(id => id !== user.uid);
-        if (!otherUserId) return;
+      const friendshipsRef = collection(db, 'friendships');
+      const q = query(friendshipsRef, where('users', 'array-contains', user.uid));
 
-        if (data.status === 'accepted') {
-          newFriends.push(otherUserId);
-        } else if (data.status === 'pending') {
-          if (data.requesterId === user.uid) {
-            newOutbound.push(otherUserId);
-          } else {
-            newInbound.push(otherUserId);
+      unsubFriendships = onSnapshot(q, (snapshot) => {
+        const newFriends: string[] = [];
+        const newInbound: string[] = [];
+        const newOutbound: string[] = [];
+
+        snapshot.docs.forEach(docSnap => {
+          const data = docSnap.data() as Omit<Friendship, 'id'>;
+          const otherUserId = data.users.find(id => id !== user.uid);
+          if (!otherUserId) return;
+
+          if (data.status === 'accepted') {
+            newFriends.push(otherUserId);
+          } else if (data.status === 'pending') {
+            if (data.requesterId === user.uid) {
+              newOutbound.push(otherUserId);
+            } else {
+              newInbound.push(otherUserId);
+            }
           }
-        }
-      });
+        });
 
-      setFriends(newFriends);
-      setFriendRequests(newInbound);
-      setSentRequests(newOutbound);
-      setLoading(false);
-    }, (err: any) => {
-      console.error("Friendships listener error:", err);
-      setError(err?.code === 'permission-denied'
-        ? 'Social features are blocked by Firestore rules.'
-        : 'Could not sync friends list.');
-      setLoading(false);
+        setFriends(newFriends);
+        setFriendRequests(newInbound);
+        setSentRequests(newOutbound);
+        setLoading(false);
+      }, (err: any) => {
+        console.error("Friendships listener error:", err);
+        setError(err?.code === 'permission-denied'
+          ? 'Social features are blocked by Firestore rules.'
+          : 'Could not sync friends list.');
+        setLoading(false);
+      });
     });
 
-    return () => unsubscribe();
-  }, [user]);
+    return () => {
+      unsubAuth();
+      if (unsubFriendships) unsubFriendships();
+    };
+  }, []);
 
   const loadLeaderboard = async () => {
     setLoading(true);
@@ -158,7 +171,7 @@ export function useSocial() {
       for (let i = 0; i < uids.length; i += 30) {
         chunks.push(uids.slice(i, i + 30));
       }
-      
+
       const allProfiles: UserProfile[] = [];
       for (const chunk of chunks) {
         const q = query(collection(db, 'profiles'), where('__name__', 'in', chunk));
@@ -175,6 +188,7 @@ export function useSocial() {
   };
 
   const sendFriendRequest = async (targetUserId: string) => {
+    const user = auth.currentUser;
     if (!user) return;
     const friendshipId = getFriendshipId(user.uid, targetUserId);
     try {
@@ -182,9 +196,8 @@ export function useSocial() {
         users: [user.uid, targetUserId],
         status: 'pending',
         requesterId: user.uid,
-        createdAt: Date.now()
+        createdAt: serverTimestamp()
       });
-      // onSnapshot handles state update
     } catch (err: any) {
       console.error("Failed to send friend request", err);
       setError(err?.code === 'permission-denied'
@@ -194,14 +207,14 @@ export function useSocial() {
   };
 
   const acceptFriendRequest = async (targetUserId: string) => {
+    const user = auth.currentUser;
     if (!user) return;
     const friendshipId = getFriendshipId(user.uid, targetUserId);
     try {
       await setDoc(doc(db, 'friendships', friendshipId), {
         status: 'accepted',
-        updatedAt: Date.now()
+        updatedAt: serverTimestamp()
       }, { merge: true });
-      // onSnapshot handles state update
     } catch (err: any) {
       console.error("Failed to accept friend request", err);
       setError(err?.code === 'permission-denied'
@@ -211,11 +224,11 @@ export function useSocial() {
   };
 
   const removeFriend = async (targetUserId: string) => {
+    const user = auth.currentUser;
     if (!user) return;
     const friendshipId = getFriendshipId(user.uid, targetUserId);
     try {
       await deleteDoc(doc(db, 'friendships', friendshipId));
-      // onSnapshot handles state update
     } catch (err: any) {
       console.error("Failed to remove friend", err);
       setError(err?.code === 'permission-denied'
@@ -232,23 +245,23 @@ export function useSocial() {
         getDocs(query(
           collection(db, 'profiles'),
           where('displayNameLowercase', '>=', lowerSearch),
-          where('displayNameLowercase', '<=', lowerSearch + '\uf8ff'),
+          where('displayNameLowercase', '<=', lowerSearch + ''),
           limit(10)
         )),
         getDocs(query(
           collection(db, 'profiles'),
           where('displayName', '>=', searchTerm),
-          where('displayName', '<=', searchTerm + '\uf8ff'),
+          where('displayName', '<=', searchTerm + ''),
           limit(10)
         ))
       ]);
-      
+
       const resultsMap = new Map<string, UserProfile>();
-      
+
       snap.docs.forEach(docSnap => {
         resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
       });
-      
+
       snapFallback.docs.forEach(docSnap => {
         if (!resultsMap.has(docSnap.id)) {
           resultsMap.set(docSnap.id, normalizeProfile(docSnap.data() as Partial<UserProfile>, docSnap.id));
@@ -256,7 +269,8 @@ export function useSocial() {
       });
 
       setError(null);
-      return Array.from(resultsMap.values());
+      const currentUid = auth.currentUser?.uid;
+      return Array.from(resultsMap.values()).filter(p => p.uid !== currentUid);
     } catch (err: any) {
       console.error("Failed to search users", err);
       setError(err?.code === 'permission-denied'

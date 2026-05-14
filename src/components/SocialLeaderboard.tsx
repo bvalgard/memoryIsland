@@ -1,30 +1,44 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Users, UserPlus, UserCheck, UserMinus, X, Check, Clock } from 'lucide-react';
-import { useSocial, UserProfile } from '../hooks/useSocial';
+import { motion } from 'motion/react';
+import { Trophy, Users, UserPlus, UserCheck, X, Check, Clock } from 'lucide-react';
+import { UserProfile } from '../hooks/useSocial';
 import { cn } from '../lib/utils';
 import { auth } from '../firebase';
 
-export default function SocialLeaderboard({ onClose }: { onClose: () => void }) {
-  const { 
-    profiles, 
-    friends, 
-    friendRequests, 
-    sentRequests, 
-    loading, 
-    error, 
-    loadLeaderboard, 
-    fetchProfilesByUids,
-    sendFriendRequest, 
-    acceptFriendRequest, 
-    removeFriend 
-  } = useSocial();
-  
-  const [tab, setTab] = useState<'leaderboard' | 'friends' | 'requests'>('leaderboard');
+interface SocialLeaderboardProps {
+  onClose: () => void;
+  profiles: UserProfile[];
+  friends: string[];
+  friendRequests: string[];
+  sentRequests: string[];
+  loading: boolean;
+  error: string | null;
+  loadLeaderboard: () => Promise<void>;
+  fetchProfilesByUids: (uids: string[]) => Promise<UserProfile[]>;
+  sendFriendRequest: (uid: string) => Promise<void>;
+  acceptFriendRequest: (uid: string) => Promise<void>;
+  removeFriend: (uid: string) => Promise<void>;
+}
+
+export default function SocialLeaderboard({
+  onClose,
+  profiles,
+  friends,
+  friendRequests,
+  sentRequests,
+  loading,
+  error,
+  loadLeaderboard,
+  fetchProfilesByUids,
+  sendFriendRequest,
+  acceptFriendRequest,
+  removeFriend,
+}: SocialLeaderboardProps) {
+  const [tab, setTab] = useState<'leaderboard' | 'friends'>('leaderboard');
   const [friendsData, setFriendsData] = useState<UserProfile[]>([]);
-  const [requestsData, setRequestsData] = useState<UserProfile[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  
+  const [pendingUid, setPendingUid] = useState<string | null>(null);
+
   const currentUser = auth.currentUser;
 
   useEffect(() => {
@@ -38,16 +52,8 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
         setLoadingData(false);
       };
       load();
-    } else if (tab === 'requests') {
-      const load = async () => {
-        setLoadingData(true);
-        const data = await fetchProfilesByUids(friendRequests);
-        setRequestsData(data);
-        setLoadingData(false);
-      };
-      load();
     }
-  }, [tab, friends.length, friendRequests.length]); // re-run if arrays change length
+  }, [tab, friends.join(','), friendRequests.join(',')]);
 
   const getRelationship = (uid: string) => {
     if (friends.includes(uid)) return 'friend';
@@ -56,9 +62,27 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
     return 'none';
   };
 
+  const handleAdd = async (uid: string) => {
+    setPendingUid(uid);
+    await sendFriendRequest(uid);
+    setPendingUid(null);
+  };
+
+  const handleAccept = async (uid: string) => {
+    setPendingUid(uid);
+    await acceptFriendRequest(uid);
+    setPendingUid(null);
+  };
+
+  const handleRemove = async (uid: string) => {
+    setPendingUid(uid);
+    await removeFriend(uid);
+    setPendingUid(null);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -71,7 +95,7 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-6 shadow-2xl flex flex-col h-[80vh] overflow-hidden"
       >
-        <button 
+        <button
           onClick={onClose}
           className="absolute top-6 right-6 text-brand-muted hover:text-white transition-colors"
         >
@@ -120,52 +144,56 @@ export default function SocialLeaderboard({ onClose }: { onClose: () => void }) 
           ) : tab === 'leaderboard' ? (
             profiles.length > 0 ? (
               profiles.map((profile, i) => (
-                <ProfileCard 
-                  key={profile.uid} 
-                  profile={profile} 
+                <ProfileCard
+                  key={profile.uid}
+                  profile={profile}
                   rank={i + 1}
                   isSelf={profile.uid === currentUser?.uid}
                   relationship={getRelationship(profile.uid)}
-                  onAdd={() => sendFriendRequest(profile.uid)}
-                  onRemove={() => removeFriend(profile.uid)}
-                  onAccept={() => acceptFriendRequest(profile.uid)}
+                  isPending={pendingUid === profile.uid}
+                  onAdd={() => handleAdd(profile.uid)}
+                  onRemove={() => handleRemove(profile.uid)}
+                  onAccept={() => handleAccept(profile.uid)}
                 />
               ))
             ) : <div className="text-center text-brand-muted py-8">No ranks to display yet.</div>
-          ) : tab === 'friends' ? (
+          ) : (
             friendsData.length > 0 ? (
               friendsData.map((profile) => (
-                <ProfileCard 
-                  key={profile.uid} 
-                  profile={profile} 
+                <ProfileCard
+                  key={profile.uid}
+                  profile={profile}
                   isSelf={profile.uid === currentUser?.uid}
                   relationship="friend"
+                  isPending={pendingUid === profile.uid}
                   onAdd={() => {}}
-                  onRemove={() => removeFriend(profile.uid)}
+                  onRemove={() => handleRemove(profile.uid)}
                   onAccept={() => {}}
                 />
               ))
             ) : <div className="text-center text-brand-muted py-8">You haven't added any friends yet.</div>
-          ) : null}
+          )}
         </div>
       </motion.div>
     </div>
   );
 }
 
-function ProfileCard({ 
-  profile, 
-  rank, 
-  isSelf, 
+function ProfileCard({
+  profile,
+  rank,
+  isSelf,
   relationship,
+  isPending,
   onAdd,
   onRemove,
   onAccept
-}: { 
-  profile: UserProfile; 
-  rank?: number; 
+}: {
+  profile: UserProfile;
+  rank?: number;
   isSelf: boolean;
   relationship: 'none' | 'friend' | 'sent' | 'received';
+  isPending: boolean;
   onAdd: () => void;
   onRemove: () => void;
   onAccept: () => void;
@@ -216,7 +244,8 @@ function ProfileCard({
           {relationship === 'none' && (
             <button
               onClick={onAdd}
-              className="p-2 rounded-xl bg-brand-primary text-white hover:bg-brand-primary/90 transition-all"
+              disabled={isPending}
+              className="p-2 rounded-xl bg-brand-primary text-white hover:bg-brand-primary/90 transition-all disabled:opacity-50"
               title="Add Friend"
             >
               <UserPlus className="w-4 h-4" />
@@ -225,7 +254,8 @@ function ProfileCard({
           {relationship === 'sent' && (
             <button
               onClick={onRemove}
-              className="p-2 rounded-xl bg-white/5 text-brand-muted hover:text-white hover:bg-white/10 transition-all"
+              disabled={isPending}
+              className="p-2 rounded-xl bg-white/5 text-brand-muted hover:text-white hover:bg-white/10 transition-all disabled:opacity-50"
               title="Cancel Request"
             >
               <Clock className="w-4 h-4" />
@@ -234,7 +264,8 @@ function ProfileCard({
           {relationship === 'friend' && (
             <button
               onClick={onRemove}
-              className="p-2 rounded-xl bg-white/5 text-brand-primary hover:bg-red-500/20 hover:text-red-400 transition-all"
+              disabled={isPending}
+              className="p-2 rounded-xl bg-white/5 text-brand-primary hover:bg-red-500/20 hover:text-red-400 transition-all disabled:opacity-50"
               title="Remove Friend"
             >
               <UserCheck className="w-4 h-4" />
@@ -244,14 +275,16 @@ function ProfileCard({
             <>
               <button
                 onClick={onAccept}
-                className="p-2 rounded-xl bg-brand-primary text-white hover:bg-brand-primary/90 transition-all"
+                disabled={isPending}
+                className="p-2 rounded-xl bg-brand-primary text-white hover:bg-brand-primary/90 transition-all disabled:opacity-50"
                 title="Accept Request"
               >
                 <Check className="w-4 h-4" />
               </button>
               <button
                 onClick={onRemove}
-                className="p-2 rounded-xl bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white transition-all"
+                disabled={isPending}
+                className="p-2 rounded-xl bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
                 title="Reject Request"
               >
                 <X className="w-4 h-4" />

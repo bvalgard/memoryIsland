@@ -121,7 +121,7 @@ export default function Dashboard() {
   }, [selectedArchipelagoId]);
 
   // Discovery State
-  const { searchUsers, sendFriendRequest, acceptFriendRequest, removeFriend, friends, sentRequests, friendRequests, error: socialError, fetchProfilesByUids } = useSocial();
+  const { searchUsers, sendFriendRequest, acceptFriendRequest, removeFriend, friends, sentRequests, friendRequests, error: socialError, fetchProfilesByUids, profiles: socialProfiles, loading: socialLoading, loadLeaderboard } = useSocial();
   const [discoverySearch, setDiscoverySearch] = useState('');
   const [discoveryTab, setDiscoveryTab] = useState<'islands' | 'archipelagos' | 'explorers'>('islands');
   const [discoveryExplorers, setDiscoveryExplorers] = useState<any[]>([]);
@@ -440,7 +440,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative">
+    <div className="h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative overflow-hidden">
       <NewIslandModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -805,9 +805,9 @@ export default function Dashboard() {
                           <div className="flex items-center gap-2 shrink-0">
                             {island.authorId === user?.uid && (
                               <>
-                                <button 
+                                <button
                                   onClick={async () => {
-                                    const localVersion = progress?.islands.find(i => i.name === island.name);
+                                    const localVersion = progress?.islands.find(i => i.publishedId === island.id || i.id === island.id);
                                     if (localVersion) {
                                       await shareIsland(localVersion);
                                       loadPublicIslands();
@@ -825,13 +825,19 @@ export default function Dashboard() {
                                   <RefreshCw className="w-3.5 h-3.5" />
                                   <span className="text-xs uppercase tracking-widest hidden sm:inline">Update</span>
                                 </button>
-                                <button 
-                                  onClick={() => {
-                                    if (confirm('Are you sure you want to permanently delete this shared island?')) {
+                                <button
+                                  onClick={() => setConfirmDialog({
+                                    open: true,
+                                    title: 'Delete from Community?',
+                                    message: `This will permanently remove "${island.name}" from the discovery feed. People who already imported it will keep their copies.`,
+                                    confirmLabel: 'Delete',
+                                    danger: true,
+                                    onConfirm: () => {
+                                      setConfirmDialog(d => ({ ...d, open: false }));
                                       deletePublishedIsland(island.id);
                                       setPublicIslands(prev => prev.filter(i => i.id !== island.id));
-                                    }
-                                  }}
+                                    },
+                                  })}
                                   className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
                                   title="Delete from Community"
                                 >
@@ -941,9 +947,9 @@ export default function Dashboard() {
                           <div className="flex items-center gap-2 shrink-0">
                             {arch.authorId === user?.uid && (
                               <>
-                                <button 
+                                <button
                                   onClick={async () => {
-                                    const localVersion = progress?.archipelagos?.find(a => a.name === arch.name);
+                                    const localVersion = progress?.archipelagos?.find(a => a.publishedId === arch.id || a.id === arch.id);
                                     if (localVersion) {
                                       await shareArchipelago(localVersion);
                                       loadPublicArchipelagos();
@@ -957,13 +963,19 @@ export default function Dashboard() {
                                   <RefreshCw className="w-3.5 h-3.5" />
                                   <span className="text-xs uppercase tracking-widest hidden sm:inline">Update</span>
                                 </button>
-                                <button 
-                                  onClick={() => {
-                                    if (confirm('Are you sure you want to permanently delete this shared archipelago?')) {
+                                <button
+                                  onClick={() => setConfirmDialog({
+                                    open: true,
+                                    title: 'Delete from Community?',
+                                    message: `This will permanently remove "${arch.name}" from the discovery feed. People who already imported it will keep their copies.`,
+                                    confirmLabel: 'Delete',
+                                    danger: true,
+                                    onConfirm: () => {
+                                      setConfirmDialog(d => ({ ...d, open: false }));
                                       deletePublishedArchipelago(arch.id);
                                       setPublicArchipelagos(prev => prev.filter(a => a.id !== arch.id));
-                                    }
-                                  }}
+                                    },
+                                  })}
                                   className="flex items-center justify-center px-4 py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 font-bold transition-all shadow-lg active:scale-95"
                                   title="Delete from Community"
                                 >
@@ -1171,7 +1183,20 @@ export default function Dashboard() {
 
       <AnimatePresence>
         {activeModal === 'leaderboard' && (
-          <SocialLeaderboard onClose={() => setActiveModal(null)} />
+          <SocialLeaderboard
+            onClose={() => setActiveModal(null)}
+            profiles={socialProfiles}
+            friends={friends}
+            friendRequests={friendRequests}
+            sentRequests={sentRequests}
+            loading={socialLoading}
+            error={socialError}
+            loadLeaderboard={loadLeaderboard}
+            fetchProfilesByUids={fetchProfilesByUids}
+            sendFriendRequest={sendFriendRequest}
+            acceptFriendRequest={acceptFriendRequest}
+            removeFriend={removeFriend}
+          />
         )}
       </AnimatePresence>
 
@@ -1383,7 +1408,7 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Sidebar - Desktop Only */}
-      <aside className="w-20 hidden md:flex flex-col items-center py-6 border-r border-brand-border bg-brand-card sticky top-0 h-screen z-50">
+      <aside className="w-20 hidden md:flex flex-col items-center py-6 border-r border-brand-border bg-brand-card z-50 shrink-0">
         <div className="relative mb-8" ref={profileRef}>
           <button 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -1531,7 +1556,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className={cn("flex-1 flex flex-col min-w-0 md:pb-0", !isStudying && "pb-20")}>
+      <main className={cn("flex-1 flex flex-col min-w-0 overflow-y-auto md:pb-0", !isStudying && "pb-20")}>
         {/* Header */}
         <header className="h-14 border-b border-brand-border flex items-center justify-start px-6 md:px-12 bg-brand-bg/50 backdrop-blur-md sticky top-0 z-20">
           <div className="flex items-center gap-4 text-brand-muted group flex-1 max-w-sm">
@@ -1855,6 +1880,8 @@ export default function Dashboard() {
                     setStudyMode(mode);
                     setIsStudying(true);
                   }}
+                  friends={friends}
+                  fetchProfilesByUids={fetchProfilesByUids}
                 />
               </motion.div>
             )}
@@ -2015,6 +2042,8 @@ export default function Dashboard() {
             onShareTargeted={async (uids) => {
               await shareArchipelago(selectedArchipelago, uids);
             }}
+            friends={friends}
+            fetchProfilesByUids={fetchProfilesByUids}
           />
         )}
       </AnimatePresence>

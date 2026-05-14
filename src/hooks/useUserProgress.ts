@@ -5,6 +5,7 @@ import {
   arrayUnion,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -48,6 +49,8 @@ export interface Card {
   demotionCount?: number;
   imageUrl?: string;
   backImageUrl?: string;
+  imageCredit?: string;
+  backImageCredit?: string;
 }
 
 export interface Archipelago {
@@ -262,6 +265,8 @@ function sanitizeCardForPublic(card: Card) {
     hint: card.hint || '',
     ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
     ...(card.backImageUrl ? { backImageUrl: card.backImageUrl } : {}),
+    ...(card.imageCredit ? { imageCredit: card.imageCredit } : {}),
+    ...(card.backImageCredit ? { backImageCredit: card.backImageCredit } : {}),
   };
 }
 
@@ -556,6 +561,8 @@ export function useUserProgress() {
           demotionCount: data.demotionCount,
           imageUrl: data.imageUrl,
           backImageUrl: data.backImageUrl,
+          imageCredit: data.imageCredit,
+          backImageCredit: data.backImageCredit,
         });
         cardsByIsland.set(data.islandId, existing);
       });
@@ -984,11 +991,9 @@ export function useUserProgress() {
     };
 
     try {
-      // 1. Create/Update the community version
-      await setDoc(publishedRef, publicData);
-      
-      // 2. Update the local document to reflect sharing state
-      await updateDoc(doc(db, 'islands', island.id), {
+      const batch = writeBatch(db);
+      batch.set(publishedRef, publicData);
+      batch.update(doc(db, 'islands', island.id), {
         isPublic: !isTargeted,
         sharedWith: isTargeted ? targetUids : [],
         publishedId: publishedId,
@@ -997,6 +1002,7 @@ export function useUserProgress() {
         approvalStatus: isTargeted ? 'approved' : 'pending',
         submittedAt: serverTimestamp(),
       });
+      await batch.commit();
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `published_islands/${publishedId}`);
     }
@@ -1022,6 +1028,8 @@ export function useUserProgress() {
       await updateDoc(doc(db, 'islands', island.id), {
         isPublic: false,
         approvalStatus: 'draft',
+        sharedWith: [],
+        publishedId: deleteField(),
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `islands/${island.id}`);
@@ -1037,23 +1045,26 @@ export function useUserProgress() {
 
     const isTargeted = targetUids && targetUids.length > 0;
 
-    const publicData = {
-      id: targetArchipelagoId,
-      name: archipelago.name,
-      islandCount: constituentIslands.length,
-      islands: constituentIslands.map((island) => ({
-        name: island.name,
-        cards: island.cards.map((card) => sanitizeCardForPublic(card)),
-      })),
-      authorId: user.uid,
-      authorName: user.displayName || 'Explorer',
-      isPublic: !isTargeted,
-      sharedWith: isTargeted ? targetUids : [],
-      downloads: 0,
-      publishedAt: serverTimestamp(),
-    };
-
     try {
+      const existingSnap = await getDoc(publishedArchipelagosRef);
+      const existingDownloads = existingSnap.exists() ? (existingSnap.data().downloads || 0) : 0;
+
+      const publicData = {
+        id: targetArchipelagoId,
+        name: archipelago.name,
+        islandCount: constituentIslands.length,
+        islands: constituentIslands.map((island) => ({
+          name: island.name,
+          cards: island.cards.map((card) => sanitizeCardForPublic(card)),
+        })),
+        authorId: user.uid,
+        authorName: user.displayName || 'Explorer',
+        isPublic: !isTargeted,
+        sharedWith: isTargeted ? targetUids : [],
+        downloads: existingDownloads,
+        publishedAt: serverTimestamp(),
+      };
+
       await setDoc(publishedArchipelagosRef, publicData);
       const updatedArchipelagos = (progress.archipelagos || []).map((entry) =>
         entry.id === archipelago.id 
@@ -1143,10 +1154,10 @@ export function useUserProgress() {
 
       const mergedMap = new Map();
       publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
-      if (targetedSnap) {
+      if (targetedQuery) {
         targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
       }
-      
+
       let results = Array.from(mergedMap.values());
 
       if (searchTerm) {
@@ -1228,7 +1239,7 @@ export function useUserProgress() {
 
       const mergedMap = new Map();
       publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
-      if (targetedSnap) {
+      if (targetedQuery) {
         targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
       }
 

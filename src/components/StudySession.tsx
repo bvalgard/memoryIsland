@@ -980,10 +980,17 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                   )}
                 </p>
                 {currentCard?.imageUrl && (
-                  <LightboxImage
-                    src={currentCard.imageUrl}
-                    className="w-full max-h-48 object-contain rounded-xl mb-4"
-                  />
+                  <div className="mb-4">
+                    <LightboxImage
+                      src={currentCard.imageUrl}
+                      className="w-full max-h-48 object-contain rounded-xl"
+                    />
+                    {currentCard.imageCredit && (
+                      <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                        {currentCard.imageCredit}
+                      </p>
+                    )}
+                  </div>
                 )}
                 <h2 className={cn("font-bold leading-snug tracking-tight mb-6 sm:mb-8 whitespace-pre-wrap", currentCard?.type === 'mcq' ? "text-lg sm:text-xl md:text-2xl" : "text-xl sm:text-2xl md:text-3xl")}>
                   {currentCard?.front}
@@ -1350,10 +1357,17 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                 ) : (
                   <>
                     {currentCard?.backImageUrl && (
-                      <LightboxImage
-                        src={currentCard.backImageUrl}
-                        className="w-full max-h-48 object-contain rounded-xl mb-4"
-                      />
+                      <div className="mb-4">
+                        <LightboxImage
+                          src={currentCard.backImageUrl}
+                          className="w-full max-h-48 object-contain rounded-xl"
+                        />
+                        {currentCard.backImageCredit && (
+                          <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                            {currentCard.backImageCredit}
+                          </p>
+                        )}
+                      </div>
                     )}
                     <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
                   </>
