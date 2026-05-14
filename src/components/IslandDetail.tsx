@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -58,6 +58,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [backImageCredit, setBackImageCredit] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
   const [parentCardForProgression, setParentCardForProgression] = useState<Card | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -533,7 +535,31 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-1 flex-wrap">
-              <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight break-words">{island.name}</h2>
+              {isEditingName ? (
+                <input
+                  autoFocus
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = editNameValue.trim();
+                    if (trimmed && trimmed !== island.name) onUpdateIsland?.({ name: trimmed });
+                    setIsEditingName(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    if (e.key === 'Escape') { setIsEditingName(false); }
+                  }}
+                  className="text-2xl sm:text-[32px] font-bold tracking-tight bg-white/5 border border-white/20 rounded-xl px-3 py-1 text-white outline-none focus:border-brand-primary/60 min-w-0 w-full max-w-sm"
+                />
+              ) : (
+                <button
+                  onClick={() => { setEditNameValue(island.name); setIsEditingName(true); }}
+                  className="group/name flex items-center gap-2 text-left"
+                >
+                  <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight break-words">{island.name}</h2>
+                  <Pencil className="w-4 h-4 text-brand-muted opacity-0 group-hover/name:opacity-100 transition-opacity shrink-0" />
+                </button>
+              )}
               
               <div className="flex items-center gap-3 shrink-0">
                 {onShare && (

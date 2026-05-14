@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -48,6 +48,7 @@ export default function Dashboard() {
     deletePublishedArchipelago,
     dismissShare,
     removeArchipelago,
+    updateArchipelagos,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -162,6 +163,8 @@ export default function Dashboard() {
     const saved = localStorage.getItem(`seen_discover_${uid}`);
     return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
   });
+  const [isRenamingArchipelago, setIsRenamingArchipelago] = useState(false);
+  const [renameArchipelagoValue, setRenameArchipelagoValue] = useState('');
 
   // Persist seen IDs to localStorage
   useEffect(() => {
@@ -1639,16 +1642,48 @@ export default function Dashboard() {
                     <div className="flex flex-wrap items-center gap-3 mb-2">
                       <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight">Memory Islands</h2>
                       <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl p-1">
-                        <select
-                          value={selectedArchipelagoId || ''}
-                          onChange={(e) => setSelectedArchipelagoId(e.target.value || null)}
-                          className="bg-transparent text-white font-bold text-sm px-3 py-1 outline-none appearance-none cursor-pointer"
-                        >
-                          <option value="" className="bg-[#111]">All Islands</option>
-                          {ownedArchipelagos.map(a => (
-                            <option key={a.id} value={a.id} className="bg-[#111]">{a.name}</option>
-                          ))}
-                        </select>
+                        {isRenamingArchipelago && selectedArchipelagoId ? (
+                          <input
+                            autoFocus
+                            value={renameArchipelagoValue}
+                            onChange={(e) => setRenameArchipelagoValue(e.target.value)}
+                            onBlur={() => {
+                              const trimmed = renameArchipelagoValue.trim();
+                              if (trimmed && selectedArchipelago && trimmed !== selectedArchipelago.name) {
+                                const updated = (progress?.archipelagos || []).map(a =>
+                                  a.id === selectedArchipelagoId ? { ...a, name: trimmed } : a
+                                );
+                                updateArchipelagos(updated);
+                              }
+                              setIsRenamingArchipelago(false);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              if (e.key === 'Escape') setIsRenamingArchipelago(false);
+                            }}
+                            className="bg-transparent text-white font-bold text-sm px-3 py-1 outline-none border-b border-white/30 focus:border-brand-primary/60 w-32"
+                          />
+                        ) : (
+                          <select
+                            value={selectedArchipelagoId || ''}
+                            onChange={(e) => setSelectedArchipelagoId(e.target.value || null)}
+                            className="bg-transparent text-white font-bold text-sm px-3 py-1 outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="" className="bg-[#111]">All Islands</option>
+                            {ownedArchipelagos.map(a => (
+                              <option key={a.id} value={a.id} className="bg-[#111]">{a.name}</option>
+                            ))}
+                          </select>
+                        )}
+                        {selectedArchipelagoId && !isRenamingArchipelago && (
+                          <button
+                            onClick={() => { setRenameArchipelagoValue(selectedArchipelago?.name || ''); setIsRenamingArchipelago(true); }}
+                            className="p-1 hover:bg-white/10 rounded-xl transition-colors text-brand-muted hover:text-white"
+                            title="Rename Archipelago"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setIsArchipelagoModalOpen(true)}
                           className="p-1 hover:bg-white/10 rounded-xl transition-colors text-brand-muted hover:text-white"
