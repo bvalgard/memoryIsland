@@ -33,6 +33,8 @@ export type CardUpdateRecord = Record<string, {
   srsEaseFactor?: number;
   srsNextReview?: number;
   srsRepetitions?: number;
+  sessionAnswers?: number;
+  sessionCorrect?: number;
 }>;
 
 export interface Card {
@@ -60,6 +62,8 @@ export interface Card {
   srsEaseFactor?: number;
   srsNextReview?: number;
   srsRepetitions?: number;
+  totalAnswers?: number;
+  totalCorrect?: number;
 }
 
 export interface Archipelago {
@@ -101,6 +105,7 @@ export interface UserStats {
   longestSessionStreak: number;
   calibrationCorrect?: number;
   calibrationTotal?: number;
+  studyHourStats?: Record<string, { sessions: number; correct: number; total: number }>;
 }
 
 export interface UserSettings {
@@ -603,6 +608,8 @@ export function useUserProgress() {
           srsEaseFactor: data.srsEaseFactor,
           srsNextReview: data.srsNextReview,
           srsRepetitions: data.srsRepetitions,
+          totalAnswers: data.totalAnswers,
+          totalCorrect: data.totalCorrect,
         });
         cardsByIsland.set(data.islandId, existing);
       });
@@ -939,6 +946,17 @@ export function useUserProgress() {
       newDailyStreak += 1;
     }
 
+    const hourlyUpdate: UserStats['studyHourStats'] = { ...(progress.stats.studyHourStats || {}) };
+    if (sessionMeta?.sessionStartHour !== undefined && sessionMeta.cardCount > 0) {
+      const h = String(sessionMeta.sessionStartHour);
+      const prev = hourlyUpdate[h] || { sessions: 0, correct: 0, total: 0 };
+      hourlyUpdate[h] = {
+        sessions: prev.sessions + 1,
+        correct: prev.correct + (sessionMeta.correctCount || 0),
+        total: prev.total + sessionMeta.cardCount,
+      };
+    }
+
     await updateStats({
       dailyReviewed: newDailyReviewed,
       dailyMastered: newDailyMastered,
@@ -952,6 +970,7 @@ export function useUserProgress() {
         calibrationCorrect: (progress.stats.calibrationCorrect || 0) + (sessionMeta.calibrationCorrect || 0),
         calibrationTotal: (progress.stats.calibrationTotal || 0) + sessionMeta.calibrationTotal,
       } : {}),
+      studyHourStats: hourlyUpdate,
     });
   };
 
@@ -969,6 +988,8 @@ export function useUserProgress() {
           consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
           needsWork: update.status === 'struggling',
           lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
+          totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
+          totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),
         };
         if (update.wasDemoted) {
           cardPayload.demotionCount = (card.demotionCount || 0) + 1;
@@ -1003,6 +1024,8 @@ export function useUserProgress() {
             consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
             needsWork: update.status === 'struggling',
             lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
+            totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
+            totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),
           };
           if (update.wasDemoted) {
             cardPayload.demotionCount = (card.demotionCount || 0) + 1;

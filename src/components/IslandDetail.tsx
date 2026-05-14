@@ -1299,6 +1299,16 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       <div className="flex items-start justify-between gap-4">
                         <p className="font-bold text-sm mb-1 truncate">{card.front}</p>
                         <div className="flex items-center gap-2 shrink-0">
+                          {card.totalAnswers != null && card.totalAnswers > 0 && (
+                            <span className={cn(
+                              "text-[9px] font-bold tabular-nums",
+                              (card.totalCorrect ?? 0) / card.totalAnswers < 0.4 ? "text-red-400/70" :
+                              (card.totalCorrect ?? 0) / card.totalAnswers < 0.7 ? "text-amber-400/70" :
+                              "text-emerald-400/70"
+                            )}>
+                              {Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)}%
+                            </span>
+                          )}
                           {card.needsWork && (
                             <span className="text-[9px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20 tracking-wider font-bold">STRUGGLING</span>
                           )}

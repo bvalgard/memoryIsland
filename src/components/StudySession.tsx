@@ -421,6 +421,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           srsEaseFactor: srsFib.easeFactor,
           srsNextReview: srsFib.nextReview,
           srsRepetitions: srsFib.repetitions,
+          sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+          sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
         },
       }));
 
@@ -456,6 +458,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           srsEaseFactor: srsFibWrong.easeFactor,
           srsNextReview: srsFibWrong.nextReview,
           srsRepetitions: srsFibWrong.repetitions,
+          sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+          sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
         },
       }));
       setDirection(-1);
@@ -517,6 +521,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         srsEaseFactor: srs.easeFactor,
         srsNextReview: srs.nextReview,
         srsRepetitions: srs.repetitions,
+        sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+        sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
       },
     }));
     setDirection(isCorrect ? 1 : -1);
@@ -626,6 +632,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         srsEaseFactor: srsMs.easeFactor,
         srsNextReview: srsMs.nextReview,
         srsRepetitions: srsMs.repetitions,
+        sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+        sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
       },
     }));
   };
@@ -673,6 +681,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
         srsEaseFactor: srsSeq.easeFactor,
         srsNextReview: srsSeq.nextReview,
         srsRepetitions: srsSeq.repetitions,
+        sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+        sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
       },
     }));
   };
@@ -712,6 +722,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           srsEaseFactor: srsMcqCorrect.easeFactor,
           srsNextReview: srsMcqCorrect.nextReview,
           srsRepetitions: srsMcqCorrect.repetitions,
+          sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+          sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
         },
       }));
     } else {
@@ -743,6 +755,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
           srsEaseFactor: srsMcqWrong.easeFactor,
           srsNextReview: srsMcqWrong.nextReview,
           srsRepetitions: srsMcqWrong.repetitions,
+          sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+          sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
         },
       }));
     }
@@ -851,6 +865,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                 srsEaseFactor: srsMatchCorrect.easeFactor,
                 srsNextReview: srsMatchCorrect.nextReview,
                 srsRepetitions: srsMatchCorrect.repetitions,
+                sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+                sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
               },
             }));
             setScoreDelta(prev => prev + 1);
@@ -884,6 +900,8 @@ export default function StudySession({ island, mode = 'all', settings, onFinish,
                 srsEaseFactor: srsMatchWrong.easeFactor,
                 srsNextReview: srsMatchWrong.nextReview,
                 srsRepetitions: srsMatchWrong.repetitions,
+                sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+                sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
               },
             }));
             setDirection(-1);

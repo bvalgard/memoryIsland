@@ -351,6 +351,37 @@ export default function Dashboard() {
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
   const globalDueCount = allCards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
 
+  // Learning insights computations
+  const weakSpotCards = [...allCards]
+    .filter(c => (c.demotionCount ?? 0) >= 2 || c.needsWork)
+    .sort((a, b) => (b.demotionCount ?? 0) - (a.demotionCount ?? 0))
+    .slice(0, 5);
+
+  const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+  const forgettingCount = allCards.filter(c =>
+    c.srsNextReview && c.srsNextReview > Date.now() && c.srsNextReview <= Date.now() + threeDaysMs
+  ).length;
+
+  const bestStudyHour = (() => {
+    const hourStats = progress?.stats?.studyHourStats as Record<string, { sessions: number; correct: number; total: number }> | undefined;
+    if (!hourStats) return null;
+    let best: { hour: number; accuracy: number; sessions: number } | null = null;
+    for (const [h, data] of Object.entries(hourStats)) {
+      if (data.sessions < 3 || data.total === 0) continue;
+      const accuracy = data.correct / data.total;
+      if (!best || accuracy > best.accuracy) best = { hour: Number(h), accuracy, sessions: data.sessions };
+    }
+    return best;
+  })();
+
+  const formatStudyHour = (h: number) => {
+    if (h >= 5 && h < 12) return `${h === 5 ? '5' : h}am`;
+    if (h === 12) return '12pm';
+    if (h > 12 && h < 17) return `${h - 12}pm`;
+    if (h >= 17 && h < 21) return `${h - 12}pm`;
+    return `${h > 12 ? h - 12 : h}${h >= 12 ? 'pm' : 'am'}`;
+  };
+
   const friendRequestNotifications = (discoveryInboundRequests || []).map(profile => ({
     id: `friend_req_${profile.uid}`,
     islandId: 'social', // Special key to trigger social modal
@@ -1373,6 +1404,67 @@ export default function Dashboard() {
                         <div className="text-[10px] font-bold tracking-widest uppercase text-sky-500/80 relative z-10">Record Daily Reviewed</div>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Learning Insights */}
+                {(weakSpotCards.length > 0 || forgettingCount > 0 || bestStudyHour) && (
+                  <div className="mb-12">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-brand-primary" />
+                      Learning Insights
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                      {forgettingCount > 0 && (
+                        <div className="bg-sky-500/5 rounded-2xl p-5 border border-sky-500/20">
+                          <div className="text-2xl font-black text-sky-400 mb-1">{forgettingCount}</div>
+                          <div className="text-[10px] font-bold tracking-widest uppercase text-sky-500/80">Cards due in 3 days</div>
+                          <div className="text-xs text-brand-muted mt-1">Review soon to avoid forgetting</div>
+                        </div>
+                      )}
+                      {bestStudyHour && (
+                        <div className="bg-emerald-500/5 rounded-2xl p-5 border border-emerald-500/20">
+                          <div className="text-2xl font-black text-emerald-400 mb-1">{formatStudyHour(bestStudyHour.hour)}</div>
+                          <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Peak retention hour</div>
+                          <div className="text-xs text-brand-muted mt-1">
+                            {Math.round(bestStudyHour.accuracy * 100)}% accuracy over {bestStudyHour.sessions} sessions
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {weakSpotCards.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted mb-3 flex items-center gap-2">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                          Persistent Weak Spots
+                        </div>
+                        <div className="space-y-2">
+                          {weakSpotCards.map(card => {
+                            const accuracy = card.totalAnswers ? Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100) : null;
+                            return (
+                              <div key={card.id} className="flex items-center justify-between bg-red-500/5 border border-red-500/10 rounded-xl px-4 py-3 gap-4">
+                                <p className="text-sm text-white/80 truncate flex-1">{card.front}</p>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  {accuracy !== null && (
+                                    <span className={cn(
+                                      "text-[10px] font-bold",
+                                      accuracy < 40 ? "text-red-400" : accuracy < 70 ? "text-amber-400" : "text-emerald-400"
+                                    )}>
+                                      {accuracy}%
+                                    </span>
+                                  )}
+                                  {(card.demotionCount ?? 0) >= 2 && (
+                                    <span className="text-[10px] bg-red-500/15 text-red-400 px-2 py-0.5 rounded border border-red-500/20 font-bold whitespace-nowrap">
+                                      {card.demotionCount}× demoted
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
