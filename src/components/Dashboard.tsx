@@ -18,8 +18,8 @@ import StudySession from './StudySession';
 import ShareModal from './ShareModal';
 import { useSocial } from '../hooks/useSocial';
 import ConfirmDialog from './ConfirmDialog';
-import DistressSignalsFeed from './DistressSignalsFeed';
-import { useFlares } from '../hooks/useFlares';
+import QuestionsBoard from './QuestionsBoard';
+import { useQuestions } from '../hooks/useQuestions';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -124,10 +124,10 @@ export default function Dashboard() {
     }
   }, [selectedArchipelagoId]);
 
-  // Flares — fetch my flares once on mount for bell notifications
-  const { fetchMyFlares, myFlares } = useFlares();
+  // Questions — fetch my questions once on mount for bell notifications
+  const { fetchMyQuestions, myQuestions } = useQuestions();
   useEffect(() => {
-    if (user?.uid) fetchMyFlares(user.uid);
+    if (user?.uid) fetchMyQuestions(user.uid);
   }, [user?.uid]);
 
   // Discovery State
@@ -418,22 +418,22 @@ export default function Dashboard() {
     timestamp: arch.publishedAt?.toMillis ? arch.publishedAt.toMillis() : (arch.createdAt || Date.now())
   }));
 
-  const flareResponseNotifications = myFlares
-    .filter(f => f.status === 'active' && f.lifePreservers.length > 0)
-    .map(f => ({
-      id: `flare_response_${f.id}_${f.lifePreservers.length}`,
+  const questionResponseNotifications = myQuestions
+    .filter(q => q.status === 'open' && q.answerCount > 0)
+    .map(q => ({
+      id: `question_response_${q.id}_${q.answerCount}`,
       islandId: 'distress',
-      title: 'Flare Response',
-      message: `You got ${f.lifePreservers.length} hint${f.lifePreservers.length > 1 ? 's' : ''} for: "${f.frontText}"`,
+      title: 'Question Answered',
+      message: `You got ${q.answerCount} answer${q.answerCount > 1 ? 's' : ''} for: "${q.frontText}"`,
       type: 'info' as const,
-      timestamp: f.createdAt?.seconds ? f.createdAt.seconds * 1000 : Date.now(),
+      timestamp: q.lastActivityAt?.seconds ? q.lastActivityAt.seconds * 1000 : Date.now(),
     }));
 
   const notifications = [
     ...friendRequestNotifications,
     ...islandShareNotifications,
     ...archipelagoShareNotifications,
-    ...flareResponseNotifications,
+    ...questionResponseNotifications,
   ].sort((a, b) => b.timestamp - a.timestamp);
   const unreadCount = notifications.filter(n => !seenNotificationIds.has(n.id)).length;
   const unreadSocialCount = friendRequests.filter(uid => !seenSocialIds.has(uid)).length;
@@ -1286,7 +1286,7 @@ export default function Dashboard() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
             >
-              <DistressSignalsFeed
+              <QuestionsBoard
                 onClose={() => setActiveModal(null)}
                 currentUserId={user?.uid || ''}
                 ownedIslandIds={progress?.islands.map(i => i.id).filter(Boolean) as string[] || []}

@@ -1,7 +1,7 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { Flame, Users, Globe, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { MessageCircleQuestion, Users, Globe, X } from 'lucide-react';
 
-interface FlareModalProps {
+interface AskQuestionModalProps {
   isOpen: boolean;
   friendCount: number;
   isSending: boolean;
@@ -9,7 +9,7 @@ interface FlareModalProps {
   onSend: (visibility: 'friends' | 'global') => Promise<void>;
 }
 
-export default function FlareModal({ isOpen, friendCount, isSending, onClose, onSend }: FlareModalProps) {
+export default function AskQuestionModal({ isOpen, friendCount, isSending, onClose, onSend }: AskQuestionModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -39,11 +39,11 @@ export default function FlareModal({ isOpen, friendCount, isSending, onClose, on
 
             <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-2xl bg-orange-500/15 border border-orange-500/25 flex items-center justify-center">
-                <Flame className="w-5 h-5 text-orange-400" />
+                <MessageCircleQuestion className="w-5 h-5 text-orange-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Send SOS Flare</h3>
-                <p className="text-[11px] text-white/40">Ask your crew for a memory trick</p>
+                <h3 className="text-sm font-bold text-white">Ask the Community</h3>
+                <p className="text-[11px] text-white/40">Get a memory trick from your crew</p>
               </div>
             </div>
 
@@ -84,7 +84,7 @@ export default function FlareModal({ isOpen, friendCount, isSending, onClose, on
             </div>
 
             {isSending && (
-              <p className="text-center text-[11px] text-white/40 mt-4">Launching flare…</p>
+              <p className="text-center text-[11px] text-white/40 mt-4">Posting question…</p>
             )}
           </motion.div>
         </motion.div>

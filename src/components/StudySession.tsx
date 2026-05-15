@@ -6,8 +6,8 @@ import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hoo
 import { SessionMeta } from '../achievements';
 import { cn } from '../lib/utils';
 import LightboxImage from './LightboxImage';
-import FlareModal from './FlareModal';
-import { useFlares, type Flare } from '../hooks/useFlares';
+import AskQuestionModal from './AskQuestionModal';
+import { useQuestions, type Question, type Answer } from '../hooks/useQuestions';
 
 // Reliable Fisher-Yates shuffle to prevent duplicate/dropped card bugs caused by Math.random() in sort()
 function shuffleArray<T>(array: T[]): T[] {
@@ -147,14 +147,15 @@ export default function StudySession({ island, mode = 'all', settings, friends =
   // Sequencing State
   const [shuffledSequence, setShuffledSequence] = useState<{ id: string, text: string }[]>([]);
 
-  // SOS Flare state
-  const [showFlareButton, setShowFlareButton] = useState(false);
-  const [flareModalOpen, setFlareModalOpen] = useState(false);
-  const [flareJustSent, setFlareJustSent] = useState(false);
-  const [isSendingFlare, setIsSendingFlare] = useState(false);
-  const [cardFlares, setCardFlares] = useState<Flare[]>([]);
+  // Community Q&A state
+  const [showAskButton, setShowAskButton] = useState(false);
+  const [askModalOpen, setAskModalOpen] = useState(false);
+  const [questionJustAsked, setQuestionJustAsked] = useState(false);
+  const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  const [cardQuestion, setCardQuestion] = useState<Question | null>(null);
+  const [cardAnswers, setCardAnswers] = useState<Answer[]>([]);
 
-  const { sendFlare, fetchCardFlares, resolveFlare } = useFlares();
+  const { askQuestion, fetchCardQuestion, loadAnswers, unsubscribeAnswers, acceptAnswer, answers } = useQuestions();
 
   // Helper for responsive nav buttons
   const NavAction = ({ icon: Icon, label, onClick, variant = 'muted' }: { icon: any, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) => (
@@ -345,20 +346,32 @@ export default function StudySession({ island, mode = 'all', settings, friends =
     // Multi-select reset
     setSelectedMultiOptions(new Set());
 
-    // SOS flare reset
-    setShowFlareButton(false);
-    setFlareModalOpen(false);
-    setFlareJustSent(false);
-    setCardFlares([]);
+    // Community Q&A reset
+    setShowAskButton(false);
+    setAskModalOpen(false);
+    setQuestionJustAsked(false);
+    setCardQuestion(null);
+    setCardAnswers([]);
+    if (cardQuestion) unsubscribeAnswers(cardQuestion.id);
   }, [currentIndex, currentCard]);
 
   useEffect(() => {
     if (!isFlipped || !currentCard?.id) {
-      setCardFlares([]);
+      setCardAnswers([]);
       return;
     }
-    fetchCardFlares(currentCard.id).then(setCardFlares);
+    fetchCardQuestion(currentCard.id).then(q => {
+      setCardQuestion(q);
+      if (q) loadAnswers(q.id);
+    });
   }, [isFlipped, currentCard?.id]);
+
+  // Sync live answers from onSnapshot into local cardAnswers state
+  useEffect(() => {
+    if (cardQuestion) {
+      setCardAnswers(answers[cardQuestion.id] ?? []);
+    }
+  }, [answers, cardQuestion?.id]);
 
   const triggerSparkle = (e: React.MouseEvent) => {
     const newSparkle = {
@@ -464,7 +477,7 @@ export default function StudySession({ island, mode = 'all', settings, friends =
       setIsFlipped(true);
       const { status, consecutiveCorrect } = getNextStatusAndStreak(false, currentCard.status, currentCard.consecutiveCorrect);
       setStreak(0);
-      setShowFlareButton(true);
+      setShowAskButton(true);
       setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
 
       const isBeingDemotedFib =
@@ -632,7 +645,7 @@ export default function StudySession({ island, mode = 'all', settings, friends =
       setMaxStreak(prev => Math.max(prev, newStreak));
     } else {
       setStreak(0);
-      setShowFlareButton(true);
+      setShowAskButton(true);
     }
 
     const { status, consecutiveCorrect } = getNextStatusAndStreak(isCorrect, currentCard?.status, currentCard?.consecutiveCorrect);
@@ -758,7 +771,7 @@ export default function StudySession({ island, mode = 'all', settings, friends =
       }));
     } else {
       setStreak(0);
-      setShowFlareButton(true);
+      setShowAskButton(true);
       const { status, consecutiveCorrect } = getNextStatusAndStreak(false, currentCard?.status, currentCard?.consecutiveCorrect);
 
       setSessionStats(prev => ({
@@ -829,18 +842,19 @@ export default function StudySession({ island, mode = 'all', settings, friends =
     nextCard();
   };
 
-  const handleSendFlare = async (visibility: 'friends' | 'global') => {
+  const handleAskQuestion = async (visibility: 'friends' | 'global') => {
     if (!currentCard) return;
-    setIsSendingFlare(true);
-    await sendFlare(currentCard, islandId || island.id || '', visibility, friends, currentUserName);
-    setFlareJustSent(true);
-    setFlareModalOpen(false);
-    setIsSendingFlare(false);
+    setIsAskingQuestion(true);
+    await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName);
+    setQuestionJustAsked(true);
+    setAskModalOpen(false);
+    setIsAskingQuestion(false);
   };
 
-  const handleThisSavedMe = async (flare: Flare, preserverIndex: number) => {
-    await resolveFlare(flare, preserverIndex);
-    setCardFlares([]);
+  const handleAcceptAnswer = async (answer: Answer) => {
+    if (!cardQuestion) return;
+    await acceptAnswer(cardQuestion, answer.id, answer.helperId);
+    setCardAnswers([]);
   };
 
   const handleMatchingSelect = (side: 'left' | 'right', id: string, e: React.MouseEvent) => {
@@ -1398,22 +1412,22 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                         <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
                       </motion.div>
                     )}
-                    {/* Life preservers — multi-select wrong answer */}
-                    {showFlareButton && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                    {/* Community answers — multi-select wrong answer */}
+                    {showAskButton && cardAnswers.length > 0 && (
                       <div className="flex flex-col gap-2 w-full mt-2">
-                        {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                        {cardAnswers.map((answer, i) => (
                           <motion.div
-                            key={`${fi}-${li}`}
+                            key={answer.id}
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: li * 0.08 }}
+                            transition={{ delay: i * 0.08 }}
                             className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
                           >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
-                            <p className="text-sm text-white/70">{lp.hintText}</p>
-                            {!lp.isHelpful && (
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
+                            <p className="text-sm text-white/70">{answer.bodyText}</p>
+                            {!answer.isAccepted && cardQuestion && (
                               <button
-                                onClick={() => handleThisSavedMe(f, li)}
+                                onClick={() => handleAcceptAnswer(answer)}
                                 className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
                               >
                                 This Saved Me!
@@ -1423,18 +1437,18 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                         ))}
                       </div>
                     )}
-                    {showFlareButton && !flareJustSent && (
+                    {showAskButton && !questionJustAsked && (
                       <motion.button
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        onClick={(e) => { e.stopPropagation(); setFlareModalOpen(true); }}
+                        onClick={(e) => { e.stopPropagation(); setAskModalOpen(true); }}
                         className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                       >
-                        <Flame className="w-3.5 h-3.5" /> Send SOS Flare
+                        <Flame className="w-3.5 h-3.5" /> Ask the Community
                       </motion.button>
                     )}
-                    {flareJustSent && (
-                      <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Flare launched!</p>
+                    {questionJustAsked && (
+                      <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Question posted!</p>
                     )}
                   </div>
                 ) : currentCard?.type === 'sequencing' ? (
@@ -1616,22 +1630,22 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                         <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
                       </motion.div>
                     )}
-                    {/* Life preservers from crew */}
-                    {showFlareButton && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                    {/* Community answers — MCQ/sequencing wrong answer */}
+                    {showAskButton && cardAnswers.length > 0 && (
                       <div className="flex flex-col gap-2 w-full mt-2">
-                        {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                        {cardAnswers.map((answer, i) => (
                           <motion.div
-                            key={`${fi}-${li}`}
+                            key={answer.id}
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: li * 0.08 }}
+                            transition={{ delay: i * 0.08 }}
                             className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
                           >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
-                            <p className="text-sm text-white/70">{lp.hintText}</p>
-                            {!lp.isHelpful && (
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
+                            <p className="text-sm text-white/70">{answer.bodyText}</p>
+                            {!answer.isAccepted && cardQuestion && (
                               <button
-                                onClick={() => handleThisSavedMe(f, li)}
+                                onClick={() => handleAcceptAnswer(answer)}
                                 className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
                               >
                                 This Saved Me!
@@ -1641,19 +1655,19 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                         ))}
                       </div>
                     )}
-                    {/* SOS Flare button — MCQ wrong answer */}
-                    {showFlareButton && !flareJustSent && (
+                    {/* Ask the Community button — MCQ wrong answer */}
+                    {showAskButton && !questionJustAsked && (
                       <motion.button
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        onClick={(e) => { e.stopPropagation(); setFlareModalOpen(true); }}
+                        onClick={(e) => { e.stopPropagation(); setAskModalOpen(true); }}
                         className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                       >
-                        <Flame className="w-3.5 h-3.5" /> Send SOS Flare
+                        <Flame className="w-3.5 h-3.5" /> Ask the Community
                       </motion.button>
                     )}
-                    {flareJustSent && (
-                      <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Flare launched!</p>
+                    {questionJustAsked && (
+                      <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Question posted!</p>
                     )}
                   </div>
                 ) : null}
@@ -1721,22 +1735,22 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                           Progress +1
                         </motion.div>
                       )}
-                      {/* Life preservers from crew — FIB wrong answer */}
-                      {isFibCorrect === false && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                      {/* Community answers — FIB wrong answer */}
+                      {isFibCorrect === false && cardAnswers.length > 0 && (
                         <div className="flex flex-col gap-2">
-                          {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                          {cardAnswers.map((answer, i) => (
                             <motion.div
-                              key={`${fi}-${li}`}
+                              key={answer.id}
                               initial={{ opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: li * 0.08 }}
+                              transition={{ delay: i * 0.08 }}
                               className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
                             >
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
-                              <p className="text-sm text-white/70">{lp.hintText}</p>
-                              {!lp.isHelpful && (
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
+                              <p className="text-sm text-white/70">{answer.bodyText}</p>
+                              {!answer.isAccepted && cardQuestion && (
                                 <button
-                                  onClick={() => handleThisSavedMe(f, li)}
+                                  onClick={() => handleAcceptAnswer(answer)}
                                   className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
                                 >
                                   This Saved Me!
@@ -1746,18 +1760,18 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                           ))}
                         </div>
                       )}
-                      {isFibCorrect === false && !flareJustSent && (
+                      {isFibCorrect === false && !questionJustAsked && (
                         <motion.button
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
-                          onClick={() => setFlareModalOpen(true)}
+                          onClick={() => setAskModalOpen(true)}
                           className="w-full flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                         >
-                          <Flame className="w-3.5 h-3.5" /> Send SOS Flare
+                          <Flame className="w-3.5 h-3.5" /> Ask the Community
                         </motion.button>
                       )}
-                      {isFibCorrect === false && flareJustSent && (
-                        <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">🔥 Flare launched!</p>
+                      {isFibCorrect === false && questionJustAsked && (
+                        <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">🔥 Question posted!</p>
                       )}
                     </div>
                   ) : (
@@ -1791,22 +1805,22 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                   )}
                 </div>
 
-                {/* Life preservers from crew — flashcard */}
-                {(!currentCard?.type || currentCard?.type === 'flashcard') && cardFlares.flatMap(f => f.lifePreservers).length > 0 && (
+                {/* Community answers — flashcard */}
+                {(!currentCard?.type || currentCard?.type === 'flashcard') && cardAnswers.length > 0 && (
                   <div className="w-full flex flex-col gap-2 mb-3" onClick={e => e.stopPropagation()}>
-                    {cardFlares.flatMap((f, fi) => f.lifePreservers.map((lp, li) => ({ f, lp, fi, li }))).map(({ f, lp, fi, li }) => (
+                    {cardAnswers.map((answer, i) => (
                       <motion.div
-                        key={`${fi}-${li}`}
+                        key={answer.id}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: li * 0.08 }}
+                        transition={{ delay: i * 0.08 }}
                         className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
                       >
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {lp.helperName}</span>
-                        <p className="text-sm text-white/70">{lp.hintText}</p>
-                        {!lp.isHelpful && (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
+                        <p className="text-sm text-white/70">{answer.bodyText}</p>
+                        {!answer.isAccepted && cardQuestion && (
                           <button
-                            onClick={() => handleThisSavedMe(f, li)}
+                            onClick={() => handleAcceptAnswer(answer)}
                             className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
                           >
                             This Saved Me!
@@ -1839,19 +1853,19 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                         <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
                       </button>
                     </div>
-                    {/* SOS Flare button — flashcard back face */}
-                    {!flareJustSent ? (
+                    {/* Ask the Community — flashcard back face */}
+                    {!questionJustAsked ? (
                       <motion.button
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.4 }}
-                        onClick={() => setFlareModalOpen(true)}
+                        onClick={() => setAskModalOpen(true)}
                         className="w-full mt-3 flex items-center justify-center gap-2 text-orange-400/50 hover:text-orange-400 transition-colors text-[10px] font-bold uppercase tracking-widest py-2"
                       >
-                        <Flame className="w-3 h-3" /> Send SOS Flare
+                        <Flame className="w-3 h-3" /> Ask the Community
                       </motion.button>
                     ) : (
-                      <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Flare launched!</p>
+                      <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Question posted!</p>
                     )}
                   </div>
                 )}
@@ -1952,12 +1966,12 @@ export default function StudySession({ island, mode = 'all', settings, friends =
       </div>
     </div>
 
-    <FlareModal
-      isOpen={flareModalOpen}
+    <AskQuestionModal
+      isOpen={askModalOpen}
       friendCount={friends.length}
-      isSending={isSendingFlare}
-      onClose={() => setFlareModalOpen(false)}
-      onSend={handleSendFlare}
+      isSending={isAskingQuestion}
+      onClose={() => setAskModalOpen(false)}
+      onSend={handleAskQuestion}
     />
     </>
   );
