@@ -28,6 +28,7 @@ export interface Question {
   frontText: string;
   backText: string;
   cardType: string;
+  options?: string[];
   askerId: string;
   askerName: string;
   status: 'open' | 'answered' | 'expired';
@@ -107,6 +108,7 @@ export function useQuestions() {
       frontText: card.front,
       backText: card.back ?? '',
       cardType: card.type ?? 'flashcard',
+      options: card.options ?? [],
       askerId: user.uid,
       askerName: isAnonymous ? 'Anonymous Explorer' : (askerName || user.displayName || 'Explorer'),
       isAnonymous,

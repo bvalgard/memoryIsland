@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ChevronUp, Check, MessageSquare, Send, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronUp, Check, MessageSquare, Send, Loader2, ChevronDown } from 'lucide-react';
 import { type Question, type Answer } from '../hooks/useQuestions';
 
 interface QuestionDetailProps {
@@ -33,6 +33,7 @@ export default function QuestionDetail({
   const [answerText, setAnswerText] = useState('');
   const [postingAnswer, setPostingAnswer] = useState(false);
   const [answerPosted, setAnswerPosted] = useState(false);
+  const [showFullCard, setShowFullCard] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [postingComment, setPostingComment] = useState<Record<string, boolean>>({});
@@ -137,15 +138,58 @@ export default function QuestionDetail({
       </div>
 
       {/* Card context */}
-      <div className="shrink-0 mb-4 p-4 rounded-2xl bg-white/5 border border-white/8">
-        <p className="text-sm font-semibold text-white leading-snug mb-2">{question.frontText}</p>
-        {question.backText && (
+      <button
+        onClick={() => setShowFullCard(v => !v)}
+        className="shrink-0 mb-4 p-4 rounded-2xl bg-white/5 border border-white/8 hover:border-white/15 hover:bg-white/8 transition-all text-left w-full"
+      >
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <p className="text-sm font-semibold text-white leading-snug flex-1">{question.frontText}</p>
+          <div className="shrink-0 flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-white/30 mt-0.5">
+            {showFullCard ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+            <span>{showFullCard ? 'Hide' : 'View card'}</span>
+          </div>
+        </div>
+        {question.backText && !showFullCard && (
           <div className="pt-2 border-t border-white/8">
             <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 block mb-0.5">Answer</span>
             <p className="text-xs text-white/60 leading-snug">{question.backText}</p>
           </div>
         )}
-      </div>
+        {showFullCard && (
+          <div className="pt-2 border-t border-white/8 space-y-2">
+            {/* All options for MCQ/multi-select */}
+            {question.options && question.options.length > 0 ? (
+              <div>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 block mb-1.5">All Choices</span>
+                <div className="space-y-1.5">
+                  {question.options.map((opt, i) => {
+                    const isCorrect = opt === question.backText;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs leading-snug ${
+                          isCorrect
+                            ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-300'
+                            : 'bg-white/4 border border-white/6 text-white/50'
+                        }`}
+                      >
+                        {isCorrect && <Check className="w-3 h-3 shrink-0 text-emerald-400" />}
+                        {!isCorrect && <span className="w-3 h-3 shrink-0" />}
+                        {opt}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : question.backText ? (
+              <div>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 block mb-0.5">Answer</span>
+                <p className="text-xs text-emerald-300 leading-snug">{question.backText}</p>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </button>
 
       {/* AI hint — shown when no crew answers yet and hint exists */}
       {question.aiHint && question.answerCount === 0 && (
