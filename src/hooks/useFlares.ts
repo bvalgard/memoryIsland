@@ -32,6 +32,7 @@ export interface Flare {
   islandId: string;
   frontText: string;
   backText: string;
+  cardType?: string;
   askerId: string;
   askerName: string;
   status: 'active' | 'resolved';
@@ -73,6 +74,7 @@ export function useFlares() {
       islandId,
       frontText: card.front,
       backText: card.back ?? '',
+      cardType: card.type ?? 'flashcard',
       askerId: user.uid,
       askerName: askerName || user.displayName || 'Explorer',
       status: 'active',

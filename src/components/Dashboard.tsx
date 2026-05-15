@@ -19,6 +19,7 @@ import ShareModal from './ShareModal';
 import { useSocial } from '../hooks/useSocial';
 import ConfirmDialog from './ConfirmDialog';
 import DistressSignalsFeed from './DistressSignalsFeed';
+import { useFlares } from '../hooks/useFlares';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -62,6 +63,7 @@ export default function Dashboard() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | null>(null);
+  const [distressInitialTab, setDistressInitialTab] = useState<'all' | 'mine'>('all');
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const appLoadCheckDone = useRef(false);
@@ -121,6 +123,12 @@ export default function Dashboard() {
       localStorage.removeItem('selectedArchipelagoId');
     }
   }, [selectedArchipelagoId]);
+
+  // Flares — fetch my flares once on mount for bell notifications
+  const { fetchMyFlares, myFlares } = useFlares();
+  useEffect(() => {
+    if (user?.uid) fetchMyFlares(user.uid);
+  }, [user?.uid]);
 
   // Discovery State
   const { searchUsers, sendFriendRequest, acceptFriendRequest, removeFriend, friends, sentRequests, friendRequests, error: socialError, fetchProfilesByUids, profiles: socialProfiles, loading: socialLoading, loadLeaderboard } = useSocial();
@@ -410,10 +418,22 @@ export default function Dashboard() {
     timestamp: arch.publishedAt?.toMillis ? arch.publishedAt.toMillis() : (arch.createdAt || Date.now())
   }));
 
+  const flareResponseNotifications = myFlares
+    .filter(f => f.status === 'active' && f.lifePreservers.length > 0)
+    .map(f => ({
+      id: `flare_response_${f.id}_${f.lifePreservers.length}`,
+      islandId: 'distress',
+      title: 'Flare Response',
+      message: `You got ${f.lifePreservers.length} hint${f.lifePreservers.length > 1 ? 's' : ''} for: "${f.frontText}"`,
+      type: 'info' as const,
+      timestamp: f.createdAt?.seconds ? f.createdAt.seconds * 1000 : Date.now(),
+    }));
+
   const notifications = [
     ...friendRequestNotifications,
     ...islandShareNotifications,
-    ...archipelagoShareNotifications
+    ...archipelagoShareNotifications,
+    ...flareResponseNotifications,
   ].sort((a, b) => b.timestamp - a.timestamp);
   const unreadCount = notifications.filter(n => !seenNotificationIds.has(n.id)).length;
   const unreadSocialCount = friendRequests.filter(uid => !seenSocialIds.has(uid)).length;
@@ -423,7 +443,10 @@ export default function Dashboard() {
   ].filter(id => !seenDiscoverIds.has(id)).length;
 
   const handleNotificationClick = (islandId: string) => {
-    if (islandId === 'social') {
+    if (islandId === 'distress') {
+      setDistressInitialTab('mine');
+      setActiveModal('distress');
+    } else if (islandId === 'social') {
       setActiveModal('users');
       setDiscoveryTab('islands');
     } else if (islandId.startsWith('share_island:')) {
@@ -1268,6 +1291,7 @@ export default function Dashboard() {
                 currentUserId={user?.uid || ''}
                 ownedIslandIds={progress?.islands.map(i => i.id).filter(Boolean) as string[] || []}
                 friends={friends}
+                initialTab={distressInitialTab}
               />
             </motion.div>
           </div>
@@ -1691,7 +1715,7 @@ export default function Dashboard() {
             </div>
           </button>
           <button
-            onClick={() => setActiveModal('distress')}
+            onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
             className="relative group text-orange-400/50 hover:text-orange-400 transition-all flex items-center justify-center"
           >
             <Radio className="w-6 h-6" />
@@ -2191,7 +2215,7 @@ export default function Dashboard() {
 
         {/* Distress Signals */}
         <button
-          onClick={() => setActiveModal('distress')}
+          onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
           className={cn("p-2 transition-all relative", activeModal === 'distress' ? "text-orange-400 scale-110" : "text-orange-400/40")}
         >
           <Radio className="w-6 h-6" />

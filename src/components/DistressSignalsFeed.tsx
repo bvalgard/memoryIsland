@@ -8,19 +8,21 @@ interface DistressSignalsFeedProps {
   currentUserId: string;
   ownedIslandIds: string[];
   friends: string[];
+  initialTab?: 'all' | 'mine';
 }
 
 type FeedTab = 'all' | 'friends' | 'my-islands' | 'mine';
 
-export default function DistressSignalsFeed({ onClose, currentUserId, ownedIslandIds, friends }: DistressSignalsFeedProps) {
+export default function DistressSignalsFeed({ onClose, currentUserId, ownedIslandIds, friends, initialTab = 'all' }: DistressSignalsFeedProps) {
   const {
     distressFlares, myFlares,
     loading, myFlaresLoading,
     throwLifePreserver, fetchDistressFeed, fetchMyFlares,
+    resolveFlare,
     updateFlareVisibility, deleteFlare,
   } = useFlares();
 
-  const [activeTab, setActiveTab] = useState<FeedTab>('all');
+  const [activeTab, setActiveTab] = useState<FeedTab>(initialTab);
   const [hintInputs, setHintInputs] = useState<Record<string, string>>({});
   const [sending, setSending] = useState<Record<string, boolean>>({});
   const [sent, setSent] = useState<Record<string, boolean>>({});
@@ -63,6 +65,13 @@ export default function DistressSignalsFeed({ onClose, currentUserId, ownedIslan
     setWorking(prev => ({ ...prev, [flareId]: true }));
     await deleteFlare(flareId);
     // working state cleans itself up since the item is removed from the list
+  };
+
+  const handleUpvote = async (flare: Flare, preserverIndex: number) => {
+    setWorking(prev => ({ ...prev, [flare.id]: true }));
+    await resolveFlare(flare, preserverIndex);
+    await fetchMyFlares(currentUserId);
+    setWorking(prev => ({ ...prev, [flare.id]: false }));
   };
 
   const isCurrentLoading = activeTab === 'mine' ? myFlaresLoading : loading;
@@ -153,6 +162,7 @@ export default function DistressSignalsFeed({ onClose, currentUserId, ownedIslan
                   working={!!working[flare.id]}
                   onSwitchVisibility={() => handleVisibilitySwitch(flare)}
                   onDelete={() => handleDelete(flare.id)}
+                  onUpvote={(preserverIndex) => handleUpvote(flare, preserverIndex)}
                 />
               ))}
             </AnimatePresence>
@@ -197,6 +207,15 @@ export default function DistressSignalsFeed({ onClose, currentUserId, ownedIslan
                     </div>
                     <Radio className="w-3.5 h-3.5 text-orange-400/50 shrink-0 mt-0.5" />
                   </div>
+
+                  {flare.backText && (
+                    <div className="mb-3 px-3 py-2 rounded-xl bg-white/5 border border-white/8">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 block mb-0.5">
+                        {flare.cardType === 'flashcard' ? 'Answer' : 'Correct Answer'}
+                      </span>
+                      <p className="text-xs text-white/70 leading-snug">{flare.backText}</p>
+                    </div>
+                  )}
 
                   {flare.lifePreservers.length > 0 && (
                     <div className="flex flex-col gap-1.5 mb-3">
@@ -243,16 +262,16 @@ export default function DistressSignalsFeed({ onClose, currentUserId, ownedIslan
   );
 }
 
-function MyFlareCard({ flare, idx, working, onSwitchVisibility, onDelete }: {
+function MyFlareCard({ flare, idx, working, onSwitchVisibility, onDelete, onUpvote }: {
   flare: Flare;
   idx: number;
   working: boolean;
   onSwitchVisibility: () => void | Promise<void>;
   onDelete: () => void | Promise<void>;
+  onUpvote: (preserverIndex: number) => void | Promise<void>;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const helpfulHint = flare.lifePreservers.find(lp => lp.isHelpful);
-  const pendingHints = flare.lifePreservers.filter(lp => !lp.isHelpful);
   const isGlobal = flare.visibility === 'global';
 
   return (
@@ -299,17 +318,29 @@ function MyFlareCard({ flare, idx, working, onSwitchVisibility, onDelete }: {
       )}
 
       {/* Active: pending hints */}
-      {flare.status === 'active' && pendingHints.length > 0 && (
+      {flare.status === 'active' && flare.lifePreservers.some(lp => !lp.isHelpful) && (
         <div className="flex flex-col gap-1.5 mb-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-1">
-            {pendingHints.length} hint{pendingHints.length > 1 ? 's' : ''} received — study this card again to mark one as helpful
+            {flare.lifePreservers.filter(lp => !lp.isHelpful).length} hint{flare.lifePreservers.filter(lp => !lp.isHelpful).length > 1 ? 's' : ''} received
           </p>
-          {pendingHints.map((lp, i) => (
-            <div key={i} className="flex items-start gap-2 text-xs text-white/50 bg-white/5 rounded-xl px-3 py-2">
-              <span className="font-semibold text-white/70 shrink-0">{lp.helperName}:</span>
-              <span className="flex-1">{lp.hintText}</span>
-            </div>
-          ))}
+          {flare.lifePreservers.map((lp, originalIndex) => {
+            if (lp.isHelpful) return null;
+            return (
+              <div key={originalIndex} className="flex items-start gap-2 text-xs bg-white/5 rounded-xl px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-white/70 block text-[10px] uppercase tracking-widest mb-0.5">{lp.helperName}</span>
+                  <span className="text-white/60">{lp.hintText}</span>
+                </div>
+                <button
+                  onClick={() => onUpvote(originalIndex)}
+                  disabled={working}
+                  className="shrink-0 mt-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-400/60 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 px-2 py-1 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  This Saved Me!
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
