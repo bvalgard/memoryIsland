@@ -168,6 +168,14 @@ export default function StudySession({ island, mode = 'all', settings, friends =
     };
   }, []);
 
+  // Tracks the pending nav timer so it can be cancelled on unmount
+  const pendingNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (pendingNavTimerRef.current !== null) clearTimeout(pendingNavTimerRef.current);
+    };
+  }, []);
+
   // Helper for responsive nav buttons
   const NavAction = ({ icon: Icon, label, onClick, variant = 'muted' }: { icon: any, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) => (
     <div className="relative group">
@@ -364,7 +372,7 @@ export default function StudySession({ island, mode = 'all', settings, friends =
     setCardQuestion(null);
     setCardAnswers([]);
     setSelectingAnswerForCard(false);
-    if (cardQuestion) unsubscribeAnswers(cardQuestion.id);
+    if (cardQuestionRef.current) unsubscribeAnswers(cardQuestionRef.current.id);
   }, [currentIndex, currentCard]);
 
   useEffect(() => {
@@ -486,7 +494,7 @@ export default function StudySession({ island, mode = 'all', settings, friends =
       if (window.navigator?.vibrate && newStatus === 'mastered') window.navigator.vibrate(50);
       triggerSparkle(e as any);
       setDirection(1);
-      setTimeout(() => nextCard(), 1500); // 1.5s delay to see correct answer
+      pendingNavTimerRef.current = setTimeout(() => nextCard(), 1500); // 1.5s delay to see correct answer
     } else {
       // Incorrect progression
       setIsFlipped(true);
@@ -859,11 +867,16 @@ export default function StudySession({ island, mode = 'all', settings, friends =
 
   const handleAskQuestion = async (visibility: 'friends' | 'global', isAnonymous = false) => {
     if (!currentCard) return;
-    setIsAskingQuestion(true);
-    await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName, isAnonymous);
-    setQuestionJustAsked(true);
-    setAskModalOpen(false);
-    setIsAskingQuestion(false);
+    try {
+      setIsAskingQuestion(true);
+      await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName, isAnonymous);
+      setQuestionJustAsked(true);
+      setAskModalOpen(false);
+    } catch (err) {
+      console.error('Failed to post question:', err);
+    } finally {
+      setIsAskingQuestion(false);
+    }
   };
 
   const renderAcceptPrompt = () => {
@@ -905,9 +918,10 @@ export default function StudySession({ island, mode = 'all', settings, friends =
 
   const handleAcceptAnswer = async (answer: Answer) => {
     if (!cardQuestion || cardQuestion.status === 'answered') return;
-    // Optimistically mark answered before the write to prevent double-tap
-    setCardQuestion(prev => prev ? { ...prev, status: 'answered', acceptedAnswerId: answer.id } : null);
-    await acceptAnswer(cardQuestion, answer.id, answer.helperId);
+    // Build updated object first so both the optimistic state and the Firestore write use the same value
+    const updatedQuestion = { ...cardQuestion, status: 'answered' as const, acceptedAnswerId: answer.id };
+    setCardQuestion(updatedQuestion);
+    await acceptAnswer(updatedQuestion, answer.id, answer.helperId);
     // Re-queue card so learner gets a second attempt with new context
     if (currentCard) {
       setShuffledCards(prev => [

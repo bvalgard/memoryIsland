@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FC } from 'react';
 import { motion } from 'motion/react';
 import { Trophy, Users, UserPlus, UserCheck, X, Check, Clock } from 'lucide-react';
 import { UserProfile } from '../hooks/useSocial';
@@ -202,16 +202,7 @@ export default function SocialLeaderboard({
   );
 }
 
-function ProfileCard({
-  profile,
-  rank,
-  isSelf,
-  relationship,
-  isPending,
-  onAdd,
-  onRemove,
-  onAccept
-}: {
+const ProfileCard: FC<{
   profile: UserProfile;
   rank?: number;
   isSelf: boolean;
@@ -220,7 +211,16 @@ function ProfileCard({
   onAdd: () => void;
   onRemove: () => void;
   onAccept: () => void;
-}) {
+}> = ({
+  profile,
+  rank,
+  isSelf,
+  relationship,
+  isPending,
+  onAdd,
+  onRemove,
+  onAccept
+}) => {
   return (
     <div className={cn(
       "p-4 rounded-2xl flex items-center justify-between border transition-all",

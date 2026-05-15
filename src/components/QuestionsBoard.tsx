@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FC } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Radio, X, Globe, Users, Anchor, RefreshCw, Flag, ChevronUp, ChevronDown, Trash2, Check, MessageCircleQuestion, MessageSquare } from 'lucide-react';
 import { useQuestions, type Question } from '../hooks/useQuestions';
@@ -290,14 +290,14 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
   );
 }
 
-function MyQuestionCard({ question, idx, working, onOpen, onSwitchVisibility, onDelete }: {
+const MyQuestionCard: FC<{
   question: Question;
   idx: number;
   working: boolean;
   onOpen: () => void;
   onSwitchVisibility: () => void | Promise<void>;
   onDelete: () => void | Promise<void>;
-}) {
+}> = ({ question, idx, working, onOpen, onSwitchVisibility, onDelete }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isGlobal = question.visibility === 'global';
 

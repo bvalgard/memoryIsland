@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogIn, AlertCircle, Mail, ArrowLeft, Key, UserPlus } from 'lucide-react';
 import { auth, googleProvider, isConfigPlaceholder } from '../firebase';
@@ -30,7 +30,7 @@ export default function Auth() {
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: FormEvent) => {
     e.preventDefault();
     if (isConfigPlaceholder) return;
     

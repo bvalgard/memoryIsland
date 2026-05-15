@@ -1,3 +1,4 @@
+import { FC } from 'react';
 import { motion } from 'motion/react';
 import { X, Award, Lock, Check } from 'lucide-react';
 import { ACHIEVEMENTS, Achievement, AchievementCategory } from '../achievements';
@@ -27,7 +28,7 @@ interface BadgeCardProps {
   unlockedAt?: number;
 }
 
-function BadgeCard({ achievement, isUnlocked, unlockedAt }: BadgeCardProps) {
+const BadgeCard: FC<BadgeCardProps> = ({ achievement, isUnlocked, unlockedAt }) => {
   const isHidden = achievement.hidden && !isUnlocked;
 
   return (

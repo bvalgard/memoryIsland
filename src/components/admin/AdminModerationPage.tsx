@@ -72,6 +72,10 @@ export default function AdminModerationPage() {
   }, []);
 
   const moderateIsland = async (islandId: string, status: 'approved' | 'rejected') => {
+    if (!auth.currentUser) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
     setProcessingId(islandId);
 
     try {
@@ -79,7 +83,7 @@ export default function AdminModerationPage() {
         approvalStatus: status,
         isPublic: status === 'approved',
         moderatedAt: Timestamp.now(),
-        moderatedBy: auth.currentUser?.uid || null,
+        moderatedBy: auth.currentUser.uid,
       });
 
       setIslands((prev) => prev.filter((island) => island.id !== islandId));

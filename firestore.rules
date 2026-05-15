@@ -147,13 +147,17 @@ service cloud.firestore {
     // 2. Published Islands Discovery
     match /published_islands/{islandId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow create: if isSignedIn() && isValidPublicIsland(request.resource.data);
+      allow update: if isSignedIn() && resource.data.authorId == request.auth.uid && isValidPublicIsland(request.resource.data);
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
     }
 
     // 3. Published Archipelagos Discovery
     match /published_archipelagos/{archipelagoId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow create: if isSignedIn() && isValidPublishedArchipelago(request.resource.data);
+      allow update: if isSignedIn() && resource.data.authorId == request.auth.uid && isValidPublishedArchipelago(request.resource.data);
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
     }
 
     // 4. Community Q&A — persistent peer learning questions and answers
@@ -200,9 +204,11 @@ service cloud.firestore {
           // Author can edit their answer body
           resource.data.helperId == request.auth.uid
           ||
-          // Anyone can vote (upvoterIds map + voteCount)
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['upvoterIds', 'voteCount', 'updatedAt'])
+          // Anyone can vote (upvoterIds map + voteCount); delta must be exactly ±1
+          (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['upvoterIds', 'voteCount', 'updatedAt']) &&
+           (request.resource.data.voteCount == resource.data.voteCount + 1 ||
+            request.resource.data.voteCount == resource.data.voteCount - 1))
           ||
           // Asker can accept (isAccepted + updatedAt)
           (
@@ -229,7 +235,10 @@ service cloud.firestore {
     // 5. User reputation — cross-user increment for vote/accept rewards
     match /user_reputation/{userId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      // Any signed-in user may update reputation (required for cross-user vote/accept rewards).
+      // Writes are constrained to the three tracked counters only.
+      allow write: if isSignedIn() &&
+        request.resource.data.keys().hasOnly(['totalVotesReceived', 'totalAnswers', 'totalAccepted']);
     }
   }
 }

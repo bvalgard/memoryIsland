@@ -52,6 +52,11 @@ export default function AdminSystemPage() {
       return;
     }
 
+    if (!auth.currentUser) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
+
     setSaving(true);
     setStatus(null);
     setError(null);
@@ -60,8 +65,8 @@ export default function AdminSystemPage() {
       await addDoc(collection(db, 'globalAnnouncements'), {
         message: trimmed,
         createdAt: serverTimestamp(),
-        createdBy: auth.currentUser?.uid || null,
-        createdByEmail: auth.currentUser?.email || null,
+        createdBy: auth.currentUser.uid,
+        createdByEmail: auth.currentUser.email,
         isActive: true,
       });
 

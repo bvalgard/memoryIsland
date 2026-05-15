@@ -10,7 +10,7 @@ interface QuestionDetailProps {
   answersLoading: boolean;
   comments: Record<string, import('../hooks/useQuestions').Comment[]>;
   onBack: () => void;
-  onVote: (questionId: string, answerId: string, currentUpvoterIds: Record<string, true>) => Promise<void>;
+  onVote: (questionId: string, answerId: string, currentUpvoterIds: Record<string, true>, helperId?: string) => Promise<void>;
   onAccept: (question: Question, answerId: string, helperId: string) => Promise<void>;
   onPostAnswer: (questionId: string, bodyText: string) => Promise<string | null>;
   onPostComment: (questionId: string, answerId: string, bodyText: string) => Promise<void>;
@@ -56,7 +56,7 @@ export default function QuestionDetail({
   const handleVote = async (answer: Answer) => {
     if (voting[answer.id]) return;
     setVoting(prev => ({ ...prev, [answer.id]: true }));
-    await onVote(question.id, answer.id, answer.upvoterIds);
+    await onVote(question.id, answer.id, answer.upvoterIds, answer.helperId);
     setVoting(prev => ({ ...prev, [answer.id]: false }));
   };
 

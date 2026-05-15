@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageCircleQuestion, Users, Globe, X } from 'lucide-react';
+import { MessageCircleQuestion, Users, Globe, X, Flame } from 'lucide-react';
 
 interface AskQuestionModalProps {
   isOpen: boolean;
@@ -12,10 +12,14 @@ interface AskQuestionModalProps {
 
 export default function AskQuestionModal({ isOpen, friendCount, isSending, onClose, onSend }: AskQuestionModalProps) {
   const [anonymous, setAnonymous] = useState(false);
+  const [visibility, setVisibility] = useState<'friends' | 'global'>('global');
 
-  // Reset anonymous toggle when modal opens so each flare starts fresh
+  // Reset state when modal opens
   useEffect(() => {
-    if (isOpen) setAnonymous(false);
+    if (isOpen) {
+      setAnonymous(false);
+      setVisibility('global');
+    }
   }, [isOpen]);
 
   return (
@@ -70,15 +74,22 @@ export default function AskQuestionModal({ isOpen, friendCount, isSending, onClo
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
+            {/* Audience selector */}
+            <div className="flex flex-col gap-3 mb-4">
               <button
-                disabled={isSending}
-                onClick={() => onSend('friends', anonymous)}
-                className="flex items-center gap-4 p-4 rounded-2xl border border-white/10
-                           bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all
-                           text-left disabled:opacity-50 disabled:cursor-not-allowed group"
+                type="button"
+                onClick={() => setVisibility('friends')}
+                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group ${
+                  visibility === 'friends'
+                    ? 'border-blue-500/50 bg-blue-500/12'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
+                }`}
               >
-                <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center shrink-0 group-hover:bg-blue-500/20 transition-colors">
+                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                  visibility === 'friends'
+                    ? 'bg-blue-500/25 border-blue-500/40'
+                    : 'bg-blue-500/15 border-blue-500/25 group-hover:bg-blue-500/20'
+                }`}>
                   <Users className="w-4 h-4 text-blue-400" />
                 </div>
                 <div>
@@ -90,13 +101,19 @@ export default function AskQuestionModal({ isOpen, friendCount, isSending, onClo
               </button>
 
               <button
-                disabled={isSending}
-                onClick={() => onSend('global', anonymous)}
-                className="flex items-center gap-4 p-4 rounded-2xl border border-orange-500/20
-                           bg-orange-500/8 hover:bg-orange-500/15 hover:border-orange-500/35 transition-all
-                           text-left disabled:opacity-50 disabled:cursor-not-allowed group"
+                type="button"
+                onClick={() => setVisibility('global')}
+                className={`flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group ${
+                  visibility === 'global'
+                    ? 'border-orange-500/50 bg-orange-500/12'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
+                }`}
               >
-                <div className="w-9 h-9 rounded-xl bg-orange-500/15 border border-orange-500/25 flex items-center justify-center shrink-0 group-hover:bg-orange-500/25 transition-colors">
+                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                  visibility === 'global'
+                    ? 'bg-orange-500/25 border-orange-500/40'
+                    : 'bg-orange-500/15 border-orange-500/25 group-hover:bg-orange-500/25'
+                }`}>
                   <Globe className="w-4 h-4 text-orange-400" />
                 </div>
                 <div>
@@ -106,9 +123,18 @@ export default function AskQuestionModal({ isOpen, friendCount, isSending, onClo
               </button>
             </div>
 
-            {isSending && (
-              <p className="text-center text-[11px] text-white/40 mt-4">Posting question…</p>
-            )}
+            {/* Submit button */}
+            <button
+              disabled={isSending}
+              onClick={() => onSend(visibility, anonymous)}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl
+                         bg-orange-500 hover:bg-orange-400 active:bg-orange-600
+                         text-white font-semibold text-sm transition-colors
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Flame className="w-4 h-4" />
+              {isSending ? 'Sending Flare…' : 'Fire Flare'}
+            </button>
           </motion.div>
         </motion.div>
       )}

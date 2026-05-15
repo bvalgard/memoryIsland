@@ -219,7 +219,7 @@ export default function Dashboard() {
     if (activeModal === 'users') {
       loadFriends();
     }
-  }, [activeModal, friends]);
+  }, [activeModal, friends, fetchProfilesByUids]);
 
   useEffect(() => {
     if (activeModal === 'users') {

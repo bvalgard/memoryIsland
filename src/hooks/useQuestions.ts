@@ -173,14 +173,14 @@ export function useQuestions() {
   const voteAnswer = async (
     questionId: string,
     answerId: string,
-    currentUpvoterIds: Record<string, true>
+    currentUpvoterIds: Record<string, true>,
+    helperId?: string
   ): Promise<void> => {
     const user = auth.currentUser;
     if (!user) return;
 
     const answerRef = doc(db, 'questions', questionId, 'answers', answerId);
     const hasVoted = user.uid in currentUpvoterIds;
-    const helperId = answers[questionId]?.find(a => a.id === answerId)?.helperId;
 
     const batch = writeBatch(db);
     if (hasVoted) {
