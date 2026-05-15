@@ -1,4 +1,5 @@
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { ACHIEVEMENT_MAP, Achievement, SessionMeta } from '../achievements';
 import { UserProgress, CardUpdateRecord, saveUnlockedAchievements } from './useUserProgress';
 
@@ -117,6 +118,18 @@ export function useAchievements() {
       const rescues = ctx.totalRescues ?? 0;
       if (rescues >= 1) tryUnlock('life-saver');
       if (rescues >= 10) tryUnlock('coast-guard');
+    }
+
+    // On app load, check helper achievements via reputation doc (retroactive unlock)
+    if (ctx.trigger === 'app-load') {
+      try {
+        const repSnap = await getDoc(doc(db, 'user_reputation', user.uid));
+        if (repSnap.exists()) {
+          const accepted = repSnap.data().totalAccepted ?? 0;
+          if (accepted >= 1) tryUnlock('life-saver');
+          if (accepted >= 10) tryUnlock('coast-guard');
+        }
+      } catch { /* silent — non-critical */ }
     }
 
     // Persist newly unlocked to Firestore

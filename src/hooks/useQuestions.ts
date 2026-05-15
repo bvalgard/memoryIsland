@@ -5,6 +5,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   doc,
   query,
   where,
@@ -29,11 +30,14 @@ export interface Question {
   cardType: string;
   askerId: string;
   askerName: string;
-  status: 'open' | 'answered';
+  status: 'open' | 'answered' | 'expired';
   acceptedAnswerId: string | null;
   answerCount: number;
   visibility: 'friends' | 'global';
   visibleTo: string[];
+  isAnonymous?: boolean;
+  aiHint?: string;
+  aiHintGeneratedAt?: number;
   createdAt: Timestamp;
   lastActivityAt: Timestamp;
 }
@@ -60,6 +64,8 @@ export interface Comment {
   createdAt: Timestamp;
 }
 
+const QUESTION_STALE_DAYS = 14;
+
 export function useQuestions() {
   const [feedQuestions, setFeedQuestions] = useState<Question[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
@@ -77,7 +83,8 @@ export function useQuestions() {
     islandId: string,
     visibility: 'friends' | 'global',
     friendUids: string[],
-    askerName: string
+    askerName: string,
+    isAnonymous = false
   ): Promise<string | null> => {
     const user = auth.currentUser;
     if (!user || !card.id) return null;
@@ -101,7 +108,8 @@ export function useQuestions() {
       backText: card.back ?? '',
       cardType: card.type ?? 'flashcard',
       askerId: user.uid,
-      askerName: askerName || user.displayName || 'Explorer',
+      askerName: isAnonymous ? 'Anonymous Explorer' : (askerName || user.displayName || 'Explorer'),
+      isAnonymous,
       status: 'open',
       acceptedAnswerId: null,
       answerCount: 0,
@@ -265,6 +273,22 @@ export function useQuestions() {
     }
   };
 
+  const expireStaleQuestions = async (questions: Question[]): Promise<Set<string>> => {
+    const cutoff = Date.now() - QUESTION_STALE_DAYS * 24 * 60 * 60 * 1000;
+    const stale = questions.filter(
+      q => q.status === 'open' &&
+        (q.lastActivityAt?.seconds ?? 0) * 1000 < cutoff
+    );
+    if (stale.length === 0) return new Set();
+
+    const batch = writeBatch(db);
+    stale.forEach(q => {
+      batch.update(doc(db, 'questions', q.id), { status: 'expired' });
+    });
+    await batch.commit().catch(err => console.warn('[expiry] batch failed:', err));
+    return new Set(stale.map(q => q.id));
+  };
+
   const fetchMyQuestions = async (userId: string): Promise<void> => {
     if (!userId) return;
     setMyQuestionsLoading(true);
@@ -279,7 +303,12 @@ export function useQuestions() {
       const sorted = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Question))
         .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-      setMyQuestions(sorted);
+
+      // Auto-expire stale open questions (asker is the current user, so security rules allow it)
+      const expiredIds = await expireStaleQuestions(sorted.filter(q => q.status === 'open'));
+      setMyQuestions(sorted.map(q =>
+        expiredIds.has(q.id) ? { ...q, status: 'expired' as const } : q
+      ));
     } catch (err) {
       console.warn('[useQuestions] fetchMyQuestions error:', err);
     } finally {
@@ -287,12 +316,36 @@ export function useQuestions() {
     }
   };
 
+  const closeQuestionForCard = async (cardId: string): Promise<void> => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'questions'),
+        where('cardId', '==', cardId),
+        where('askerId', '==', userId),
+        where('status', '==', 'open'),
+        limit(1)
+      ));
+      if (snap.empty) return;
+      const qId = snap.docs[0].id;
+      await updateDoc(doc(db, 'questions', qId), { status: 'expired' });
+      setMyQuestions(prev =>
+        prev.map(q => q.id === qId ? { ...q, status: 'expired' as const } : q)
+      );
+    } catch (err) {
+      console.warn('[closeQuestionForCard] failed:', err);
+    }
+  };
+
   const fetchCardQuestion = async (cardId: string): Promise<Question | null> => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return null;
     const snap = await getDocs(
       query(
         collection(db, 'questions'),
         where('cardId', '==', cardId),
-        where('status', '==', 'open'),
+        where('askerId', '==', userId),
         limit(1)
       )
     );
@@ -310,13 +363,17 @@ export function useQuestions() {
 
     const q = query(
       collection(db, 'questions', questionId, 'answers'),
-      orderBy('isAccepted', 'desc'),
-      orderBy('voteCount', 'desc'),
       orderBy('createdAt', 'asc')
     );
 
     const unsub = onSnapshot(q, snap => {
-      const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() } as Answer));
+      const raw = snap.docs.map(d => ({ id: d.id, ...d.data() } as Answer));
+      // Sort client-side: accepted first, then by voteCount desc, then createdAt asc
+      const sorted = [...raw].sort((a, b) => {
+        if (a.isAccepted !== b.isAccepted) return a.isAccepted ? -1 : 1;
+        if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
+        return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
+      });
       setAnswers(prev => ({ ...prev, [questionId]: sorted }));
       setAnswersLoading(prev => ({ ...prev, [questionId]: false }));
     }, err => {
@@ -366,6 +423,60 @@ export function useQuestions() {
     setMyQuestions(prev => prev.filter(q => q.id !== questionId));
   };
 
+  const fetchMyReputation = async (): Promise<{
+    totalAnswers: number;
+    totalAccepted: number;
+    totalVotesReceived: number;
+  } | null> => {
+    const user = auth.currentUser;
+    if (!user) return null;
+    try {
+      const snap = await getDoc(doc(db, 'user_reputation', user.uid));
+      if (!snap.exists()) return null;
+      const d = snap.data();
+      return {
+        totalAnswers: d.totalAnswers ?? 0,
+        totalAccepted: d.totalAccepted ?? 0,
+        totalVotesReceived: d.totalVotesReceived ?? 0,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const generateAIHintIfNeeded = async (question: Question): Promise<void> => {
+    const now = Date.now();
+    const ageMs = now - (question.createdAt?.seconds ?? 0) * 1000;
+    if (question.answerCount > 0) return;
+    if (ageMs < 24 * 60 * 60 * 1000) return;
+    if (question.aiHint) return;
+
+    const apiKey = (process.env as Record<string, string>).GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `You are a memory coach. Write a short, vivid memory hook (1-2 sentences) to help someone remember:\n\nConcept: ${question.frontText}\nAnswer: ${question.backText}\n\nRespond with only the memory hook.`;
+      const result = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: prompt,
+      });
+      const hint = result.text?.trim();
+      if (!hint) return;
+
+      await updateDoc(doc(db, 'questions', question.id), {
+        aiHint: hint,
+        aiHintGeneratedAt: now,
+      });
+      setFeedQuestions(prev =>
+        prev.map(q => q.id === question.id ? { ...q, aiHint: hint, aiHintGeneratedAt: now } : q)
+      );
+    } catch (err) {
+      console.warn('[AI hint] generation failed:', err);
+    }
+  };
+
   return {
     feedQuestions,
     feedLoading,
@@ -387,5 +498,8 @@ export function useQuestions() {
     loadComments,
     updateVisibility,
     deleteQuestion,
+    closeQuestionForCard,
+    fetchMyReputation,
+    generateAIHintIfNeeded,
   };
 }

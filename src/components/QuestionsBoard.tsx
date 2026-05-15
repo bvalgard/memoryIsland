@@ -10,11 +10,12 @@ interface QuestionsBoardProps {
   ownedIslandIds: string[];
   friends: string[];
   initialTab?: 'all' | 'mine';
+  initialQuestion?: Question;
 }
 
 type FeedTab = 'all' | 'friends' | 'my-islands' | 'mine';
 
-export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds, friends, initialTab = 'all' }: QuestionsBoardProps) {
+export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds, friends, initialTab = 'all', initialQuestion }: QuestionsBoardProps) {
   const {
     feedQuestions, myQuestions,
     feedLoading, myQuestionsLoading,
@@ -24,10 +25,11 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
     voteAnswer, acceptAnswer,
     postAnswer, postComment, loadComments,
     updateVisibility, deleteQuestion,
+    generateAIHintIfNeeded,
   } = useQuestions();
 
   const [activeTab, setActiveTab] = useState<FeedTab>(initialTab);
-  const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
+  const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(initialQuestion ?? null);
   const [working, setWorking] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -35,10 +37,10 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
   }, [currentUserId]);
 
   useEffect(() => {
-    if (activeTab === 'mine' && myQuestions.length === 0 && !myQuestionsLoading) {
+    if (activeTab === 'mine') {
       fetchMyQuestions(currentUserId);
     }
-  }, [activeTab]);
+  }, [activeTab, currentUserId]);
 
   // Load answers when a question is opened; unsubscribe on close
   useEffect(() => {
@@ -49,6 +51,15 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
       if (selectedQuestion) unsubscribeAnswers(selectedQuestion.id);
     };
   }, [selectedQuestion?.id]);
+
+  // Trigger AI hint for the first stale unanswered question in the feed (one per load cycle)
+  useEffect(() => {
+    const stale = feedQuestions.find(
+      q => q.status === 'open' && q.answerCount === 0 && !q.aiHint &&
+        Date.now() - (q.createdAt?.seconds ?? 0) * 1000 > 24 * 60 * 60 * 1000
+    );
+    if (stale) generateAIHintIfNeeded(stale);
+  }, [feedQuestions]);
 
   const filteredFeed = feedQuestions.filter(q => {
     if (activeTab === 'friends') return friends.includes(q.askerId);
@@ -263,6 +274,12 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
                       Click to view &amp; answer
                     </span>
                   </div>
+                  {q.aiHint && (
+                    <div className="mt-2 pt-2 border-t border-white/5 text-left pointer-events-none">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">AI Memory Hook</p>
+                      <p className="text-[11px] text-amber-100/50 leading-snug italic">{q.aiHint}</p>
+                    </div>
+                  )}
                 </motion.button>
               ))}
             </AnimatePresence>
@@ -293,6 +310,8 @@ function MyQuestionCard({ question, idx, working, onOpen, onSwitchVisibility, on
       className={`p-4 rounded-2xl border transition-colors ${
         question.status === 'answered'
           ? 'bg-emerald-500/5 border-emerald-500/20'
+          : question.status === 'expired'
+          ? 'bg-white/3 border-white/5 opacity-60'
           : 'bg-white/5 border-white/8'
       }`}
     >
@@ -300,6 +319,10 @@ function MyQuestionCard({ question, idx, working, onOpen, onSwitchVisibility, on
         {question.status === 'answered' ? (
           <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md">
             <Check className="w-2.5 h-2.5" /> Answered
+          </span>
+        ) : question.status === 'expired' ? (
+          <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded-md">
+            Closed
           </span>
         ) : (
           <span className="text-[9px] font-bold uppercase tracking-widest text-orange-400/80 bg-orange-400/10 px-2 py-0.5 rounded-md">

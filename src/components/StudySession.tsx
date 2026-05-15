@@ -99,9 +99,10 @@ interface StudySessionProps {
   onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onViewQuestion?: (question: Question) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, friends = [], islandId = '', currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, friends = [], islandId = '', currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -154,8 +155,18 @@ export default function StudySession({ island, mode = 'all', settings, friends =
   const [isAskingQuestion, setIsAskingQuestion] = useState(false);
   const [cardQuestion, setCardQuestion] = useState<Question | null>(null);
   const [cardAnswers, setCardAnswers] = useState<Answer[]>([]);
+  const [selectingAnswerForCard, setSelectingAnswerForCard] = useState(false);
 
   const { askQuestion, fetchCardQuestion, loadAnswers, unsubscribeAnswers, acceptAnswer, answers } = useQuestions();
+
+  // Tracks the active question across renders for unmount cleanup
+  const cardQuestionRef = useRef<Question | null>(null);
+  useEffect(() => { cardQuestionRef.current = cardQuestion; }, [cardQuestion]);
+  useEffect(() => {
+    return () => {
+      if (cardQuestionRef.current) unsubscribeAnswers(cardQuestionRef.current.id);
+    };
+  }, []);
 
   // Helper for responsive nav buttons
   const NavAction = ({ icon: Icon, label, onClick, variant = 'muted' }: { icon: any, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) => (
@@ -352,18 +363,22 @@ export default function StudySession({ island, mode = 'all', settings, friends =
     setQuestionJustAsked(false);
     setCardQuestion(null);
     setCardAnswers([]);
+    setSelectingAnswerForCard(false);
     if (cardQuestion) unsubscribeAnswers(cardQuestion.id);
   }, [currentIndex, currentCard]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!isFlipped || !currentCard?.id) {
       setCardAnswers([]);
       return;
     }
     fetchCardQuestion(currentCard.id).then(q => {
+      if (cancelled) return;
       setCardQuestion(q);
       if (q) loadAnswers(q.id);
     });
+    return () => { cancelled = true; };
   }, [isFlipped, currentCard?.id]);
 
   // Sync live answers from onSnapshot into local cardAnswers state
@@ -842,18 +857,65 @@ export default function StudySession({ island, mode = 'all', settings, friends =
     nextCard();
   };
 
-  const handleAskQuestion = async (visibility: 'friends' | 'global') => {
+  const handleAskQuestion = async (visibility: 'friends' | 'global', isAnonymous = false) => {
     if (!currentCard) return;
     setIsAskingQuestion(true);
-    await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName);
+    await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName, isAnonymous);
     setQuestionJustAsked(true);
     setAskModalOpen(false);
     setIsAskingQuestion(false);
   };
 
+  const renderAcceptPrompt = () => {
+    if (!cardQuestion || cardQuestion.status !== 'open' || cardAnswers.length === 0) return null;
+    if (selectingAnswerForCard) {
+      return (
+        <div className="mt-2 w-full" onClick={e => e.stopPropagation()}>
+          <p className="text-[9px] uppercase tracking-widest font-bold text-emerald-400 mb-1.5 text-center">Which answer helped?</p>
+          <div className="flex flex-col gap-1.5">
+            {cardAnswers.map(answer => (
+              <button
+                key={answer.id}
+                onClick={() => { handleAcceptAnswer(answer); setSelectingAnswerForCard(false); }}
+                className="w-full text-left p-2.5 rounded-xl bg-white/5 border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all"
+              >
+                <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-400/60 block mb-0.5">{answer.helperName}</span>
+                <p className="text-[11px] text-white/60 line-clamp-2">{answer.bodyText}</p>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setSelectingAnswerForCard(false)}
+            className="mt-1 w-full text-center text-[9px] text-white/25 uppercase tracking-widest py-1"
+          >
+            Cancel
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button
+        onClick={e => { e.stopPropagation(); setSelectingAnswerForCard(true); }}
+        className="mt-2 w-full text-[10px] uppercase tracking-widest font-bold text-emerald-400/60 hover:text-emerald-300 transition-colors text-center"
+      >
+        Did any of these help? →
+      </button>
+    );
+  };
+
   const handleAcceptAnswer = async (answer: Answer) => {
-    if (!cardQuestion) return;
+    if (!cardQuestion || cardQuestion.status === 'answered') return;
+    // Optimistically mark answered before the write to prevent double-tap
+    setCardQuestion(prev => prev ? { ...prev, status: 'answered', acceptedAnswerId: answer.id } : null);
     await acceptAnswer(cardQuestion, answer.id, answer.helperId);
+    // Re-queue card so learner gets a second attempt with new context
+    if (currentCard) {
+      setShuffledCards(prev => [
+        ...prev.slice(0, currentIndex + 1),
+        currentCard,
+        ...prev.slice(currentIndex + 1),
+      ]);
+    }
     setCardAnswers([]);
   };
 
@@ -1425,26 +1487,19 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                           >
                             <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
                             <p className="text-sm text-white/70">{answer.bodyText}</p>
-                            {!answer.isAccepted && cardQuestion && (
-                              <button
-                                onClick={() => handleAcceptAnswer(answer)}
-                                className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
-                              >
-                                This Saved Me!
-                              </button>
-                            )}
                           </motion.div>
                         ))}
+                        {renderAcceptPrompt()}
                       </div>
                     )}
                     {showAskButton && !questionJustAsked && (
                       <motion.button
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        onClick={(e) => { e.stopPropagation(); setAskModalOpen(true); }}
+                        onClick={(e) => { e.stopPropagation(); cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true); }}
                         className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                       >
-                        <Flame className="w-3.5 h-3.5" /> Ask the Community
+                        <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                       </motion.button>
                     )}
                     {questionJustAsked && (
@@ -1643,16 +1698,9 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                           >
                             <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
                             <p className="text-sm text-white/70">{answer.bodyText}</p>
-                            {!answer.isAccepted && cardQuestion && (
-                              <button
-                                onClick={() => handleAcceptAnswer(answer)}
-                                className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
-                              >
-                                This Saved Me!
-                              </button>
-                            )}
                           </motion.div>
                         ))}
+                        {renderAcceptPrompt()}
                       </div>
                     )}
                     {/* Ask the Community button — MCQ wrong answer */}
@@ -1660,10 +1708,10 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                       <motion.button
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        onClick={(e) => { e.stopPropagation(); setAskModalOpen(true); }}
+                        onClick={(e) => { e.stopPropagation(); cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true); }}
                         className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                       >
-                        <Flame className="w-3.5 h-3.5" /> Ask the Community
+                        <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                       </motion.button>
                     )}
                     {questionJustAsked && (
@@ -1748,26 +1796,19 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                             >
                               <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
                               <p className="text-sm text-white/70">{answer.bodyText}</p>
-                              {!answer.isAccepted && cardQuestion && (
-                                <button
-                                  onClick={() => handleAcceptAnswer(answer)}
-                                  className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
-                                >
-                                  This Saved Me!
-                                </button>
-                              )}
                             </motion.div>
                           ))}
+                          {renderAcceptPrompt()}
                         </div>
                       )}
                       {isFibCorrect === false && !questionJustAsked && (
                         <motion.button
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
-                          onClick={() => setAskModalOpen(true)}
+                          onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
                           className="w-full flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
                         >
-                          <Flame className="w-3.5 h-3.5" /> Ask the Community
+                          <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                         </motion.button>
                       )}
                       {isFibCorrect === false && questionJustAsked && (
@@ -1818,16 +1859,9 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                       >
                         <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
                         <p className="text-sm text-white/70">{answer.bodyText}</p>
-                        {!answer.isAccepted && cardQuestion && (
-                          <button
-                            onClick={() => handleAcceptAnswer(answer)}
-                            className="mt-2 text-[10px] uppercase tracking-widest font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
-                          >
-                            This Saved Me!
-                          </button>
-                        )}
                       </motion.div>
                     ))}
+                    {renderAcceptPrompt()}
                   </div>
                 )}
 
@@ -1853,16 +1887,16 @@ export default function StudySession({ island, mode = 'all', settings, friends =
                         <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
                       </button>
                     </div>
-                    {/* Ask the Community — flashcard back face */}
+                    {/* Ask the Community / View Community Thread — flashcard back face */}
                     {!questionJustAsked ? (
                       <motion.button
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.4 }}
-                        onClick={() => setAskModalOpen(true)}
+                        onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
                         className="w-full mt-3 flex items-center justify-center gap-2 text-orange-400/50 hover:text-orange-400 transition-colors text-[10px] font-bold uppercase tracking-widest py-2"
                       >
-                        <Flame className="w-3 h-3" /> Ask the Community
+                        <Flame className="w-3 h-3" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                       </motion.button>
                     ) : (
                       <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Question posted!</p>

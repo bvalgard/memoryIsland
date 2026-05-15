@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageCircleQuestion, Users, Globe, X } from 'lucide-react';
 
@@ -6,10 +7,17 @@ interface AskQuestionModalProps {
   friendCount: number;
   isSending: boolean;
   onClose: () => void;
-  onSend: (visibility: 'friends' | 'global') => Promise<void>;
+  onSend: (visibility: 'friends' | 'global', isAnonymous: boolean) => Promise<void>;
 }
 
 export default function AskQuestionModal({ isOpen, friendCount, isSending, onClose, onSend }: AskQuestionModalProps) {
+  const [anonymous, setAnonymous] = useState(false);
+
+  // Reset anonymous toggle when modal opens so each flare starts fresh
+  useEffect(() => {
+    if (isOpen) setAnonymous(false);
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -47,10 +55,25 @@ export default function AskQuestionModal({ isOpen, friendCount, isSending, onClo
               </div>
             </div>
 
+            {/* Anonymous toggle */}
+            <div className="flex items-center justify-between mb-4 p-3 rounded-2xl bg-white/5 border border-white/8">
+              <div>
+                <p className="text-xs font-semibold text-white">Post anonymously</p>
+                <p className="text-[11px] text-white/40">Your name shows as "Anonymous Explorer"</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnonymous(a => !a)}
+                className={`relative shrink-0 w-10 h-5 rounded-full transition-colors ${anonymous ? 'bg-orange-500' : 'bg-white/15'}`}
+              >
+                <span className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${anonymous ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
             <div className="flex flex-col gap-3">
               <button
                 disabled={isSending}
-                onClick={() => onSend('friends')}
+                onClick={() => onSend('friends', anonymous)}
                 className="flex items-center gap-4 p-4 rounded-2xl border border-white/10
                            bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all
                            text-left disabled:opacity-50 disabled:cursor-not-allowed group"
@@ -68,7 +91,7 @@ export default function AskQuestionModal({ isOpen, friendCount, isSending, onClo
 
               <button
                 disabled={isSending}
-                onClick={() => onSend('global')}
+                onClick={() => onSend('global', anonymous)}
                 className="flex items-center gap-4 p-4 rounded-2xl border border-orange-500/20
                            bg-orange-500/8 hover:bg-orange-500/15 hover:border-orange-500/35 transition-all
                            text-left disabled:opacity-50 disabled:cursor-not-allowed group"

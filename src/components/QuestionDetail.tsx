@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ChevronUp, Check, MessageSquare, Send, Loader2 } from 'lucide-react';
-import { useQuestions, type Question, type Answer } from '../hooks/useQuestions';
+import { type Question, type Answer } from '../hooks/useQuestions';
 
 interface QuestionDetailProps {
   question: Question;
@@ -38,6 +38,7 @@ export default function QuestionDetail({
   const [postingComment, setPostingComment] = useState<Record<string, boolean>>({});
   const [voting, setVoting] = useState<Record<string, boolean>>({});
   const [accepting, setAccepting] = useState(false);
+  const [selectingAnswer, setSelectingAnswer] = useState(false);
 
   const isAsker = currentUserId === question.askerId;
 
@@ -62,6 +63,7 @@ export default function QuestionDetail({
     if (accepting) return;
     setAccepting(true);
     await onAccept(question, answer.id, answer.helperId);
+    setSelectingAnswer(false);
     setAccepting(false);
   };
 
@@ -116,6 +118,10 @@ export default function QuestionDetail({
               <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Check className="w-2.5 h-2.5" /> Answered
               </span>
+            ) : question.status === 'expired' ? (
+              <span className="text-[9px] font-bold uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded-md">
+                Closed
+              </span>
             ) : (
               <span className="text-[9px] font-bold uppercase tracking-widest text-orange-400/80 bg-orange-400/10 px-2 py-0.5 rounded-md">
                 Open
@@ -140,6 +146,14 @@ export default function QuestionDetail({
           </div>
         )}
       </div>
+
+      {/* AI hint — shown when no crew answers yet and hint exists */}
+      {question.aiHint && question.answerCount === 0 && (
+        <div className="shrink-0 mb-4 p-3 rounded-xl bg-amber-500/8 border border-amber-500/20">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 mb-1">AI Memory Hook — no crew answers yet</p>
+          <p className="text-xs text-amber-100/60 leading-relaxed italic">{question.aiHint}</p>
+        </div>
+      )}
 
       {/* Answers */}
       <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-1">
@@ -208,7 +222,7 @@ export default function QuestionDetail({
                     </span>
                     <p className="text-sm text-white/80 leading-relaxed">{answer.bodyText}</p>
 
-                    {/* Action row */}
+                    {/* Comment action only */}
                     <div className="flex items-center gap-3 mt-2.5">
                       <button
                         onClick={() => toggleComments(answer.id)}
@@ -217,16 +231,6 @@ export default function QuestionDetail({
                         <MessageSquare className="w-3 h-3" />
                         {answerComments.length > 0 ? answerComments.length : ''} Comment{answerComments.length !== 1 ? 's' : ''}
                       </button>
-
-                      {isAsker && !answer.isAccepted && question.status === 'open' && (
-                        <button
-                          onClick={() => handleAccept(answer)}
-                          disabled={accepting}
-                          className="text-[10px] font-bold uppercase tracking-widest text-emerald-400/60 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 px-2 py-1 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          This Saved Me!
-                        </button>
-                      )}
                     </div>
 
                     {/* Comments thread */}
@@ -264,8 +268,47 @@ export default function QuestionDetail({
           })}
         </AnimatePresence>
 
-        {/* Post answer — only for non-askers (or anyone on open questions) */}
-        {!isAsker && !answerPosted && (
+        {/* Consolidated "Did any of these help?" — shown to asker when question is still open and there are answers */}
+        {isAsker && question.status === 'open' && answers.length > 0 && (
+          <div className="pt-3 mt-1 border-t border-white/8 shrink-0">
+            {!selectingAnswer ? (
+              <button
+                onClick={() => setSelectingAnswer(true)}
+                className="w-full h-9 rounded-xl bg-emerald-500/8 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/15 text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+              >
+                <Check className="w-3 h-3" /> Did any of these help?
+              </button>
+            ) : (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-2">Which answer helped you most?</p>
+                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {answers.map(answer => (
+                    <button
+                      key={answer.id}
+                      disabled={accepting}
+                      onClick={() => handleAccept(answer)}
+                      className="w-full text-left p-3 rounded-xl bg-white/5 border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all disabled:opacity-40"
+                    >
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 block mb-0.5">
+                        {answer.helperName}
+                      </span>
+                      <p className="text-xs text-white/70 leading-snug line-clamp-2">{answer.bodyText}</p>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setSelectingAnswer(false)}
+                  className="mt-2 w-full text-center text-[10px] text-white/25 hover:text-white/50 font-bold uppercase tracking-widest py-1 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Post answer — only for non-askers on open questions */}
+        {!isAsker && question.status === 'open' && !answerPosted && (
           <div className="pt-2 shrink-0">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-2">Your Answer</p>
             <textarea

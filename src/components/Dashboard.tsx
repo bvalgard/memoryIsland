@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | null>(null);
   const [distressInitialTab, setDistressInitialTab] = useState<'all' | 'mine'>('all');
+  const [distressInitialQuestion, setDistressInitialQuestion] = useState<import('../hooks/useQuestions').Question | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const appLoadCheckDone = useRef(false);
@@ -124,10 +125,14 @@ export default function Dashboard() {
     }
   }, [selectedArchipelagoId]);
 
-  // Questions — fetch my questions once on mount for bell notifications
-  const { fetchMyQuestions, myQuestions } = useQuestions();
+  // Questions — fetch my questions once on mount for bell notifications, plus reputation
+  const { fetchMyQuestions, myQuestions, fetchMyReputation, closeQuestionForCard } = useQuestions();
+  const [myReputation, setMyReputation] = useState<{ totalAnswers: number; totalAccepted: number; totalVotesReceived: number } | null>(null);
   useEffect(() => {
     if (user?.uid) fetchMyQuestions(user.uid);
+  }, [user?.uid]);
+  useEffect(() => {
+    if (user?.uid) fetchMyReputation().then(rep => { if (rep) setMyReputation(rep); });
   }, [user?.uid]);
 
   // Discovery State
@@ -421,13 +426,18 @@ export default function Dashboard() {
   const questionResponseNotifications = myQuestions
     .filter(q => q.status === 'open' && q.answerCount > 0)
     .map(q => ({
-      id: `question_response_${q.id}_${q.answerCount}`,
+      id: `question_response_${q.id}_${q.lastActivityAt?.seconds ?? 0}`,
       islandId: 'distress',
       title: 'Question Answered',
-      message: `You got ${q.answerCount} answer${q.answerCount > 1 ? 's' : ''} for: "${q.frontText}"`,
+      message: `Someone answered your question about: "${q.frontText.slice(0, 60)}${q.frontText.length > 60 ? '…' : ''}"`,
       type: 'info' as const,
       timestamp: q.lastActivityAt?.seconds ? q.lastActivityAt.seconds * 1000 : Date.now(),
     }));
+
+  const pendingAnswerBanner = myQuestions.find(
+    q => q.status === 'open' && q.answerCount > 0 &&
+      !seenNotificationIds.has(`question_response_${q.id}_${q.lastActivityAt?.seconds ?? 0}`)
+  ) ?? null;
 
   const notifications = [
     ...friendRequestNotifications,
@@ -476,6 +486,12 @@ export default function Dashboard() {
 
   const handleSignOut = () => signOut(auth);
 
+  const handleViewQuestion = (question: import('../hooks/useQuestions').Question) => {
+    setDistressInitialQuestion(question);
+    setDistressInitialTab('mine');
+    setActiveModal('distress');
+  };
+
   const selectedIsland = selectedIslandId === 'archipelago' ? archipelagoIsland : currentIslands.find(i => i.id === selectedIslandId);
 
   const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
@@ -494,6 +510,14 @@ export default function Dashboard() {
       });
       if (unlocked.length) enqueueToasts(unlocked);
     }
+    // Close open questions for any cards the learner just mastered
+    const islandCards = selectedIsland?.cards ?? [];
+    Object.entries(cardUpdates).forEach(([front, update]) => {
+      if (update.status === 'mastered') {
+        const card = islandCards.find(c => c.front === front);
+        if (card?.id) closeQuestionForCard(card.id);
+      }
+    });
     setIsStudying(false);
     setSelectedIslandId(null);
   };
@@ -1255,6 +1279,7 @@ export default function Dashboard() {
             sendFriendRequest={sendFriendRequest}
             acceptFriendRequest={acceptFriendRequest}
             removeFriend={removeFriend}
+            myReputation={myReputation}
           />
         )}
       </AnimatePresence>
@@ -1287,11 +1312,12 @@ export default function Dashboard() {
               className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
             >
               <QuestionsBoard
-                onClose={() => setActiveModal(null)}
+                onClose={() => { setActiveModal(null); setDistressInitialQuestion(null); }}
                 currentUserId={user?.uid || ''}
                 ownedIslandIds={progress?.islands.map(i => i.id).filter(Boolean) as string[] || []}
                 friends={friends}
                 initialTab={distressInitialTab}
+                initialQuestion={distressInitialQuestion ?? undefined}
               />
             </motion.div>
           </div>
@@ -1744,6 +1770,33 @@ export default function Dashboard() {
 
         {/* Content Area */}
         <div className="p-6 md:p-12 max-w-7xl mx-auto w-full overflow-x-hidden">
+          {/* Pending answer banner — shown when learner has new crew answers they haven't seen */}
+          <AnimatePresence>
+            {pendingAnswerBanner && !isStudying && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="mb-4 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-between gap-3 cursor-pointer"
+                onClick={() => {
+                  const notifId = `question_response_${pendingAnswerBanner.id}_${pendingAnswerBanner.lastActivityAt?.seconds ?? 0}`;
+                  setSeenNotificationIds(prev => new Set([...prev, notifId]));
+                  setDistressInitialTab('mine');
+                  setActiveModal('distress');
+                }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Radio className="w-4 h-4 text-orange-400 shrink-0 animate-pulse" />
+                  <p className="text-xs text-white/80 truncate">
+                    New answer for: <span className="font-semibold text-orange-300">"{pendingAnswerBanner.frontText.slice(0, 50)}{pendingAnswerBanner.frontText.length > 50 ? '…' : ''}"</span>
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-orange-400 border border-orange-500/30 px-2 py-1 rounded-lg">
+                  View
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <AnimatePresence mode="wait">
             {isStudying && selectedIsland ? (
               <motion.div
@@ -1760,6 +1813,7 @@ export default function Dashboard() {
                   friends={friends}
                   islandId={selectedIslandId || selectedIsland.id}
                   currentUserName={user?.displayName || 'Explorer'}
+                  onViewQuestion={handleViewQuestion}
                   onFinish={handleFinishStudy}
                   onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);

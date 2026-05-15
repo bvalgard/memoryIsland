@@ -18,6 +18,7 @@ interface SocialLeaderboardProps {
   sendFriendRequest: (uid: string) => Promise<void>;
   acceptFriendRequest: (uid: string) => Promise<void>;
   removeFriend: (uid: string) => Promise<void>;
+  myReputation?: { totalAnswers: number; totalAccepted: number; totalVotesReceived: number } | null;
 }
 
 export default function SocialLeaderboard({
@@ -33,6 +34,7 @@ export default function SocialLeaderboard({
   sendFriendRequest,
   acceptFriendRequest,
   removeFriend,
+  myReputation,
 }: SocialLeaderboardProps) {
   const [tab, setTab] = useState<'leaderboard' | 'friends'>('leaderboard');
   const [friendsData, setFriendsData] = useState<UserProfile[]>([]);
@@ -142,7 +144,27 @@ export default function SocialLeaderboard({
           ) : (loading || loadingData) ? (
             <div className="text-center text-brand-muted py-8">Loading profiles...</div>
           ) : tab === 'leaderboard' ? (
-            profiles.length > 0 ? (
+            <>
+              {myReputation && (
+                <div className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 mb-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-3">Your Crew Score</p>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="text-xl font-black text-white">{myReputation.totalAnswers}</div>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-0.5">Answers</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-emerald-400">{myReputation.totalAccepted}</div>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-0.5">Accepted</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-amber-400">{myReputation.totalVotesReceived}</div>
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-white/40 mt-0.5">Votes Got</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            {profiles.length > 0 ? (
               profiles.map((profile, i) => (
                 <ProfileCard
                   key={profile.uid}
@@ -156,7 +178,8 @@ export default function SocialLeaderboard({
                   onAccept={() => handleAccept(profile.uid)}
                 />
               ))
-            ) : <div className="text-center text-brand-muted py-8">No ranks to display yet.</div>
+            ) : <div className="text-center text-brand-muted py-8">No ranks to display yet.</div>}
+            </>
           ) : (
             friendsData.length > 0 ? (
               friendsData.map((profile) => (

@@ -177,6 +177,13 @@ service cloud.firestore {
             .hasOnly(['answerCount', 'lastActivityAt']) &&
           request.resource.data.answerCount == resource.data.answerCount + 1
         )
+        ||
+        // Anyone can write an AI hint to a zero-answer open question
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['aiHint', 'aiHintGeneratedAt']) &&
+          resource.data.answerCount == 0
+        )
       );
       allow delete: if isSignedIn() && resource.data.askerId == request.auth.uid;
 
