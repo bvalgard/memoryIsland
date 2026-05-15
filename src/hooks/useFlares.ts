@@ -3,6 +3,7 @@ import {
   collection,
   addDoc,
   updateDoc,
+  deleteDoc,
   getDocs,
   getDoc,
   doc,
@@ -42,7 +43,9 @@ export interface Flare {
 
 export function useFlares() {
   const [distressFlares, setDistressFlares] = useState<Flare[]>([]);
+  const [myFlares, setMyFlares] = useState<Flare[]>([]);
   const [loading, setLoading] = useState(false);
+  const [myFlaresLoading, setMyFlaresLoading] = useState(false);
 
   const sendFlare = async (
     card: Card,
@@ -170,13 +173,57 @@ export function useFlares() {
     }
   };
 
+  const fetchMyFlares = async (userId: string): Promise<void> => {
+    if (!userId) return;
+    setMyFlaresLoading(true);
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, 'flares'),
+          where('askerId', '==', userId),
+          limit(30)
+        )
+      );
+      const sorted = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Flare))
+        .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+      setMyFlares(sorted);
+    } catch (err) {
+      console.warn('[useFlares] fetchMyFlares error:', err);
+    } finally {
+      setMyFlaresLoading(false);
+    }
+  };
+
+  const updateFlareVisibility = async (
+    flareId: string,
+    visibility: 'friends' | 'global',
+    friendUids: string[] = []
+  ): Promise<void> => {
+    const visibleTo = visibility === 'friends' ? friendUids : [];
+    await updateDoc(doc(db, 'flares', flareId), { visibility, visibleTo });
+    setMyFlares(prev =>
+      prev.map(f => f.id === flareId ? { ...f, visibility, visibleTo } : f)
+    );
+  };
+
+  const deleteFlare = async (flareId: string): Promise<void> => {
+    await deleteDoc(doc(db, 'flares', flareId));
+    setMyFlares(prev => prev.filter(f => f.id !== flareId));
+  };
+
   return {
     distressFlares,
+    myFlares,
     loading,
+    myFlaresLoading,
     sendFlare,
     throwLifePreserver,
     fetchCardFlares,
     resolveFlare,
     fetchDistressFeed,
+    fetchMyFlares,
+    updateFlareVisibility,
+    deleteFlare,
   };
 }
