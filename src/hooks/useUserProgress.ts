@@ -117,6 +117,7 @@ export interface UserSettings {
   masteryStreakNeeded: number;
   showOnGlobalLeaderboard: boolean;
   progressTrackingMode: 'srs' | 'status' | 'both';
+  sessionDisplay: 'focused' | 'stats';
 }
 
 export interface UserProgress {
@@ -221,6 +222,7 @@ const defaultSettings: UserSettings = {
   masteryStreakNeeded: 3,
   showOnGlobalLeaderboard: true,
   progressTrackingMode: 'srs',
+  sessionDisplay: 'stats',
 };
 
 function randomId() {

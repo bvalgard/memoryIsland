@@ -95,6 +95,7 @@ interface StudySessionProps {
   allTimeBestStreak?: number;
   friends?: string[];
   islandId?: string;
+  archipelagoName?: string;
   currentUserName?: string;
   onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
@@ -103,7 +104,7 @@ interface StudySessionProps {
   onViewQuestion?: (question: Question) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -1135,7 +1136,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
                   <div className="flex flex-col">
                     <span className="text-sm text-brand-muted leading-tight">{name}</span>
-                    <span className="text-[10px] text-brand-muted/50">{island.name}</span>
+                    <span className="text-[10px] text-brand-muted/50">{archipelagoName ? `${archipelagoName} → ${island.name}` : island.name}</span>
                   </div>
                 </div>
               ))}
@@ -2006,11 +2007,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       )}
 
       {/* Live Session Tracker */}
-      <div className="w-full mt-12 px-4 md:px-0">
-        <div className={cn(
-          "mx-auto grid gap-2 md:gap-4 pointer-events-auto",
-          settings?.progressTrackingMode === 'srs' ? "max-w-xs grid-cols-1" : "max-w-2xl grid-cols-4"
-        )}>
+      {(settings?.sessionDisplay ?? 'stats') === 'focused' ? null : <div className="w-full mt-12 px-4 md:px-0">
+        <div className="mx-auto grid gap-2 md:gap-4 pointer-events-auto max-w-xl grid-cols-3">
           {/* Streak Counter */}
           <motion.div
             animate={isNewRecord ? {
@@ -2045,51 +2043,33 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             </span>
           </motion.div>
 
-          {/* Status indicators — hidden in SRS-only mode */}
-          {settings?.progressTrackingMode !== 'srs' && (
-            <>
-              {/* Mastered */}
-              <div className="bg-emerald-500/10 rounded-2xl p-2 md:p-4 border border-emerald-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-                <motion.span
-                  key={sessionStats.mastered}
-                  initial={{ scale: 1.5, color: '#10b981' }}
-                  animate={{ scale: 1, color: '#ffffff' }}
-                  className="text-xs md:text-sm font-black"
-                >
-                  {sessionStats.mastered}
-                </motion.span>
-                <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80 text-center leading-none">Mastered</span>
-              </div>
+          {/* Correct */}
+          <div className="bg-emerald-500/10 rounded-2xl p-2 md:p-4 border border-emerald-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
+            <motion.span
+              key={sessionStats.mastered + sessionStats.learning}
+              initial={{ scale: 1.5, color: '#10b981' }}
+              animate={{ scale: 1, color: '#ffffff' }}
+              className="text-xs md:text-sm font-black"
+            >
+              {sessionStats.mastered + sessionStats.learning}
+            </motion.span>
+            <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80 text-center leading-none">Correct</span>
+          </div>
 
-              {/* Learning */}
-              <div className="bg-brand-primary/10 rounded-2xl p-2 md:p-4 border border-brand-primary/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-                <motion.span
-                  key={sessionStats.learning}
-                  initial={{ scale: 1.5, color: '#3b82f6' }}
-                  animate={{ scale: 1, color: '#ffffff' }}
-                  className="text-xs md:text-sm font-black"
-                >
-                  {sessionStats.learning}
-                </motion.span>
-                <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-brand-primary/80 text-center leading-none">Learning</span>
-              </div>
-
-              {/* Struggling */}
-              <div className="bg-red-500/10 rounded-2xl p-2 md:p-4 border border-red-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-                <motion.span
-                  key={sessionStats.struggling}
-                  initial={{ scale: 1.5, color: '#ef4444' }}
-                  animate={{ scale: 1, color: '#ffffff' }}
-                  className="text-xs md:text-sm font-black"
-                >
-                  {sessionStats.struggling}
-                </motion.span>
-                <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80 text-center leading-none">Struggling</span>
-              </div>
-            </>
-          )}
+          {/* Incorrect */}
+          <div className="bg-red-500/10 rounded-2xl p-2 md:p-4 border border-red-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
+            <motion.span
+              key={sessionStats.struggling}
+              initial={{ scale: 1.5, color: '#ef4444' }}
+              animate={{ scale: 1, color: '#ffffff' }}
+              className="text-xs md:text-sm font-black"
+            >
+              {sessionStats.struggling}
+            </motion.span>
+            <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80 text-center leading-none">Incorrect</span>
+          </div>
         </div>
-      </div>
+      </div>}
     </div>
 
     <AskQuestionModal

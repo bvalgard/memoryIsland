@@ -1278,6 +1278,29 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="mb-3">
+                    <p className="text-sm font-bold text-white mb-1">Session Display</p>
+                    <p className="text-xs text-brand-muted">Focused hides all stats. Stats shows streak, correct, and incorrect.</p>
+                  </div>
+                  <div className="flex bg-black/30 rounded-xl p-1 border border-white/10 gap-1">
+                    {(['focused', 'stats'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => updateSettings({ sessionDisplay: mode })}
+                        className={cn(
+                          "flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors",
+                          (progress?.settings?.sessionDisplay ?? 'stats') === mode
+                            ? "bg-brand-primary text-white shadow-sm"
+                            : "text-brand-muted hover:text-white"
+                        )}
+                      >
+                        {mode === 'focused' ? 'Focused' : 'Stats'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                   <div>
                     <p className="text-sm font-bold text-white mb-1">Dark Mode</p>
@@ -1855,6 +1878,7 @@ export default function Dashboard() {
                   allTimeBestStreak={progress?.stats?.longestSessionStreak ?? 0}
                   friends={friends}
                   islandId={selectedIslandId || selectedIsland.id}
+                  archipelagoName={selectedIslandId !== 'archipelago' ? selectedArchipelago?.name : undefined}
                   currentUserName={user?.displayName || 'Explorer'}
                   onViewQuestion={handleViewQuestion}
                   onFinish={handleFinishStudy}
