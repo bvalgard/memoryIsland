@@ -1080,9 +1080,18 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const cardsReviewed = shuffledCards.length;
     const correctAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'learning' || c.status === 'mastered').length;
     const incorrectAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'struggling').length;
+    const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
+    const meta = buildMeta();
+    const durationLabel = meta.sessionDurationMs < 60000
+      ? `${Math.round(meta.sessionDurationMs / 1000)}s`
+      : `${Math.round(meta.sessionDurationMs / 60000)}m`;
+    const strugglingCardNames = Object.entries(cardUpdates)
+      .filter(([, u]) => (u as any).status === 'struggling')
+      .map(([front]) => front);
+    const showTierBreakdown = settings?.progressTrackingMode !== 'srs';
 
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md mx-auto w-full text-center"
@@ -1092,31 +1101,77 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           <CheckCircle2 className="w-12 h-12 text-brand-primary relative z-10" />
         </div>
         <h2 className="text-4xl font-bold mb-4 leading-tight">Sync Complete</h2>
-        <p className="text-brand-muted mb-8 text-lg">
+        <p className="text-brand-muted mb-6 text-lg">
           Retention strengthened for <span className="text-white font-medium">{island.name}</span>.
         </p>
 
-        <div className="grid grid-cols-2 gap-4 mb-12">
+        {/* 3-col stat grid */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-emerald-500/5 rounded-2xl p-4 border border-emerald-500/20 border-b-2 border-b-emerald-500/40">
+            <div className="text-3xl font-black text-emerald-400 mb-1">{accuracyPct}%</div>
+            <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Accuracy</div>
+          </div>
           <div className="bg-white/5 rounded-2xl p-4 border border-white/10 border-b-2 border-b-white/20">
             <div className="text-3xl font-black text-white mb-1">{cardsReviewed}</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted">Cards Reviewed</div>
+            <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted">Reviewed</div>
           </div>
           <div className="bg-brand-primary/5 rounded-2xl p-4 border border-brand-primary/20 border-b-2 border-b-brand-primary/40">
             <div className="text-3xl font-black text-brand-primary mb-1">+{scoreDelta}</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-brand-primary/80">Score Gained</div>
-          </div>
-          <div className="bg-emerald-500/5 rounded-2xl p-4 border border-emerald-500/20 border-b-2 border-b-emerald-500/40">
-            <div className="text-3xl font-black text-emerald-400 mb-1">{correctAnswers}</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Correct</div>
-          </div>
-          <div className="bg-red-500/5 rounded-2xl p-4 border border-red-500/20 border-b-2 border-b-red-500/40">
-            <div className="text-3xl font-black text-red-400 mb-1">{incorrectAnswers}</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-red-500/80">Struggling</div>
+            <div className="text-[10px] font-bold tracking-widest uppercase text-brand-primary/80">Score</div>
           </div>
         </div>
 
-        <button 
-          onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak, buildMeta())}
+        {/* Streak + duration strip */}
+        <div className="flex justify-between items-center text-sm text-brand-muted mb-4 px-1">
+          <div className="flex items-center gap-1.5">
+            <Flame className={`w-4 h-4 ${maxStreak >= 3 ? 'text-amber-400' : 'text-brand-muted'}`} />
+            <span className={maxStreak >= 3 ? 'text-amber-400 font-semibold' : ''}>
+              {maxStreak} best streak
+            </span>
+            {isNewRecord && (
+              <span className="text-[10px] font-bold tracking-widest uppercase text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full">
+                New Record!
+              </span>
+            )}
+          </div>
+          <span>{durationLabel} session</span>
+        </div>
+
+        {/* Tier breakdown badges */}
+        {showTierBreakdown && (
+          <div className="flex gap-2 justify-center mb-4">
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              ✓ Mastered {sessionStats.mastered}
+            </span>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              ◦ Learning {sessionStats.learning}
+            </span>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+              ✕ Struggling {sessionStats.struggling}
+            </span>
+          </div>
+        )}
+
+        {/* Cards to revisit */}
+        {strugglingCardNames.length > 0 && (
+          <div className="border-l-2 border-red-500/50 pl-3 mb-6 text-left">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-red-400 mb-2">Cards to revisit</div>
+            <div className="flex flex-col gap-1">
+              {strugglingCardNames.slice(0, 5).map((name, i) => (
+                <div key={i} className="flex items-start gap-1.5">
+                  <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
+                  <span className="text-sm text-brand-muted leading-tight">{name}</span>
+                </div>
+              ))}
+              {strugglingCardNames.length > 5 && (
+                <div className="text-xs text-brand-muted pl-4.5">+ {strugglingCardNames.length - 5} more</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak, meta)}
           className="w-full btn-primary h-16 text-lg"
         >
           Return to Map
