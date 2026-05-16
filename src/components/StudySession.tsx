@@ -1227,8 +1227,9 @@ export default function StudySession({ island, mode = 'all', settings, friends =
             }}
             className="w-full group"
             onClick={() => {
-              // For flashcards, confidence buttons or Skip handle the flip — tap does nothing
-              if (currentCard?.type && currentCard.type !== 'flashcard') {
+              // Flashcards flip via confidence buttons; MCQ flips only after option selection
+              const type = currentCard?.type;
+              if (type && type !== 'flashcard' && type !== 'mcq') {
                 setIsFlipped(!isFlipped);
               }
             }}
