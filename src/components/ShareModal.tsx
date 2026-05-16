@@ -4,7 +4,7 @@ import { Globe, Users, X, Check } from 'lucide-react';
 import { UserProfile } from '../hooks/useSocial';
 import { cn } from '../lib/utils';
 
-const RESHARE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const RESHARE_COOLDOWN_MS = 1 * 60 * 60 * 1000;
 
 interface ShareModalProps {
   isOpen: boolean;
