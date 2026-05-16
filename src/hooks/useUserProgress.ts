@@ -116,6 +116,7 @@ export interface UserSettings {
   learningStreakNeeded: number;
   masteryStreakNeeded: number;
   showOnGlobalLeaderboard: boolean;
+  progressTrackingMode: 'srs' | 'status' | 'both';
 }
 
 export interface UserProgress {
@@ -219,6 +220,7 @@ const defaultSettings: UserSettings = {
   learningStreakNeeded: 1,
   masteryStreakNeeded: 3,
   showOnGlobalLeaderboard: true,
+  progressTrackingMode: 'srs',
 };
 
 function randomId() {
@@ -1072,6 +1074,14 @@ export function useUserProgress() {
     const publishedId = island.publishedId || island.id;
     const publishedRef = doc(db, 'published_islands', publishedId);
 
+    let existingDownloads = island.downloads || 0;
+    try {
+      const existingSnap = await getDoc(publishedRef);
+      if (existingSnap.exists()) existingDownloads = existingSnap.data().downloads || 0;
+    } catch {
+      // non-fatal: proceed with cached value
+    }
+
     const publicData = {
       id: publishedId,
       name: island.name,
@@ -1080,7 +1090,7 @@ export function useUserProgress() {
       authorName: user.displayName || 'Explorer',
       isPublic: !isTargeted,
       sharedWith: isTargeted ? targetUids : [],
-      downloads: island.downloads || 0,
+      downloads: existingDownloads,
       publishedAt: serverTimestamp(),
     };
 
@@ -1127,6 +1137,7 @@ export function useUserProgress() {
         isPublic: false,
         approvalStatus: 'draft',
         sharedWith: [],
+        sharedAtTimestamps: {},
         publishedId: deleteField(),
       });
     } catch (error) {
@@ -1163,7 +1174,6 @@ export function useUserProgress() {
         publishedAt: serverTimestamp(),
       };
 
-      await setDoc(publishedArchipelagosRef, publicData);
       const now = Date.now();
       const updatedTimestamps: Record<string, number> = { ...(archipelago.sharedAtTimestamps || {}) };
       if (isTargeted) {
@@ -1180,7 +1190,15 @@ export function useUserProgress() {
             }
           : entry
       );
-      await updateArchipelagos(updatedArchipelagos);
+
+      const batch = writeBatch(db);
+      batch.set(publishedArchipelagosRef, publicData);
+      batch.set(
+        doc(db, 'users', user.uid),
+        { archipelagos: omitUndefined(updatedArchipelagos), last_active: Timestamp.now() },
+        { merge: true }
+      );
+      await batch.commit();
       return targetArchipelagoId;
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `published_archipelagos/${targetArchipelagoId}`);
@@ -1204,7 +1222,7 @@ export function useUserProgress() {
     try {
       await Promise.all(publishedIds.map((id) => deleteDoc(doc(db, 'published_archipelagos', id))));
       const updatedArchipelagos = (progress.archipelagos || []).map((entry) =>
-        entry.id === archipelago.id ? { ...entry, isPublic: false, sharedWith: [], publishedId: undefined } : entry
+        entry.id === archipelago.id ? { ...entry, isPublic: false, sharedWith: [], sharedAtTimestamps: {}, publishedId: undefined } : entry
       );
       await updateArchipelagos(updatedArchipelagos);
     } catch (error) {

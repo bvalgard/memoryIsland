@@ -42,7 +42,11 @@ export default function ShareModal({
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedUids(new Set(initialSelectedUids));
+      const eligibleUids = (initialSelectedUids || []).filter(uid => {
+        const lastShared = sharedAtTimestamps[uid];
+        return !lastShared || lastShared + RESHARE_COOLDOWN_MS - Date.now() <= 0;
+      });
+      setSelectedUids(new Set(eligibleUids));
       setTab(initialTab);
       setIsSubmitting(false);
       setError(null);
@@ -68,8 +72,9 @@ export default function ShareModal({
     if (!lastShared) return null;
     const remaining = lastShared + RESHARE_COOLDOWN_MS - Date.now();
     if (remaining <= 0) return null;
-    const hours = Math.ceil(remaining / (60 * 60 * 1000));
-    return `Reshare in ${hours}h`;
+    const minutes = Math.ceil(remaining / (60 * 1000));
+    if (minutes < 60) return `Reshare in ${minutes}m`;
+    return `Reshare in ${Math.ceil(minutes / 60)}h`;
   };
 
   const toggleUser = (uid: string) => {
@@ -89,7 +94,13 @@ export default function ShareModal({
       if (tab === 'public') {
         await onSharePublic();
       } else {
-        await onShareTargeted(Array.from(selectedUids));
+        // Merge back cooldown-blocked UIDs from the original list so they aren't silently dropped
+        const cooldownBlockedUids = (initialSelectedUids || []).filter(uid => {
+          const lastShared = sharedAtTimestamps[uid];
+          return lastShared && lastShared + RESHARE_COOLDOWN_MS - Date.now() > 0;
+        });
+        const mergedUids = Array.from(new Set([...Array.from(selectedUids), ...cooldownBlockedUids]));
+        await onShareTargeted(mergedUids);
       }
       onClose();
     } catch (e) {

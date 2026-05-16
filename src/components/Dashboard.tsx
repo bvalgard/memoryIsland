@@ -388,6 +388,8 @@ export default function Dashboard() {
     return best;
   })();
 
+  const trackingMode = progress?.settings?.progressTrackingMode ?? 'srs';
+
   const formatStudyHour = (h: number) => {
     if (h >= 5 && h < 12) return `${h === 5 ? '5' : h}am`;
     if (h === 12) return '12pm';
@@ -1241,6 +1243,29 @@ export default function Dashboard() {
                   </button>
                 </div>
 
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="mb-3">
+                    <p className="text-sm font-bold text-white mb-1">Progress Tracking</p>
+                    <p className="text-xs text-brand-muted">Choose which system shows in the UI. Both always track silently.</p>
+                  </div>
+                  <div className="flex bg-black/30 rounded-xl p-1 border border-white/10 gap-1">
+                    {(['srs', 'status', 'both'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => updateSettings({ progressTrackingMode: mode })}
+                        className={cn(
+                          "flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors",
+                          trackingMode === mode
+                            ? "bg-brand-primary text-white shadow-sm"
+                            : "text-brand-muted hover:text-white"
+                        )}
+                      >
+                        {mode === 'srs' ? 'Spaced Rep' : mode === 'status' ? 'Mastery' : 'Both'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                   <div>
                     <p className="text-sm font-bold text-white mb-1">Dark Mode</p>
@@ -1487,21 +1512,22 @@ export default function Dashboard() {
                 )}
 
                 {/* Learning Insights */}
-                {(weakSpotCards.length > 0 || forgettingCount > 0 || bestStudyHour) && (
+                {((trackingMode !== 'status' && (forgettingCount > 0 || bestStudyHour != null)) ||
+                  (trackingMode !== 'srs' && weakSpotCards.length > 0)) && (
                   <div className="mb-12">
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                       <Activity className="w-5 h-5 text-brand-primary" />
                       Learning Insights
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                      {forgettingCount > 0 && (
+                      {trackingMode !== 'status' && forgettingCount > 0 && (
                         <div className="bg-sky-500/5 rounded-2xl p-5 border border-sky-500/20">
                           <div className="text-2xl font-black text-sky-400 mb-1">{forgettingCount}</div>
                           <div className="text-[10px] font-bold tracking-widest uppercase text-sky-500/80">Cards due in 3 days</div>
                           <div className="text-xs text-brand-muted mt-1">Review soon to avoid forgetting</div>
                         </div>
                       )}
-                      {bestStudyHour && (
+                      {trackingMode !== 'status' && bestStudyHour && (
                         <div className="bg-emerald-500/5 rounded-2xl p-5 border border-emerald-500/20">
                           <div className="text-2xl font-black text-emerald-400 mb-1">{formatStudyHour(bestStudyHour.hour)}</div>
                           <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Peak retention hour</div>
@@ -1511,7 +1537,7 @@ export default function Dashboard() {
                         </div>
                       )}
                     </div>
-                    {weakSpotCards.length > 0 && (
+                    {trackingMode !== 'srs' && weakSpotCards.length > 0 && (
                       <div>
                         <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted mb-3 flex items-center gap-2">
                           <AlertCircle className="w-3.5 h-3.5 text-red-400" />
@@ -1559,32 +1585,36 @@ export default function Dashboard() {
                       <div key={island.id} className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                         <div className="flex-1">
                           <h4 className="text-base font-bold mb-1">{island.name}</h4>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden flex">
-                              {island.cards.length > 0 && (
-                                <>
-                                  <div style={{ width: `${(mst / island.cards.length) * 100}%` }} className="h-full bg-emerald-500" />
-                                  <div style={{ width: `${(lrn / island.cards.length) * 100}%` }} className="h-full bg-amber-500" />
-                                  <div style={{ width: `${(str / island.cards.length) * 100}%` }} className="h-full bg-red-500" />
-                                </>
-                              )}
+                          {trackingMode !== 'srs' && (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden flex">
+                                {island.cards.length > 0 && (
+                                  <>
+                                    <div style={{ width: `${(mst / island.cards.length) * 100}%` }} className="h-full bg-emerald-500" />
+                                    <div style={{ width: `${(lrn / island.cards.length) * 100}%` }} className="h-full bg-amber-500" />
+                                    <div style={{ width: `${(str / island.cards.length) * 100}%` }} className="h-full bg-red-500" />
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {trackingMode !== 'srs' && (
+                          <div className="flex gap-4 shrink-0">
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-emerald-400">{mst}</div>
+                              <div className="text-[9px] font-bold tracking-widest uppercase text-emerald-500/60">Mast</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-amber-400">{lrn}</div>
+                              <div className="text-[9px] font-bold tracking-widest uppercase text-amber-500/60">Lrn</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-red-400">{str}</div>
+                              <div className="text-[9px] font-bold tracking-widest uppercase text-red-500/60">Strg</div>
                             </div>
                           </div>
-                        </div>
-                        <div className="flex gap-4 shrink-0">
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-emerald-400">{mst}</div>
-                            <div className="text-[9px] font-bold tracking-widest uppercase text-emerald-500/60">Mast</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-amber-400">{lrn}</div>
-                            <div className="text-[9px] font-bold tracking-widest uppercase text-amber-500/60">Lrn</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-red-400">{str}</div>
-                            <div className="text-[9px] font-bold tracking-widest uppercase text-red-500/60">Strg</div>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1995,46 +2025,52 @@ export default function Dashboard() {
                           >
                             All ({allCards.length})
                           </button>
-                          <button
-                            onClick={() => setStudyMode('due')}
-                            disabled={globalDueCount === 0}
-                            className={cn(
-                              "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
-                              studyMode === 'due' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" : "text-brand-muted hover:text-sky-400"
-                            )}
-                          >
-                            Due ({globalDueCount})
-                          </button>
-                          <button
-                            onClick={() => setStudyMode('struggling')}
-                            disabled={globalStrugglingCount === 0}
-                            className={cn(
-                              "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
-                              studyMode === 'struggling' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
-                            )}
-                          >
-                            Struggling ({globalStrugglingCount})
-                          </button>
-                          <button
-                            onClick={() => setStudyMode('learning')}
-                            disabled={globalLearningCount === 0}
-                            className={cn(
-                              "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
-                              studyMode === 'learning' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-brand-muted hover:text-amber-400"
-                            )}
-                          >
-                            Learning ({globalLearningCount})
-                          </button>
-                          <button
-                            onClick={() => setStudyMode('mastered')}
-                            disabled={globalMasteredCount === 0}
-                            className={cn(
-                              "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
-                              studyMode === 'mastered' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-brand-muted hover:text-emerald-400"
-                            )}
-                          >
-                            Mastered ({globalMasteredCount})
-                          </button>
+                          {trackingMode !== 'status' && (
+                            <button
+                              onClick={() => setStudyMode('due')}
+                              disabled={globalDueCount === 0}
+                              className={cn(
+                                "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
+                                studyMode === 'due' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" : "text-brand-muted hover:text-sky-400"
+                              )}
+                            >
+                              Due ({globalDueCount})
+                            </button>
+                          )}
+                          {trackingMode !== 'srs' && (
+                            <>
+                              <button
+                                onClick={() => setStudyMode('struggling')}
+                                disabled={globalStrugglingCount === 0}
+                                className={cn(
+                                  "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
+                                  studyMode === 'struggling' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
+                                )}
+                              >
+                                Struggling ({globalStrugglingCount})
+                              </button>
+                              <button
+                                onClick={() => setStudyMode('learning')}
+                                disabled={globalLearningCount === 0}
+                                className={cn(
+                                  "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
+                                  studyMode === 'learning' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-brand-muted hover:text-amber-400"
+                                )}
+                              >
+                                Learning ({globalLearningCount})
+                              </button>
+                              <button
+                                onClick={() => setStudyMode('mastered')}
+                                disabled={globalMasteredCount === 0}
+                                className={cn(
+                                  "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
+                                  studyMode === 'mastered' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-brand-muted hover:text-emerald-400"
+                                )}
+                              >
+                                Mastered ({globalMasteredCount})
+                              </button>
+                            </>
+                          )}
                         </div>
 
                         <button 
@@ -2064,12 +2100,12 @@ export default function Dashboard() {
                       const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
 
                       let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
-                      if (strugglingCount > 0) {
-                        masteryLevel = 'struggling';
-                      } else if (island.cards.length > 0 && masteredCount === island.cards.length) {
-                        masteryLevel = 'mastered';
-                      } else {
-                        masteryLevel = 'learning';
+                      if (trackingMode !== 'srs') {
+                        if (strugglingCount > 0) {
+                          masteryLevel = 'struggling';
+                        } else if (island.cards.length > 0 && masteredCount === island.cards.length) {
+                          masteryLevel = 'mastered';
+                        }
                       }
                       
                       const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -2150,6 +2186,7 @@ export default function Dashboard() {
                     setStudyMode(mode);
                     setIsStudying(true);
                   }}
+                  progressTrackingMode={trackingMode}
                   friends={friends}
                   fetchProfilesByUids={fetchProfilesByUids}
                 />
@@ -2310,10 +2347,10 @@ export default function Dashboard() {
           <ShareModal
             isOpen={showShareArchipelagoConfirm}
             onClose={() => setShowShareArchipelagoConfirm(false)}
-            title="Publish Archipelago?"
+            title={selectedArchipelago.isPublic ? "Update Community Archipelago" : selectedArchipelago.sharedWith?.length ? "Update Sharing" : "Publish Archipelago?"}
             description={`This will share "${selectedArchipelago.name}" and all its ${islandsInArchipelago.length} islands. Other explorers will be able to anchor this knowledge.`}
             initialSelectedUids={selectedArchipelago.sharedWith || []}
-            initialTab={selectedArchipelago.sharedWith?.length ? 'targeted' : 'public'}
+            initialTab={selectedArchipelago.isPublic ? 'public' : selectedArchipelago.sharedWith?.length ? 'targeted' : 'public'}
             onSharePublic={async () => {
               await shareArchipelago(selectedArchipelago);
             }}

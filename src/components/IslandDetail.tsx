@@ -24,11 +24,12 @@ interface IslandDetailProps {
   onShare?: (island: Island, targetUids?: string[]) => void;
   onUnshare?: (island: Island) => void;
   onUpdateIsland?: (updates: Partial<Island>) => void;
+  progressTrackingMode?: 'srs' | 'status' | 'both';
   friends?: string[];
   fetchProfilesByUids?: (uids: string[]) => Promise<UserProfile[]>;
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, friends = [], fetchProfilesByUids = async () => [] }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [] }: IslandDetailProps) {
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>('all');
   const [showShareConfirm, setShowShareConfirm] = useState(false);
@@ -605,10 +606,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       <ShareModal
                         isOpen={showShareConfirm}
                         onClose={() => setShowShareConfirm(false)}
-                        title={islandPrivacyState === 'shared' ? "Update Sharing" : "Submit for review?"}
+                        title={islandPrivacyState === 'shared' ? "Update Sharing" : islandPrivacyState === 'public' ? "Update Community Island" : "Submit for review?"}
                         description={islandPrivacyState === 'shared'
                           ? "Select more friends to share this island with."
-                          : "This island will be submitted to the moderation queue before it appears in community discovery."}
+                          : islandPrivacyState === 'public'
+                            ? "Resubmit your latest changes to update this island in the community discovery feed."
+                            : "This island will be submitted to the moderation queue before it appears in community discovery."}
                         initialSelectedUids={island.sharedWith || []}
                         initialTab={islandPrivacyState === 'shared' ? 'targeted' : 'public'}
                         onSharePublic={() => {
@@ -759,49 +762,57 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   All ({island.cards.length})
                 </button>
 
-                <div className="hidden sm:block w-px h-4 bg-white/10 mx-1 self-center" />
+                {progressTrackingMode === 'both' && (
+                  <div className="hidden sm:block w-px h-4 bg-white/10 mx-1 self-center" />
+                )}
 
-                <button
-                  onClick={() => setStudyMode('due')}
-                  disabled={dueCount === 0}
-                  className={cn(
-                    "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
-                    studyMode === 'due' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" : "text-brand-muted hover:text-sky-400"
-                  )}
-                  title={`${dueCount} cards due for review`}
-                >
-                  Due ({dueCount})
-                </button>
-                <button
-                  onClick={() => setStudyMode('struggling')}
-                  disabled={strugglingCount === 0}
-                  className={cn(
-                    "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
-                    studyMode === 'struggling' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
-                  )}
-                >
-                  Struggling ({strugglingCount})
-                </button>
-                <button
-                  onClick={() => setStudyMode('learning')}
-                  disabled={learningCount === 0}
-                  className={cn(
-                    "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
-                    studyMode === 'learning' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-brand-muted hover:text-amber-400"
-                  )}
-                >
-                  Learning ({learningCount})
-                </button>
-                <button
-                  onClick={() => setStudyMode('mastered')}
-                  disabled={masteredCount === 0}
-                  className={cn(
-                    "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
-                    studyMode === 'mastered' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-brand-muted hover:text-emerald-400"
-                  )}
-                >
-                  Mastered ({masteredCount})
-                </button>
+                {progressTrackingMode !== 'status' && (
+                  <button
+                    onClick={() => setStudyMode('due')}
+                    disabled={dueCount === 0}
+                    className={cn(
+                      "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
+                      studyMode === 'due' ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" : "text-brand-muted hover:text-sky-400"
+                    )}
+                    title={`${dueCount} cards due for review`}
+                  >
+                    Due ({dueCount})
+                  </button>
+                )}
+                {progressTrackingMode !== 'srs' && (
+                  <>
+                    <button
+                      onClick={() => setStudyMode('struggling')}
+                      disabled={strugglingCount === 0}
+                      className={cn(
+                        "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
+                        studyMode === 'struggling' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
+                      )}
+                    >
+                      Struggling ({strugglingCount})
+                    </button>
+                    <button
+                      onClick={() => setStudyMode('learning')}
+                      disabled={learningCount === 0}
+                      className={cn(
+                        "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
+                        studyMode === 'learning' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-brand-muted hover:text-amber-400"
+                      )}
+                    >
+                      Learning ({learningCount})
+                    </button>
+                    <button
+                      onClick={() => setStudyMode('mastered')}
+                      disabled={masteredCount === 0}
+                      className={cn(
+                        "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
+                        studyMode === 'mastered' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-brand-muted hover:text-emerald-400"
+                      )}
+                    >
+                      Mastered ({masteredCount})
+                    </button>
+                  </>
+                )}
               </div>
 
               <button 
@@ -1329,7 +1340,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                               {Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)}%
                             </span>
                           )}
-                          {card.needsWork && (
+                          {progressTrackingMode !== 'srs' && card.needsWork && (
                             <span className="text-[9px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20 tracking-wider font-bold">STRUGGLING</span>
                           )}
                           {onDeleteCard && (
