@@ -116,10 +116,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [cardUpdates, setCardUpdates] = useState<CardUpdateRecord>({});
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(allTimeBestStreak);
+  const [sessionMaxStreak, setSessionMaxStreak] = useState(0);
   const [isNewRecord, setIsNewRecord] = useState(false);
   const newRecordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateStreakWithRecord = (newStreak: number) => {
+    setSessionMaxStreak(prev => Math.max(prev, newStreak));
     setMaxStreak(prev => {
       if (newStreak > prev) {
         if (newRecordTimerRef.current) clearTimeout(newRecordTimerRef.current);
@@ -1077,18 +1079,14 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   };
 
   if (sessionComplete) {
-    const cardsReviewed = shuffledCards.length;
+    const cardsReviewed = Object.keys(cardUpdates).length;
     const correctAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'learning' || c.status === 'mastered').length;
     const incorrectAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'struggling').length;
     const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
     const meta = buildMeta();
-    const durationLabel = meta.sessionDurationMs < 60000
-      ? `${Math.round(meta.sessionDurationMs / 1000)}s`
-      : `${Math.round(meta.sessionDurationMs / 60000)}m`;
     const strugglingCardNames = Object.entries(cardUpdates)
       .filter(([, u]) => (u as any).status === 'struggling')
       .map(([front]) => front);
-    const showTierBreakdown = settings?.progressTrackingMode !== 'srs';
 
     return (
       <motion.div
@@ -1096,15 +1094,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md mx-auto w-full text-center"
       >
-        <div className="w-24 h-24 bg-brand-primary/10 rounded-full flex items-center justify-center mx-auto mb-8 relative">
-          <div className="absolute inset-0 bg-brand-primary/20 rounded-full animate-ping" style={{ animationDuration: '3s' }} />
-          <CheckCircle2 className="w-12 h-12 text-brand-primary relative z-10" />
-        </div>
-        <h2 className="text-4xl font-bold mb-4 leading-tight">Sync Complete</h2>
-        <p className="text-brand-muted mb-6 text-lg">
-          Retention strengthened for <span className="text-white font-medium">{island.name}</span>.
-        </p>
-
         {/* 3-col stat grid */}
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-emerald-500/5 rounded-2xl p-4 border border-emerald-500/20 border-b-2 border-b-emerald-500/40">
@@ -1121,36 +1110,20 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </div>
         </div>
 
-        {/* Streak + duration strip */}
-        <div className="flex justify-between items-center text-sm text-brand-muted mb-4 px-1">
-          <div className="flex items-center gap-1.5">
-            <Flame className={`w-4 h-4 ${maxStreak >= 3 ? 'text-amber-400' : 'text-brand-muted'}`} />
-            <span className={maxStreak >= 3 ? 'text-amber-400 font-semibold' : ''}>
-              {maxStreak} best streak
-            </span>
-            {isNewRecord && (
-              <span className="text-[10px] font-bold tracking-widest uppercase text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full">
-                New Record!
-              </span>
-            )}
-          </div>
-          <span>{durationLabel} session</span>
+        {/* Streak / correct / incorrect strip */}
+        <div className="flex gap-2 justify-center mb-4">
+          <span className={`text-xs font-semibold px-3 py-1 rounded-full border flex items-center gap-1 ${sessionMaxStreak >= 3 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-white/5 text-brand-muted border-white/10'}`}>
+            <Flame className="w-3 h-3" />
+            {sessionMaxStreak} streak
+            {isNewRecord && <span className="text-[9px] font-bold tracking-widest uppercase ml-0.5">· Record!</span>}
+          </span>
+          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            ✓ {correctAnswers} correct
+          </span>
+          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+            ✕ {incorrectAnswers} incorrect
+          </span>
         </div>
-
-        {/* Tier breakdown badges */}
-        {showTierBreakdown && (
-          <div className="flex gap-2 justify-center mb-4">
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              ✓ Mastered {sessionStats.mastered}
-            </span>
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              ◦ Learning {sessionStats.learning}
-            </span>
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-              ✕ Struggling {sessionStats.struggling}
-            </span>
-          </div>
-        )}
 
         {/* Cards to revisit */}
         {strugglingCardNames.length > 0 && (
@@ -1160,7 +1133,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               {strugglingCardNames.slice(0, 5).map((name, i) => (
                 <div key={i} className="flex items-start gap-1.5">
                   <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
-                  <span className="text-sm text-brand-muted leading-tight">{name}</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm text-brand-muted leading-tight">{name}</span>
+                    <span className="text-[10px] text-brand-muted/50">{island.name}</span>
+                  </div>
                 </div>
               ))}
               {strugglingCardNames.length > 5 && (
@@ -1172,10 +1148,18 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
         <button
           onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak, meta)}
-          className="w-full btn-primary h-16 text-lg"
+          className="w-full btn-primary h-16 text-lg mb-4"
         >
           Return to Map
         </button>
+
+        {/* Compact footer */}
+        <div className="flex items-center justify-center gap-2 text-brand-muted/60">
+          <CheckCircle2 className="w-4 h-4 text-brand-primary/60" />
+          <span className="text-sm font-medium">Sync Complete</span>
+          <span className="text-brand-muted/30">·</span>
+          <span className="text-sm">{island.name}</span>
+        </div>
       </motion.div>
     );
   }
