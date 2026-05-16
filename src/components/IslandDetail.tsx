@@ -31,7 +31,14 @@ interface IslandDetailProps {
 
 export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [] }: IslandDetailProps) {
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
-  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>('all');
+  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
+    if (progressTrackingMode === 'srs') {
+      const now = Date.now();
+      const due = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= now).length;
+      return due > 0 ? 'due' : 'all';
+    }
+    return 'all';
+  });
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

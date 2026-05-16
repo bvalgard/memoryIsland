@@ -92,6 +92,7 @@ interface StudySessionProps {
   island: Island;
   mode?: 'all' | 'struggling' | 'learning' | 'mastered' | 'due';
   settings?: UserSettings;
+  allTimeBestStreak?: number;
   friends?: string[];
   islandId?: string;
   currentUserName?: string;
@@ -102,7 +103,7 @@ interface StudySessionProps {
   onViewQuestion?: (question: Question) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, friends = [], islandId = '', currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -114,7 +115,7 @@ export default function StudySession({ island, mode = 'all', settings, friends =
   const [showHint, setShowHint] = useState(false);
   const [cardUpdates, setCardUpdates] = useState<CardUpdateRecord>({});
   const [streak, setStreak] = useState(0);
-  const [maxStreak, setMaxStreak] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(allTimeBestStreak);
   const [isNewRecord, setIsNewRecord] = useState(false);
   const newRecordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

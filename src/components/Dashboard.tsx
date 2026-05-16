@@ -68,6 +68,7 @@ export default function Dashboard() {
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const appLoadCheckDone = useRef(false);
+  const defaultStudyModeApplied = useRef(false);
 
   // Achievement system
   const { checkAndAwardAchievements } = useAchievements();
@@ -108,6 +109,17 @@ export default function Dashboard() {
         .then(unlocked => { if (unlocked.length) enqueueToasts(unlocked); });
     }
   }, [progress]);
+
+  // Default study mode to "due" when SRS is active and cards are due
+  useEffect(() => {
+    if (defaultStudyModeApplied.current || !progress?.settings) return;
+    defaultStudyModeApplied.current = true;
+    if (progress.settings.progressTrackingMode === 'srs') {
+      const now = Date.now();
+      const due = (progress.islands || []).flatMap(i => i.cards).filter(c => !c.srsNextReview || c.srsNextReview <= now).length;
+      setStudyMode(due > 0 ? 'due' : 'all');
+    }
+  }, [progress?.settings]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'alpha-asc' | 'alpha-desc' | 'creation'>(() => {
     return (localStorage.getItem('islandSortOrder') as 'alpha-asc' | 'alpha-desc' | 'creation') || 'alpha-asc';
@@ -1840,6 +1852,7 @@ export default function Dashboard() {
                   island={selectedIsland}
                   mode={studyMode}
                   settings={progress?.settings}
+                  allTimeBestStreak={progress?.stats?.longestSessionStreak ?? 0}
                   friends={friends}
                   islandId={selectedIslandId || selectedIsland.id}
                   currentUserName={user?.displayName || 'Explorer'}
