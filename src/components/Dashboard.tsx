@@ -2322,6 +2322,7 @@ export default function Dashboard() {
             }}
             friends={friends}
             fetchProfilesByUids={fetchProfilesByUids}
+            sharedAtTimestamps={selectedArchipelago.sharedAtTimestamps}
           />
         )}
       </AnimatePresence>

@@ -4,6 +4,8 @@ import { Globe, Users, X, Check } from 'lucide-react';
 import { UserProfile } from '../hooks/useSocial';
 import { cn } from '../lib/utils';
 
+const RESHARE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -15,6 +17,7 @@ interface ShareModalProps {
   initialTab?: 'public' | 'targeted';
   friends: string[];
   fetchProfilesByUids: (uids: string[]) => Promise<UserProfile[]>;
+  sharedAtTimestamps?: Record<string, number>;
 }
 
 export default function ShareModal({
@@ -28,10 +31,12 @@ export default function ShareModal({
   initialTab = 'public',
   friends,
   fetchProfilesByUids,
+  sharedAtTimestamps = {},
 }: ShareModalProps) {
   const [tab, setTab] = useState<'public' | 'targeted'>('public');
   const [selectedUids, setSelectedUids] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [friendProfiles, setFriendProfiles] = useState<UserProfile[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
 
@@ -40,6 +45,7 @@ export default function ShareModal({
       setSelectedUids(new Set(initialSelectedUids));
       setTab(initialTab);
       setIsSubmitting(false);
+      setError(null);
       
       const load = async () => {
         setIsLoadingFriends(true);
@@ -57,6 +63,15 @@ export default function ShareModal({
 
   if (!isOpen) return null;
 
+  const getCooldownLabel = (uid: string): string | null => {
+    const lastShared = sharedAtTimestamps[uid];
+    if (!lastShared) return null;
+    const remaining = lastShared + RESHARE_COOLDOWN_MS - Date.now();
+    if (remaining <= 0) return null;
+    const hours = Math.ceil(remaining / (60 * 60 * 1000));
+    return `Reshare in ${hours}h`;
+  };
+
   const toggleUser = (uid: string) => {
     const next = new Set(selectedUids);
     if (next.has(uid)) {
@@ -69,6 +84,7 @@ export default function ShareModal({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setError(null);
     try {
       if (tab === 'public') {
         await onSharePublic();
@@ -78,6 +94,7 @@ export default function ShareModal({
       onClose();
     } catch (e) {
       console.error(e);
+      setError('Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -156,13 +173,19 @@ export default function ShareModal({
               ) : (
                 friendProfiles.map(profile => {
                   const isSelected = selectedUids.has(profile.uid);
+                  const cooldownLabel = getCooldownLabel(profile.uid);
+                  const isOnCooldown = cooldownLabel !== null;
                   return (
-                    <div 
+                    <div
                       key={profile.uid}
-                      onClick={() => toggleUser(profile.uid)}
+                      onClick={() => !isOnCooldown && toggleUser(profile.uid)}
                       className={cn(
-                        "flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all",
-                        isSelected ? "bg-brand-primary/10 border-brand-primary/30" : "bg-white/5 border-white/5 hover:border-white/10"
+                        "flex items-center justify-between p-3 rounded-2xl border transition-all",
+                        isOnCooldown
+                          ? "bg-white/[0.02] border-white/5 opacity-50 cursor-not-allowed"
+                          : isSelected
+                            ? "bg-brand-primary/10 border-brand-primary/30 cursor-pointer"
+                            : "bg-white/5 border-white/5 hover:border-white/10 cursor-pointer"
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -173,13 +196,18 @@ export default function ShareModal({
                             <Users className="w-4 h-4 text-brand-muted" />
                           )}
                         </div>
-                        <span className="text-sm font-bold text-white">{profile.displayName}</span>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-white">{profile.displayName}</span>
+                          {isOnCooldown && (
+                            <span className="text-xs text-brand-muted">{cooldownLabel}</span>
+                          )}
+                        </div>
                       </div>
                       <div className={cn(
                         "w-5 h-5 rounded-full flex items-center justify-center border",
-                        isSelected ? "bg-brand-primary border-brand-primary" : "border-white/20"
+                        isOnCooldown ? "border-white/10" : isSelected ? "bg-brand-primary border-brand-primary" : "border-white/20"
                       )}>
-                        {isSelected && <Check className="w-3 h-3 text-black" />}
+                        {isSelected && !isOnCooldown && <Check className="w-3 h-3 text-black" />}
                       </div>
                     </div>
                   );
@@ -190,7 +218,10 @@ export default function ShareModal({
         </div>
 
         <div className="shrink-0 flex flex-col gap-3">
-          <button 
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
+          <button
             onClick={handleSubmit}
             disabled={isSubmitting || (tab === 'targeted' && selectedUids.size === 0)}
             className="w-full py-4 bg-brand-primary text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-transform disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"

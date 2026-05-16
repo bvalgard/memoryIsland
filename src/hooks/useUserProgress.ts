@@ -9,6 +9,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
@@ -74,6 +75,7 @@ export interface Archipelago {
   publishedId?: string;
   isImported?: boolean;
   sharedWith?: string[];
+  sharedAtTimestamps?: Record<string, number>;
 }
 
 export interface Island {
@@ -91,6 +93,7 @@ export interface Island {
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
   isImported?: boolean;
   sharedWith?: string[];
+  sharedAtTimestamps?: Record<string, number>;
 }
 
 export interface UserStats {
@@ -155,6 +158,7 @@ interface IslandDocumentData {
   submittedAt?: Timestamp;
   isImported?: boolean;
   sharedWith?: string[];
+  sharedAtTimestamps?: Record<string, number>;
 }
 
 interface CardDocumentData extends Card {
@@ -274,6 +278,8 @@ function sanitizeCardForStorage(card: Card): Card {
 
 function sanitizeCardForPublic(card: Card) {
   return {
+    // id is included so importers can reconstruct the prevTierCardId chain
+    ...(card.id ? { id: card.id } : {}),
     front: card.front,
     back: card.back,
     type: card.type || 'flashcard',
@@ -287,6 +293,8 @@ function sanitizeCardForPublic(card: Card) {
     ...(card.backImageUrl ? { backImageUrl: card.backImageUrl } : {}),
     ...(card.imageCredit ? { imageCredit: card.imageCredit } : {}),
     ...(card.backImageCredit ? { backImageCredit: card.backImageCredit } : {}),
+    ...(card.tier ? { tier: card.tier } : {}),
+    ...(card.prevTierCardId ? { prevTierCardId: card.prevTierCardId } : {}),
   };
 }
 
@@ -306,6 +314,7 @@ function toIslandDocument(island: Island, ownerId: string, ownerEmail?: string |
     approvalStatus: island.approvalStatus || (island.isPublic ? 'approved' : 'draft'),
     isImported: island.isImported || false,
     sharedWith: island.sharedWith || [],
+    sharedAtTimestamps: island.sharedAtTimestamps || {},
   });
 }
 
@@ -635,6 +644,7 @@ export function useUserProgress() {
         approvalStatus: data.approvalStatus,
         isImported: data.isImported || false,
         sharedWith: data.sharedWith || [],
+        sharedAtTimestamps: data.sharedAtTimestamps || {},
         cards: cardsByIsland.get(id) || [],
       }));
 
@@ -1074,12 +1084,19 @@ export function useUserProgress() {
       publishedAt: serverTimestamp(),
     };
 
+    const now = Date.now();
+    const updatedTimestamps: Record<string, number> = { ...(island.sharedAtTimestamps || {}) };
+    if (isTargeted) {
+      targetUids!.forEach(uid => { updatedTimestamps[uid] = now; });
+    }
+
     try {
       const batch = writeBatch(db);
       batch.set(publishedRef, publicData);
       batch.update(doc(db, 'islands', island.id), {
         isPublic: !isTargeted,
         sharedWith: isTargeted ? targetUids : [],
+        sharedAtTimestamps: updatedTimestamps,
         publishedId: publishedId,
         authorId: user.uid,
         authorName: user.displayName || 'Explorer',
@@ -1097,12 +1114,9 @@ export function useUserProgress() {
 
     let publishedIds = island.publishedId ? [island.publishedId] : [];
     if (!publishedIds.length) {
-      try {
-        const snapshot = await getDocs(query(collection(db, 'published_islands'), where('authorId', '==', user.uid), limit(100)));
-        publishedIds = snapshot.docs.filter((docSnap) => (docSnap.data() as any).name === island.name).map((docSnap) => docSnap.id);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, 'published_islands');
-      }
+      // shareIsland always uses island.id as the publishedId for previously-unpublished islands,
+      // so island.id is the correct fallback when publishedId wasn't saved on older records.
+      publishedIds = [island.id];
     }
 
     try {
@@ -1150,14 +1164,20 @@ export function useUserProgress() {
       };
 
       await setDoc(publishedArchipelagosRef, publicData);
+      const now = Date.now();
+      const updatedTimestamps: Record<string, number> = { ...(archipelago.sharedAtTimestamps || {}) };
+      if (isTargeted) {
+        targetUids!.forEach(uid => { updatedTimestamps[uid] = now; });
+      }
       const updatedArchipelagos = (progress.archipelagos || []).map((entry) =>
-        entry.id === archipelago.id 
-          ? { 
-              ...entry, 
-              isPublic: !isTargeted, 
-              sharedWith: isTargeted ? targetUids : [], 
-              publishedId: targetArchipelagoId 
-            } 
+        entry.id === archipelago.id
+          ? {
+              ...entry,
+              isPublic: !isTargeted,
+              sharedWith: isTargeted ? targetUids : [],
+              sharedAtTimestamps: updatedTimestamps,
+              publishedId: targetArchipelagoId
+            }
           : entry
       );
       await updateArchipelagos(updatedArchipelagos);
@@ -1271,16 +1291,34 @@ export function useUserProgress() {
       name: sharedArchipelago.name,
     };
 
-    const newIslands: Island[] = (sharedArchipelago.islands || []).map((island: any) => ({
-      id: randomId(),
-      name: island.name,
-      archipelagoId: newArchipelagoId,
-      color_score: 50,
-      cards: (island.cards || []).map((card: Card, index: number) => normalizeCard(card, index)),
-      createdAt: Date.now(),
-      isPublic: false,
-      approvalStatus: 'draft',
-    }));
+    const newIslands: Island[] = (sharedArchipelago.islands || []).map((island: any) => {
+      const sourceCards: Card[] = island.cards || [];
+
+      // Strip the published id so normalizeCard generates a fresh one, but capture
+      // the original→new mapping so prevTierCardId links can be remapped.
+      const idMap = new Map<string, string>();
+      const normalizedCards = sourceCards.map((card, index) => {
+        const normalized = normalizeCard({ ...card, id: undefined }, index);
+        if (card.id) idMap.set(card.id, normalized.id!);
+        return normalized;
+      });
+      normalizedCards.forEach(card => {
+        if (card.prevTierCardId) {
+          card.prevTierCardId = idMap.get(card.prevTierCardId) ?? card.prevTierCardId;
+        }
+      });
+
+      return {
+        id: randomId(),
+        name: island.name,
+        archipelagoId: newArchipelagoId,
+        color_score: 50,
+        cards: normalizedCards,
+        createdAt: Date.now(),
+        isPublic: false,
+        approvalStatus: 'draft',
+      };
+    });
 
     try {
       const batch = writeBatch(db);
@@ -1298,12 +1336,7 @@ export function useUserProgress() {
 
     try {
       const sourceRef = doc(db, 'published_archipelagos', sharedArchipelago.id);
-      const sourceDoc = await getDoc(sourceRef);
-      if (sourceDoc.exists()) {
-        await updateDoc(sourceRef, {
-          downloads: (sourceDoc.data().downloads || 0) + 1,
-        });
-      }
+      await updateDoc(sourceRef, { downloads: increment(1) });
     } catch (error) {
       console.warn('Could not increment download count.');
     }
@@ -1351,7 +1384,22 @@ export function useUserProgress() {
     if (!progress || !user) return;
 
     const newIslandId = randomId();
-    const importedCards = (island.cards || []).map((card, index) => normalizeCard(card, index));
+    const sourceCards = island.cards || [];
+
+    // Strip the published id so normalizeCard generates a fresh one, but capture
+    // the original→new mapping so prevTierCardId links can be remapped.
+    const idMap = new Map<string, string>();
+    const importedCards = sourceCards.map((card, index) => {
+      const normalized = normalizeCard({ ...card, id: undefined }, index);
+      if (card.id) idMap.set(card.id, normalized.id!);
+      return normalized;
+    });
+    importedCards.forEach(card => {
+      if (card.prevTierCardId) {
+        card.prevTierCardId = idMap.get(card.prevTierCardId) ?? card.prevTierCardId;
+      }
+    });
+
     const newIsland: Island = {
       id: newIslandId,
       name: island.name,
@@ -1361,7 +1409,7 @@ export function useUserProgress() {
       approvalStatus: 'draft',
       authorId: island.authorId,
       authorName: island.authorName,
-      downloads: (island.downloads || 0) + 1,
+      downloads: 0,
       createdAt: Date.now(),
       isImported: false,
       sharedWith: [],
@@ -1381,12 +1429,7 @@ export function useUserProgress() {
 
     try {
       const sourceRef = doc(db, 'published_islands', island.id);
-      const sourceDoc = await getDoc(sourceRef);
-      if (sourceDoc.exists()) {
-        await updateDoc(sourceRef, {
-          downloads: (sourceDoc.data().downloads || 0) + 1,
-        });
-      }
+      await updateDoc(sourceRef, { downloads: increment(1) });
     } catch (error) {
       console.warn('Could not increment download count, but importing anyway.');
     }

@@ -619,6 +619,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                         }}
                         friends={friends}
                         fetchProfilesByUids={fetchProfilesByUids}
+                        sharedAtTimestamps={island.sharedAtTimestamps}
                       />
                     )}
 
