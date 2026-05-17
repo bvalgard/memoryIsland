@@ -51,6 +51,12 @@ export default function Dashboard() {
     dismissShare,
     removeArchipelago,
     updateArchipelagos,
+    createCollaborativeIsland,
+    addCollaborator,
+    removeCollaborator,
+    createCollaborativeArchipelago,
+    addArchipelagoCollaborator,
+    removeArchipelagoCollaborator,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -629,8 +635,13 @@ export default function Dashboard() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={addIsland}
+        onSubmitCollaborative={async (name, collaboratorUids, archipelagoId) => {
+          await createCollaborativeIsland(name, collaboratorUids, archipelagoId ?? undefined);
+        }}
         archipelagos={progress?.archipelagos || []}
         defaultArchipelagoId={selectedArchipelagoId}
+        friends={friends}
+        fetchProfilesByUids={fetchProfilesByUids}
       />
 
       <NewArchipelagoModal
@@ -640,6 +651,12 @@ export default function Dashboard() {
           const newId = await addArchipelago(name);
           if (newId) setSelectedArchipelagoId(newId);
         }}
+        onSubmitCollaborative={async (name, collaboratorUids) => {
+          const newId = await createCollaborativeArchipelago(name, collaboratorUids);
+          if (newId) setSelectedArchipelagoId(newId);
+        }}
+        friends={friends}
+        fetchProfilesByUids={fetchProfilesByUids}
       />
 
       {/* Community / Social Modal (Users) */}
@@ -2335,6 +2352,9 @@ export default function Dashboard() {
                   progressTrackingMode={trackingMode}
                   friends={friends}
                   fetchProfilesByUids={fetchProfilesByUids}
+                  currentUserId={user?.uid ?? undefined}
+                  onAddCollaborator={async (uid) => addCollaborator(selectedIsland.id, uid)}
+                  onRemoveCollaborator={async (uid) => removeCollaborator(selectedIsland.id, uid)}
                 />
               </motion.div>
             )}
@@ -2689,9 +2709,17 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClic
       </div>
       
       <div className="flex-1 overflow-hidden">
-        <h3 className="text-lg font-bold mb-1 text-white truncate group-hover:whitespace-normal transition-all duration-300" title={island.name}>
-          {island.name}
-        </h3>
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-lg font-bold text-white truncate group-hover:whitespace-normal transition-all duration-300" title={island.name}>
+            {island.name}
+          </h3>
+          {island.isCollaborative && (
+            <span className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[9px] font-black uppercase tracking-widest">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              Crew
+            </span>
+          )}
+        </div>
         <p className="text-brand-muted text-xs uppercase tracking-[0.15em] font-medium mb-1">
           {island.cards?.length || 0} Core Cards
         </p>

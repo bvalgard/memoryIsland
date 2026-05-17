@@ -1,35 +1,63 @@
 import { useState } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X } from 'lucide-react';
+import { X, Users, Check } from 'lucide-react';
+import { UserProfile } from '../hooks/useSocial';
 
 interface NewIslandModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (name: string, archipelagoId: string | null) => void;
+  onSubmitCollaborative?: (name: string, collaboratorUids: string[], archipelagoId: string | null) => void;
   archipelagos: { id: string; name: string }[];
   defaultArchipelagoId: string | null;
+  friends?: string[];
+  fetchProfilesByUids?: (uids: string[]) => Promise<UserProfile[]>;
 }
 
-export default function NewIslandModal({ isOpen, onClose, onSubmit, archipelagos, defaultArchipelagoId }: NewIslandModalProps) {
+export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitCollaborative, archipelagos, defaultArchipelagoId, friends = [], fetchProfilesByUids = async () => [] }: NewIslandModalProps) {
   const [name, setName] = useState('');
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(defaultArchipelagoId);
+  const [isCollaborative, setIsCollaborative] = useState(false);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const [friendProfiles, setFriendProfiles] = useState<UserProfile[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
-  // Update selected if default changes when reopened
   React.useEffect(() => {
     if (isOpen) {
       setSelectedArchipelagoId(defaultArchipelagoId);
       setName('');
+      setIsCollaborative(false);
+      setSelectedFriends([]);
     }
   }, [isOpen, defaultArchipelagoId]);
 
+  const handleCollaborativeToggle = async (enabled: boolean) => {
+    setIsCollaborative(enabled);
+    if (enabled && friends.length > 0 && friendProfiles.length === 0) {
+      setLoadingFriends(true);
+      const profiles = await fetchProfilesByUids(friends);
+      setFriendProfiles(profiles);
+      setLoadingFriends(false);
+    }
+  };
+
+  const toggleFriend = (uid: string) => {
+    setSelectedFriends(prev =>
+      prev.includes(uid) ? prev.filter(u => u !== uid) : [...prev, uid]
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim()) {
+    if (!name.trim()) return;
+    if (isCollaborative && onSubmitCollaborative) {
+      onSubmitCollaborative(name.trim(), selectedFriends, selectedArchipelagoId);
+    } else {
       onSubmit(name.trim(), selectedArchipelagoId);
-      setName('');
-      onClose();
     }
+    setName('');
+    onClose();
   };
 
   return (
@@ -43,7 +71,7 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, archipelagos
             onClick={onClose}
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           />
-          
+
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -71,7 +99,7 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, archipelagos
                     placeholder="e.g. Quantum Physics"
                     className="w-full mb-4 bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors"
                   />
-                  
+
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-4">
                     Archipelago (Collection)
                   </label>
@@ -87,12 +115,77 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, archipelagos
                   </select>
                 </div>
 
+                {onSubmitCollaborative && friends.length > 0 && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handleCollaborativeToggle(!isCollaborative)}
+                      className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl border transition-all ${
+                        isCollaborative
+                          ? 'bg-violet-500/10 border-violet-500/40 text-violet-300'
+                          : 'bg-white/5 border-brand-border text-brand-muted hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Users className="w-4 h-4" />
+                        <div className="text-left">
+                          <p className="text-xs font-bold uppercase tracking-widest">Collaborative Island</p>
+                          <p className="text-[10px] opacity-70 mt-0.5">Invite friends to co-create cards</p>
+                        </div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                        isCollaborative ? 'bg-violet-500 border-violet-400' : 'border-white/20'
+                      }`}>
+                        {isCollaborative && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                    </button>
+
+                    {isCollaborative && (
+                      <div className="mt-3">
+                        <p className="text-[10px] text-brand-muted uppercase tracking-widest font-medium mb-2">
+                          Invite to crew ({selectedFriends.length} selected)
+                        </p>
+                        {loadingFriends ? (
+                          <p className="text-[10px] text-brand-muted">Loading friends...</p>
+                        ) : (
+                          <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                            {friendProfiles.map((profile) => (
+                              <button
+                                key={profile.uid}
+                                type="button"
+                                onClick={() => toggleFriend(profile.uid)}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left ${
+                                  selectedFriends.includes(profile.uid)
+                                    ? 'bg-violet-500/15 border border-violet-500/30'
+                                    : 'hover:bg-white/5 border border-transparent'
+                                }`}
+                              >
+                                {profile.photoURL ? (
+                                  <img src={profile.photoURL} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                                    {profile.displayName?.[0]?.toUpperCase() || '?'}
+                                  </div>
+                                )}
+                                <span className="text-sm text-white flex-1">{profile.displayName}</span>
+                                {selectedFriends.includes(profile.uid) && (
+                                  <Check className="w-4 h-4 text-violet-300 shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={!name.trim()}
                   className="w-full btn-primary h-14 disabled:opacity-50"
                 >
-                  Anchor Island
+                  {isCollaborative ? 'Create Crew Island' : 'Anchor Island'}
                 </button>
               </form>
             </div>

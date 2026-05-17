@@ -37,6 +37,20 @@ service cloud.firestore {
       return isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
+    function isCollaboratorOnIsland() {
+      return isSignedIn() &&
+             resource.data.isCollaborative == true &&
+             request.auth.uid in resource.data.collaborators;
+    }
+
+    function isIslandCollaboratorByDoc(islandId) {
+      let island = get(/databases/$(database)/documents/islands/$(islandId));
+      return isSignedIn() &&
+             island.data.isCollaborative == true &&
+             (island.data.ownerId == request.auth.uid ||
+              request.auth.uid in island.data.collaborators);
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -86,14 +100,32 @@ service cloud.firestore {
     // Admin-managed top-level content collections
     match /islands/{islandId} {
       allow create: if isIslandOwner() || isAdmin();
-      allow read: if ownsIsland() || isAdmin();
-      allow update, delete: if ownsIsland() || isAdmin();
+      allow read: if ownsIsland() || isCollaboratorOnIsland() || isAdmin();
+      allow update: if ownsIsland() || isCollaboratorOnIsland() || isAdmin();
+      allow delete: if ownsIsland() || isAdmin();
     }
 
     match /cards/{cardId} {
-      allow create: if isCardOwner() || isAdmin();
-      allow read: if ownsCard() || isAdmin();
-      allow update, delete: if ownsCard() || isAdmin();
+      allow create: if isCardOwner() || isIslandCollaboratorByDoc(request.resource.data.islandId) || isAdmin();
+      allow read: if ownsCard() || isIslandCollaboratorByDoc(resource.data.islandId) || isAdmin();
+      allow update: if ownsCard() || isIslandCollaboratorByDoc(resource.data.islandId) || isAdmin();
+      allow delete: if ownsCard() || isIslandCollaboratorByDoc(resource.data.islandId) || isAdmin();
+    }
+
+    // Collaborative archipelagos (top-level collection, separate from user-embedded arrays)
+    match /archipelagos/{archipelagoId} {
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.isCollaborative == true && request.auth.uid in resource.data.collaborators) ||
+        isAdmin()
+      );
+      allow update: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.isCollaborative == true && request.auth.uid in resource.data.collaborators) ||
+        isAdmin()
+      );
+      allow delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
     }
 
     match /adminStats/{docId} {

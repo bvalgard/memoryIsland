@@ -38,6 +38,20 @@ export type CardUpdateRecord = Record<string, {
   sessionCorrect?: number;
 }>;
 
+export interface UserCardProgress {
+  status?: CardStatus;
+  consecutiveCorrect?: number;
+  lastReviewed?: number;
+  needsWork?: boolean;
+  demotionCount?: number;
+  srsInterval?: number;
+  srsEaseFactor?: number;
+  srsNextReview?: number;
+  srsRepetitions?: number;
+  totalAnswers?: number;
+  totalCorrect?: number;
+}
+
 export interface Card {
   id?: string;
   front: string;
@@ -67,6 +81,7 @@ export interface Card {
   totalAnswers?: number;
   totalCorrect?: number;
   islandName?: string;
+  userProgress?: Record<string, UserCardProgress>;
 }
 
 export interface Archipelago {
@@ -77,6 +92,10 @@ export interface Archipelago {
   isImported?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
+  isCollaborative?: boolean;
+  collaborators?: string[];
+  ownerId?: string;
+  isTopLevel?: boolean;
 }
 
 export interface Island {
@@ -95,6 +114,9 @@ export interface Island {
   isImported?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
+  isCollaborative?: boolean;
+  collaborators?: string[];
+  ownerId?: string;
 }
 
 export interface UserStats {
@@ -162,6 +184,21 @@ interface IslandDocumentData {
   isImported?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
+  isCollaborative?: boolean;
+  collaborators?: string[];
+}
+
+interface ArchipelagoDocumentData {
+  id: string;
+  name: string;
+  ownerId: string;
+  collaborators: string[];
+  isCollaborative: boolean;
+  isPublic?: boolean;
+  publishedId?: string;
+  sharedWith?: string[];
+  sharedAtTimestamps?: Record<string, number>;
+  createdAt: number;
 }
 
 interface CardDocumentData extends Card {
@@ -169,6 +206,7 @@ interface CardDocumentData extends Card {
   ownerId: string;
   position: number;
   createdAt?: number;
+  userProgress?: Record<string, UserCardProgress>;
 }
 
 enum OperationType {
@@ -320,6 +358,8 @@ function toIslandDocument(island: Island, ownerId: string, ownerEmail?: string |
     isImported: island.isImported || false,
     sharedWith: island.sharedWith || [],
     sharedAtTimestamps: island.sharedAtTimestamps || {},
+    isCollaborative: island.isCollaborative || false,
+    collaborators: island.collaborators || [],
   });
 }
 
@@ -377,9 +417,15 @@ export function useUserProgress() {
   const [userData, setUserData] = useState<UserDocumentData | null>(null);
   const [islandDocs, setIslandDocs] = useState<Array<{ id: string; data: IslandDocumentData }>>([]);
   const [cardDocs, setCardDocs] = useState<Array<{ id: string; data: CardDocumentData }>>([]);
+  const [collabIslandDocs, setCollabIslandDocs] = useState<Array<{ id: string; data: IslandDocumentData }>>([]);
+  const [collabCardDocs, setCollabCardDocs] = useState<Array<{ id: string; data: CardDocumentData }>>([]);
+  const [topLevelArchipelagoDocs, setTopLevelArchipelagoDocs] = useState<Array<{ id: string; data: ArchipelagoDocumentData }>>([]);
   const [userLoaded, setUserLoaded] = useState(false);
   const [islandsLoaded, setIslandsLoaded] = useState(false);
   const [cardsLoaded, setCardsLoaded] = useState(false);
+  const [collabIslandsLoaded, setCollabIslandsLoaded] = useState(false);
+  const [collabCardsLoaded, setCollabCardsLoaded] = useState(false);
+  const [topLevelArchipelagosLoaded, setTopLevelArchipelagosLoaded] = useState(false);
   const migrationInProgress = useRef(false);
   const user = auth.currentUser;
 
@@ -582,59 +628,183 @@ export function useUserProgress() {
       }
     );
 
+    // Collaborative islands where this user is a collaborator (not the owner)
+    const collabIslandsQuery = query(collection(db, 'islands'), where('collaborators', 'array-contains', user.uid));
+    const unsubscribeCollabIslands = onSnapshot(
+      collabIslandsQuery,
+      (snapshot) => {
+        setCollabIslandDocs(snapshot.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() as IslandDocumentData })));
+        setCollabIslandsLoaded(true);
+      },
+      (error) => {
+        console.warn('Could not load collaborative islands:', error);
+        setCollabIslandsLoaded(true);
+      }
+    );
+
+    // Top-level collaborative archipelagos (owned or collaborated)
+    const ownedArchipelagosQuery = query(collection(db, 'archipelagos'), where('ownerId', '==', user.uid));
+    const collabArchipelagosQuery = query(collection(db, 'archipelagos'), where('collaborators', 'array-contains', user.uid));
+    let ownedArchipelagoDocs: Array<{ id: string; data: ArchipelagoDocumentData }> = [];
+    let collabArchipelagosFromQuery: Array<{ id: string; data: ArchipelagoDocumentData }> = [];
+    let ownedLoaded = false;
+    let collabLoaded = false;
+
+    const mergeAndSetTopLevel = () => {
+      if (!ownedLoaded || !collabLoaded) return;
+      const seen = new Set<string>();
+      const merged: Array<{ id: string; data: ArchipelagoDocumentData }> = [];
+      for (const entry of [...ownedArchipelagoDocs, ...collabArchipelagosFromQuery]) {
+        if (!seen.has(entry.id)) {
+          seen.add(entry.id);
+          merged.push(entry);
+        }
+      }
+      setTopLevelArchipelagoDocs(merged);
+      setTopLevelArchipelagosLoaded(true);
+    };
+
+    const unsubscribeOwnedArchipelagos = onSnapshot(
+      ownedArchipelagosQuery,
+      (snapshot) => {
+        ownedArchipelagoDocs = snapshot.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() as ArchipelagoDocumentData }));
+        ownedLoaded = true;
+        mergeAndSetTopLevel();
+      },
+      (error) => {
+        console.warn('Could not load owned top-level archipelagos:', error);
+        ownedLoaded = true;
+        mergeAndSetTopLevel();
+      }
+    );
+
+    const unsubscribeCollabArchipelagos = onSnapshot(
+      collabArchipelagosQuery,
+      (snapshot) => {
+        collabArchipelagosFromQuery = snapshot.docs.map((docSnap) => ({ id: docSnap.id, data: docSnap.data() as ArchipelagoDocumentData }));
+        collabLoaded = true;
+        mergeAndSetTopLevel();
+      },
+      (error) => {
+        console.warn('Could not load collaborative archipelagos:', error);
+        collabLoaded = true;
+        mergeAndSetTopLevel();
+      }
+    );
+
     return () => {
       unsubscribeUser();
       unsubscribeIslands();
       unsubscribeCards();
+      unsubscribeCollabIslands();
+      unsubscribeOwnedArchipelagos();
+      unsubscribeCollabArchipelagos();
     };
   }, [user]);
 
+  // Fetch cards from collaborative islands (owned by others but accessible to this user)
   useEffect(() => {
-    if (!userLoaded || !islandsLoaded || !cardsLoaded || !userData) {
+    if (!user || collabIslandDocs.length === 0) {
+      setCollabCardDocs([]);
+      setCollabCardsLoaded(true);
+      return;
+    }
+
+    const collabIslandIds = collabIslandDocs.map((d) => d.id);
+    const chunks = chunk(collabIslandIds, 30);
+
+    Promise.all(
+      chunks.map((ids) =>
+        getDocs(query(collection(db, 'cards'), where('islandId', 'in', ids)))
+      )
+    )
+      .then((snapshots) => {
+        const docs: Array<{ id: string; data: CardDocumentData }> = [];
+        snapshots.forEach((snap) => {
+          snap.docs.forEach((docSnap) => {
+            docs.push({ id: docSnap.id, data: docSnap.data() as CardDocumentData });
+          });
+        });
+        setCollabCardDocs(docs);
+        setCollabCardsLoaded(true);
+      })
+      .catch((error) => {
+        console.warn('Could not load collaborative island cards:', error);
+        setCollabCardDocs([]);
+        setCollabCardsLoaded(true);
+      });
+  }, [collabIslandDocs, user]);
+
+  useEffect(() => {
+    if (!userLoaded || !islandsLoaded || !cardsLoaded || !collabIslandsLoaded || !collabCardsLoaded || !topLevelArchipelagosLoaded || !userData) {
       setLoading(true);
       return;
     }
 
+    const uid = user?.uid;
+    const collabIslandIds = new Set(collabIslandDocs.map((d) => d.id));
+
     const cardsByIsland = new Map<string, Card[]>();
 
-    [...cardDocs]
+    const assembleCard = (id: string, data: CardDocumentData, isCollab: boolean): Card => {
+      const userProg = isCollab && uid ? data.userProgress?.[uid] : undefined;
+      return {
+        id,
+        front: data.front,
+        back: data.back,
+        type: data.type,
+        options: data.options || [],
+        correctOptions: data.correctOptions || [],
+        explanations: data.explanations || {},
+        explanation: data.explanation || '',
+        pairs: data.pairs || [],
+        hint: data.hint || '',
+        prevTierCardId: data.prevTierCardId,
+        tier: data.tier,
+        imageUrl: data.imageUrl,
+        backImageUrl: data.backImageUrl,
+        imageCredit: data.imageCredit,
+        backImageCredit: data.backImageCredit,
+        // Per-user progress: read from userProgress map for collab cards, fall back to top-level
+        needsWork: userProg?.needsWork ?? data.needsWork,
+        status: userProg?.status ?? data.status,
+        consecutiveCorrect: userProg?.consecutiveCorrect ?? data.consecutiveCorrect,
+        lastReviewed: userProg?.lastReviewed ?? data.lastReviewed,
+        demotionCount: userProg?.demotionCount ?? data.demotionCount,
+        srsInterval: userProg?.srsInterval ?? data.srsInterval,
+        srsEaseFactor: userProg?.srsEaseFactor ?? data.srsEaseFactor,
+        srsNextReview: userProg?.srsNextReview ?? data.srsNextReview,
+        srsRepetitions: userProg?.srsRepetitions ?? data.srsRepetitions,
+        totalAnswers: userProg?.totalAnswers ?? data.totalAnswers,
+        totalCorrect: userProg?.totalCorrect ?? data.totalCorrect,
+        userProgress: isCollab ? data.userProgress : undefined,
+      };
+    };
+
+    // Merge owned cards and collab cards, deduplicating by id
+    const seenCardIds = new Set<string>();
+    [...cardDocs, ...collabCardDocs]
       .sort((a, b) => a.data.position - b.data.position)
       .forEach(({ data, id }) => {
+        if (seenCardIds.has(id)) return;
+        seenCardIds.add(id);
+        const isCollab = collabIslandIds.has(data.islandId);
         const existing = cardsByIsland.get(data.islandId) || [];
-        existing.push({
-          id,
-          front: data.front,
-          back: data.back,
-          type: data.type,
-          options: data.options || [],
-          correctOptions: data.correctOptions || [],
-          explanations: data.explanations || {},
-          explanation: data.explanation || '',
-          pairs: data.pairs || [],
-          needsWork: data.needsWork,
-          status: data.status,
-          consecutiveCorrect: data.consecutiveCorrect,
-          lastReviewed: data.lastReviewed,
-          prevTierCardId: data.prevTierCardId,
-          tier: data.tier,
-          hint: data.hint || '',
-          demotionCount: data.demotionCount,
-          imageUrl: data.imageUrl,
-          backImageUrl: data.backImageUrl,
-          imageCredit: data.imageCredit,
-          backImageCredit: data.backImageCredit,
-          srsInterval: data.srsInterval,
-          srsEaseFactor: data.srsEaseFactor,
-          srsNextReview: data.srsNextReview,
-          srsRepetitions: data.srsRepetitions,
-          totalAnswers: data.totalAnswers,
-          totalCorrect: data.totalCorrect,
-        });
+        existing.push(assembleCard(id, data, isCollab));
         cardsByIsland.set(data.islandId, existing);
       });
 
-    const assembledIslands: Island[] = [...islandDocs]
-      .sort((a, b) => (a.data.createdAt || 0) - (b.data.createdAt || 0))
+    // Merge owned islands and collab islands, deduplicating by id
+    const seenIslandIds = new Set<string>();
+    const allIslandDocs = [...islandDocs, ...collabIslandDocs]
+      .sort((a, b) => (a.data.createdAt || 0) - (b.data.createdAt || 0));
+
+    const assembledIslands: Island[] = allIslandDocs
+      .filter(({ id }) => {
+        if (seenIslandIds.has(id)) return false;
+        seenIslandIds.add(id);
+        return true;
+      })
       .map(({ id, data }) => ({
         id,
         name: data.name,
@@ -650,19 +820,41 @@ export function useUserProgress() {
         isImported: data.isImported || false,
         sharedWith: data.sharedWith || [],
         sharedAtTimestamps: data.sharedAtTimestamps || {},
+        isCollaborative: data.isCollaborative || false,
+        collaborators: data.collaborators || [],
+        ownerId: data.ownerId,
         cards: cardsByIsland.get(id) || [],
       }));
 
+    // Merge legacy embedded archipelagos with top-level collaborative ones
+    const legacyArchipelagos: Archipelago[] = (userData.archipelagos || []).map((a) => ({
+      ...a,
+      isTopLevel: false,
+    }));
+    const topLevelArchipelagos: Archipelago[] = topLevelArchipelagoDocs.map(({ id, data }) => ({
+      id,
+      name: data.name,
+      isPublic: data.isPublic,
+      publishedId: data.publishedId,
+      sharedWith: data.sharedWith || [],
+      sharedAtTimestamps: data.sharedAtTimestamps || {},
+      isCollaborative: data.isCollaborative,
+      collaborators: data.collaborators,
+      ownerId: data.ownerId,
+      isTopLevel: true,
+    }));
+    const allArchipelagos = [...legacyArchipelagos, ...topLevelArchipelagos];
+
     setProgress({
       last_active: userData.last_active || Timestamp.now(),
-      archipelagos: userData.archipelagos || [],
+      archipelagos: allArchipelagos,
       stats: { ...defaultStats, ...(userData.stats || {}) },
       settings: { ...defaultSettings, ...(userData.settings || {}) },
       islands: assembledIslands,
       achievements: userData.achievements || [],
     });
     setLoading(false);
-  }, [userLoaded, islandsLoaded, cardsLoaded, userData, islandDocs, cardDocs]);
+  }, [userLoaded, islandsLoaded, cardsLoaded, collabIslandsLoaded, collabCardsLoaded, topLevelArchipelagosLoaded, userData, islandDocs, cardDocs, collabIslandDocs, collabCardDocs, topLevelArchipelagoDocs, user]);
 
   const updateStats = async (newStats: Partial<UserStats>) => {
     if (!user || isConfigPlaceholder || !progress?.stats) return;
@@ -715,11 +907,13 @@ export function useUserProgress() {
 
   const updateArchipelagos = async (newArchipelagos: Archipelago[]) => {
     if (!user || isConfigPlaceholder) return;
+    // Only persist legacy embedded archipelagos to the user doc — top-level ones have their own collection
+    const embeddedOnly = newArchipelagos.filter((a) => !a.isTopLevel);
     try {
       await setDoc(
         doc(db, 'users', user.uid),
         {
-          archipelagos: omitUndefined(newArchipelagos),
+          archipelagos: omitUndefined(embeddedOnly),
           last_active: Timestamp.now(),
         },
         { merge: true }
@@ -795,6 +989,7 @@ export function useUserProgress() {
 
   const removeArchipelago = async (archipelagoId: string) => {
     if (!user || !progress) return;
+    const archipelago = (progress.archipelagos || []).find(a => a.id === archipelagoId);
     const islandsToRemove = progress.islands.filter(i => i.archipelagoId === archipelagoId);
 
     try {
@@ -811,8 +1006,18 @@ export function useUserProgress() {
       return;
     }
 
-    const updatedArchipelagos = (progress.archipelagos || []).filter(a => a.id !== archipelagoId);
-    await updateArchipelagos(updatedArchipelagos);
+    if (archipelago?.isTopLevel) {
+      // Top-level doc — delete from archipelagos collection
+      try {
+        await deleteDoc(doc(db, 'archipelagos', archipelagoId));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `archipelagos/${archipelagoId}`);
+      }
+    } else {
+      // Legacy embedded — update user doc
+      const updatedArchipelagos = (progress.archipelagos || []).filter(a => a.id !== archipelagoId);
+      await updateArchipelagos(updatedArchipelagos);
+    }
   };
 
   const addIsland = async (name: string, archipelagoId?: string) => {
@@ -863,9 +1068,11 @@ export function useUserProgress() {
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
 
+    // For collaborative islands, use the island owner's uid so the owner's card query returns this card
+    const cardOwnerId = island.isCollaborative ? (island.ownerId ?? user.uid) : user.uid;
     const normalized = normalizeCard(card, island.cards.length);
     try {
-      await setDoc(doc(db, 'cards', normalized.id!), toCardDocument(normalized, islandId, user.uid, island.cards.length));
+      await setDoc(doc(db, 'cards', normalized.id!), toCardDocument(normalized, islandId, cardOwnerId, island.cards.length));
       if (progress.stats) {
         await updateStats({ totalCardsCreated: progress.stats.totalCardsCreated + 1 });
       }
@@ -879,10 +1086,11 @@ export function useUserProgress() {
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
 
+    const cardOwnerId = island.isCollaborative ? (island.ownerId ?? user.uid) : user.uid;
     const batch = writeBatch(db);
     const normalizedCards = cards.map((card, index) => normalizeCard(card, island.cards.length + index));
     normalizedCards.forEach((card, index) => {
-      batch.set(doc(db, 'cards', card.id!), toCardDocument(card, islandId, user.uid, island.cards.length + index));
+      batch.set(doc(db, 'cards', card.id!), toCardDocument(card, islandId, cardOwnerId, island.cards.length + index));
     });
 
     try {
@@ -913,7 +1121,12 @@ export function useUserProgress() {
   const removeIsland = async (islandId: string) => {
     if (!user || !progress) return;
 
-    const cardsToDelete = progress.islands.find((island) => island.id === islandId)?.cards || [];
+    const island = progress.islands.find((i) => i.id === islandId);
+    if (island?.isCollaborative && island.ownerId !== user.uid) {
+      throw new Error('Only the island owner can delete a collaborative island.');
+    }
+
+    const cardsToDelete = island?.cards || [];
     const batch = writeBatch(db);
     cardsToDelete.forEach((card) => {
       if (card.id) {
@@ -994,33 +1207,62 @@ export function useUserProgress() {
     });
   };
 
+  const buildCardPayload = (card: Card, update: CardUpdateRecord[string], isCollab: boolean, uid: string): Record<string, unknown> => {
+    if (isCollab) {
+      const prefix = `userProgress.${uid}`;
+      const payload: Record<string, unknown> = {
+        [`${prefix}.status`]: update.status,
+        [`${prefix}.consecutiveCorrect`]: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
+        [`${prefix}.needsWork`]: update.status === 'struggling',
+        [`${prefix}.lastReviewed`]: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
+        [`${prefix}.totalAnswers`]: increment((update.sessionAnswers || 1)),
+        [`${prefix}.totalCorrect`]: increment((update.sessionCorrect || 0)),
+      };
+      if (update.wasDemoted) {
+        payload[`${prefix}.demotionCount`] = increment(1);
+      }
+      if (update.srsInterval !== undefined) {
+        payload[`${prefix}.srsInterval`] = update.srsInterval;
+        payload[`${prefix}.srsEaseFactor`] = update.srsEaseFactor;
+        payload[`${prefix}.srsNextReview`] = update.srsNextReview;
+        payload[`${prefix}.srsRepetitions`] = update.srsRepetitions;
+      }
+      return payload;
+    }
+
+    const payload: Record<string, unknown> = {
+      status: update.status,
+      consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
+      needsWork: update.status === 'struggling',
+      lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
+      totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
+      totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),
+    };
+    if (update.wasDemoted) {
+      payload.demotionCount = (card.demotionCount || 0) + 1;
+    }
+    if (update.srsInterval !== undefined) {
+      payload.srsInterval = update.srsInterval;
+      payload.srsEaseFactor = update.srsEaseFactor;
+      payload.srsNextReview = update.srsNextReview;
+      payload.srsRepetitions = update.srsRepetitions;
+    }
+    return payload;
+  };
+
   const processSessionResults = async (islandId: string, delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
-    if (!progress) return;
+    if (!progress || !user) return;
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
+
+    const isCollab = island.isCollaborative === true;
+    const uid = user.uid;
 
     const batch = writeBatch(db);
     island.cards.forEach((card) => {
       const update = cardUpdates[card.front];
       if (update && card.id) {
-        const cardPayload: Record<string, unknown> = {
-          status: update.status,
-          consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
-          needsWork: update.status === 'struggling',
-          lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
-          totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
-          totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),
-        };
-        if (update.wasDemoted) {
-          cardPayload.demotionCount = (card.demotionCount || 0) + 1;
-        }
-        if (update.srsInterval !== undefined) {
-          cardPayload.srsInterval = update.srsInterval;
-          cardPayload.srsEaseFactor = update.srsEaseFactor;
-          cardPayload.srsNextReview = update.srsNextReview;
-          cardPayload.srsRepetitions = update.srsRepetitions;
-        }
-        batch.update(doc(db, 'cards', card.id), cardPayload);
+        batch.update(doc(db, 'cards', card.id), buildCardPayload(card, update, isCollab, uid));
       }
     });
     try {
@@ -1032,34 +1274,18 @@ export function useUserProgress() {
   };
 
   const processArchipelagoResults = async (delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
-    if (!progress) return;
+    if (!progress || !user) return;
 
+    const uid = user.uid;
     const batch = writeBatch(db);
     progress.islands.forEach((island) => {
+      const isCollab = island.isCollaborative === true;
       island.cards.forEach((card) => {
         const update = cardUpdates[card.front];
         if (update && card.id) {
-          const cardPayload: Record<string, unknown> = {
-            status: update.status,
-            consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
-            needsWork: update.status === 'struggling',
-            lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
-            totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
-            totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),
-          };
-          if (update.wasDemoted) {
-            cardPayload.demotionCount = (card.demotionCount || 0) + 1;
-          }
-          if (update.srsInterval !== undefined) {
-            cardPayload.srsInterval = update.srsInterval;
-            cardPayload.srsEaseFactor = update.srsEaseFactor;
-            cardPayload.srsNextReview = update.srsNextReview;
-            cardPayload.srsRepetitions = update.srsRepetitions;
-          }
-          batch.update(doc(db, 'cards', card.id), cardPayload);
+          batch.update(doc(db, 'cards', card.id), buildCardPayload(card, update, isCollab, uid));
         }
       });
-
     });
 
     try {
@@ -1498,6 +1724,102 @@ export function useUserProgress() {
     }
   };
 
+  const createCollaborativeIsland = async (name: string, collaboratorUids: string[], archipelagoId?: string): Promise<string | undefined> => {
+    if (!user) return;
+    const islandId = randomId();
+    try {
+      await setDoc(doc(db, 'islands', islandId), toIslandDocument({
+        id: islandId,
+        name,
+        archipelagoId,
+        cards: [],
+        color_score: 50,
+        createdAt: Date.now(),
+        isPublic: false,
+        approvalStatus: 'draft',
+        isCollaborative: true,
+        collaborators: collaboratorUids,
+      }, user.uid, user.email));
+      return islandId;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `islands/${islandId}`);
+    }
+  };
+
+  const addCollaborator = async (islandId: string, uid: string) => {
+    if (!user || !progress) return;
+    const island = progress.islands.find((i) => i.id === islandId);
+    if (!island || island.ownerId !== user.uid) {
+      throw new Error('Only the island owner can add collaborators.');
+    }
+    try {
+      await updateDoc(doc(db, 'islands', islandId), { collaborators: arrayUnion(uid) });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
+    }
+  };
+
+  const removeCollaborator = async (islandId: string, uid: string) => {
+    if (!user || !progress) return;
+    const island = progress.islands.find((i) => i.id === islandId);
+    if (!island || island.ownerId !== user.uid) {
+      throw new Error('Only the island owner can remove collaborators.');
+    }
+    try {
+      await updateDoc(doc(db, 'islands', islandId), { collaborators: arrayRemove(uid) });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
+    }
+  };
+
+  const createCollaborativeArchipelago = async (name: string, collaboratorUids: string[]): Promise<string | undefined> => {
+    if (!user) return;
+    const archipelagoId = randomId();
+    const docData: ArchipelagoDocumentData = {
+      id: archipelagoId,
+      name,
+      ownerId: user.uid,
+      collaborators: collaboratorUids,
+      isCollaborative: true,
+      isPublic: false,
+      sharedWith: [],
+      sharedAtTimestamps: {},
+      createdAt: Date.now(),
+    };
+    try {
+      await setDoc(doc(db, 'archipelagos', archipelagoId), docData);
+      return archipelagoId;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `archipelagos/${archipelagoId}`);
+    }
+  };
+
+  const addArchipelagoCollaborator = async (archipelagoId: string, uid: string) => {
+    if (!user || !progress) return;
+    const archipelago = (progress.archipelagos || []).find((a) => a.id === archipelagoId);
+    if (!archipelago?.isTopLevel || archipelago.ownerId !== user.uid) {
+      throw new Error('Only the archipelago owner can add collaborators.');
+    }
+    try {
+      await updateDoc(doc(db, 'archipelagos', archipelagoId), { collaborators: arrayUnion(uid) });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
+    }
+  };
+
+  const removeArchipelagoCollaborator = async (archipelagoId: string, uid: string) => {
+    if (!user || !progress) return;
+    const archipelago = (progress.archipelagos || []).find((a) => a.id === archipelagoId);
+    if (!archipelago?.isTopLevel || archipelago.ownerId !== user.uid) {
+      throw new Error('Only the archipelago owner can remove collaborators.');
+    }
+    try {
+      await updateDoc(doc(db, 'archipelagos', archipelagoId), { collaborators: arrayRemove(uid) });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
+    }
+  };
+
   return {
     progress,
     loading,
@@ -1527,6 +1849,12 @@ export function useUserProgress() {
     deletePublishedIsland,
     deletePublishedArchipelago,
     dismissShare,
+    createCollaborativeIsland,
+    addCollaborator,
+    removeCollaborator,
+    createCollaborativeArchipelago,
+    addArchipelagoCollaborator,
+    removeArchipelagoCollaborator,
   };
 }
 

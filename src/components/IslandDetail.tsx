@@ -27,9 +27,12 @@ interface IslandDetailProps {
   progressTrackingMode?: 'srs' | 'status' | 'both';
   friends?: string[];
   fetchProfilesByUids?: (uids: string[]) => Promise<UserProfile[]>;
+  currentUserId?: string;
+  onAddCollaborator?: (uid: string) => Promise<void>;
+  onRemoveCollaborator?: (uid: string) => Promise<void>;
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [] }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator }: IslandDetailProps) {
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
     if (progressTrackingMode === 'srs') {
@@ -42,6 +45,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCollaboratorPanel, setShowCollaboratorPanel] = useState(false);
+  const [collaboratorProfiles, setCollaboratorProfiles] = useState<UserProfile[]>([]);
+  const [friendProfilesForInvite, setFriendProfilesForInvite] = useState<UserProfile[]>([]);
+  const [loadingCollaborators, setLoadingCollaborators] = useState(false);
+  const [showCollabInvite, setShowCollabInvite] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [movingCardIndex, setMovingCardIndex] = useState<number | null>(null);
   const [cardType, setCardType] = useState<Card['type']>('flashcard');
@@ -79,6 +87,29 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       : (island.sharedWith && island.sharedWith.length > 0)
         ? 'shared'
         : 'private';
+
+  const isCollaborative = island.isCollaborative === true;
+  const isCollabOwner = isCollaborative && island.ownerId === currentUserId;
+  const isCollabMember = isCollaborative && !isCollabOwner;
+
+  const openCollaboratorPanel = async () => {
+    setShowCollaboratorPanel(true);
+    const collabUids = island.collaborators || [];
+    if (collabUids.length > 0) {
+      setLoadingCollaborators(true);
+      const profiles = await fetchProfilesByUids(collabUids);
+      setCollaboratorProfiles(profiles);
+      setLoadingCollaborators(false);
+    }
+  };
+
+  const openCollabInvite = async () => {
+    setShowCollabInvite(true);
+    if (friends.length > 0 && friendProfilesForInvite.length === 0) {
+      const profiles = await fetchProfilesByUids(friends);
+      setFriendProfilesForInvite(profiles);
+    }
+  };
   
   const resetCardForm = () => {
     setEditingCardIndex(null);
@@ -681,7 +712,146 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   </div>
                 )}
                 
-                {onDeleteIsland && (
+                {isCollaborative && (
+                  <div className="relative">
+                    <button
+                      onClick={() => isCollabOwner ? openCollaboratorPanel() : setShowCollaboratorPanel(true)}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30"
+                      title={isCollabOwner ? "Manage collaborators" : "Collaborative island"}
+                    >
+                      <Users className="w-3 h-3" />
+                      {isCollabOwner ? `Crew (${(island.collaborators || []).length})` : 'Crew'}
+                    </button>
+
+                    <AnimatePresence>
+                      {showCollaboratorPanel && (
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
+                            onClick={() => { setShowCollaboratorPanel(false); setShowCollabInvite(false); }}
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                            className="absolute top-full left-0 mt-3 w-72 glass p-5 rounded-[24px] border border-violet-500/20 shadow-2xl z-[70] bg-violet-500/5 backdrop-blur-xl"
+                          >
+                            <div className="flex items-center justify-between mb-4">
+                              <p className="text-xs font-bold text-white">Crew</p>
+                              <button onClick={() => { setShowCollaboratorPanel(false); setShowCollabInvite(false); }} className="text-brand-muted hover:text-white">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {isCollabMember && (
+                              <p className="text-[10px] text-brand-muted mb-3">
+                                This is a collaborative island. All crew members can add and edit cards.
+                              </p>
+                            )}
+
+                            {loadingCollaborators ? (
+                              <p className="text-[10px] text-brand-muted">Loading crew...</p>
+                            ) : (
+                              <div className="space-y-2 mb-4">
+                                {/* Island owner */}
+                                <div className="flex items-center justify-between py-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center">
+                                      <Users className="w-3 h-3 text-violet-300" />
+                                    </div>
+                                    <span className="text-[11px] text-white font-medium">
+                                      {island.authorName || 'Owner'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] text-violet-300 font-black uppercase tracking-widest">Owner</span>
+                                </div>
+                                {/* Collaborators */}
+                                {collaboratorProfiles.map((profile) => (
+                                  <div key={profile.uid} className="flex items-center justify-between py-1.5">
+                                    <div className="flex items-center gap-2">
+                                      {profile.photoURL ? (
+                                        <img src={profile.photoURL} className="w-6 h-6 rounded-full object-cover" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-bold text-white">
+                                          {profile.displayName?.[0]?.toUpperCase() || '?'}
+                                        </div>
+                                      )}
+                                      <span className="text-[11px] text-white">{profile.displayName}</span>
+                                    </div>
+                                    {isCollabOwner && onRemoveCollaborator && (
+                                      <button
+                                        onClick={async () => {
+                                          await onRemoveCollaborator(profile.uid);
+                                          setCollaboratorProfiles(prev => prev.filter(p => p.uid !== profile.uid));
+                                        }}
+                                        className="text-brand-muted hover:text-red-400 transition-colors"
+                                        title="Remove from crew"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                                {(island.collaborators || []).length === 0 && (
+                                  <p className="text-[10px] text-brand-muted">No crew members yet.</p>
+                                )}
+                              </div>
+                            )}
+
+                            {isCollabOwner && !showCollabInvite && (
+                              <button
+                                onClick={openCollabInvite}
+                                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-violet-500/20 text-violet-300 text-[10px] font-black uppercase tracking-widest hover:bg-violet-500/30 transition-colors border border-violet-500/20"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Invite to crew
+                              </button>
+                            )}
+
+                            {isCollabOwner && showCollabInvite && (
+                              <div className="mt-2">
+                                <p className="text-[10px] text-brand-muted mb-2">Select a friend to add:</p>
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                  {friendProfilesForInvite
+                                    .filter(p => !(island.collaborators || []).includes(p.uid))
+                                    .map((profile) => (
+                                      <button
+                                        key={profile.uid}
+                                        onClick={async () => {
+                                          if (!onAddCollaborator) return;
+                                          await onAddCollaborator(profile.uid);
+                                          setCollaboratorProfiles(prev => [...prev, profile]);
+                                          setShowCollabInvite(false);
+                                        }}
+                                        className="w-full flex items-center gap-2 py-1.5 px-2 rounded-xl hover:bg-white/5 text-left transition-colors"
+                                      >
+                                        {profile.photoURL ? (
+                                          <img src={profile.photoURL} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                                        ) : (
+                                          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-bold text-white shrink-0">
+                                            {profile.displayName?.[0]?.toUpperCase() || '?'}
+                                          </div>
+                                        )}
+                                        <span className="text-[11px] text-white">{profile.displayName}</span>
+                                      </button>
+                                    ))}
+                                  {friendProfilesForInvite.filter(p => !(island.collaborators || []).includes(p.uid)).length === 0 && (
+                                    <p className="text-[10px] text-brand-muted">All friends are already in the crew.</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {onDeleteIsland && !isCollabMember && (
                   <div className="relative">
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
