@@ -2233,14 +2233,11 @@ export default function Dashboard() {
                       let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
                       if (trackingMode === 'srs') {
                         const now = Date.now();
-                        const endOfToday = new Date();
-                        endOfToday.setHours(23, 59, 59, 999);
-                        const endOfTodayMs = endOfToday.getTime();
                         const sevenDaysMs = now + 7 * 24 * 60 * 60 * 1000;
 
                         if (island.cards.length > 0) {
-                          const hasDueToday = island.cards.some((c: any) => !c.srsNextReview || c.srsNextReview <= endOfTodayMs);
-                          if (hasDueToday) {
+                          const hasDueOrOverdue = island.cards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now);
+                          if (hasDueOrOverdue) {
                             masteryLevel = 'struggling';
                           } else if (island.cards.some((c: any) => c.srsNextReview <= sevenDaysMs)) {
                             masteryLevel = 'learning';
