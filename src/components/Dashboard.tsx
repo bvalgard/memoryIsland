@@ -685,7 +685,19 @@ export default function Dashboard() {
         onClose={() => setIsModalOpen(false)}
         onSubmit={addIsland}
         onSubmitCollaborative={async (name, collaboratorUids, archipelagoId) => {
-          await createCollaborativeIsland(name, collaboratorUids, archipelagoId ?? undefined);
+          let finalCollaborators = collaboratorUids;
+          if (archipelagoId) {
+            // When creating inside a collaborative archipelago the modal passes only
+            // arch.collaborators — which excludes the arch owner.  Build the full
+            // crew (owner + collaborators) then remove the current user (who becomes
+            // the island's ownerId and doesn't need to be in collaborators).
+            const arch = (progress?.archipelagos || []).find(a => a.id === archipelagoId);
+            if (arch?.isCollaborative && arch.ownerId) {
+              const fullCrew = [...new Set([arch.ownerId, ...(arch.collaborators || [])])];
+              finalCollaborators = fullCrew.filter(uid => uid !== user?.uid);
+            }
+          }
+          await createCollaborativeIsland(name, finalCollaborators, archipelagoId ?? undefined);
         }}
         archipelagos={(progress?.archipelagos || []).map(a => ({
           id: a.id,

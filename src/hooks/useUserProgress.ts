@@ -702,7 +702,7 @@ export function useUserProgress() {
     };
   }, [user]);
 
-  // Fetch cards from collaborative islands (owned by others but accessible to this user)
+  // Real-time listener for cards in collaborative islands
   useEffect(() => {
     if (!user || collabIslandDocs.length === 0) {
       setCollabCardDocs([]);
@@ -713,26 +713,41 @@ export function useUserProgress() {
     const collabIslandIds = collabIslandDocs.map((d) => d.id);
     const chunks = chunk(collabIslandIds, 30);
 
-    Promise.all(
-      chunks.map((ids) =>
-        getDocs(query(collection(db, 'cards'), where('islandId', 'in', ids)))
+    // One Map per chunk; rebuilt into collabCardDocs whenever any chunk fires
+    const chunkMaps: Map<string, CardDocumentData>[] = chunks.map(() => new Map());
+    const chunkLoaded: boolean[] = chunks.map(() => false);
+    let active = true;
+
+    const rebuild = () => {
+      if (!active || !chunkLoaded.every(Boolean)) return;
+      const merged: Array<{ id: string; data: CardDocumentData }> = [];
+      chunkMaps.forEach(m => m.forEach((data, id) => merged.push({ id, data })));
+      setCollabCardDocs(merged);
+      setCollabCardsLoaded(true);
+    };
+
+    const unsubscribers = chunks.map((ids, i) =>
+      onSnapshot(
+        query(collection(db, 'cards'), where('islandId', 'in', ids)),
+        (snapshot) => {
+          const m = new Map<string, CardDocumentData>();
+          snapshot.docs.forEach(d => m.set(d.id, d.data() as CardDocumentData));
+          chunkMaps[i] = m;
+          chunkLoaded[i] = true;
+          rebuild();
+        },
+        (error) => {
+          console.warn('Could not load collaborative island cards:', error);
+          chunkLoaded[i] = true;
+          rebuild();
+        }
       )
-    )
-      .then((snapshots) => {
-        const docs: Array<{ id: string; data: CardDocumentData }> = [];
-        snapshots.forEach((snap) => {
-          snap.docs.forEach((docSnap) => {
-            docs.push({ id: docSnap.id, data: docSnap.data() as CardDocumentData });
-          });
-        });
-        setCollabCardDocs(docs);
-        setCollabCardsLoaded(true);
-      })
-      .catch((error) => {
-        console.warn('Could not load collaborative island cards:', error);
-        setCollabCardDocs([]);
-        setCollabCardsLoaded(true);
-      });
+    );
+
+    return () => {
+      active = false;
+      unsubscribers.forEach(u => u());
+    };
   }, [collabIslandDocs, user]);
 
   useEffect(() => {
