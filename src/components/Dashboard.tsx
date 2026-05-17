@@ -687,7 +687,12 @@ export default function Dashboard() {
         onSubmitCollaborative={async (name, collaboratorUids, archipelagoId) => {
           await createCollaborativeIsland(name, collaboratorUids, archipelagoId ?? undefined);
         }}
-        archipelagos={progress?.archipelagos || []}
+        archipelagos={(progress?.archipelagos || []).map(a => ({
+          id: a.id,
+          name: a.name,
+          isCollaborative: a.isCollaborative,
+          collaborators: a.collaborators,
+        }))}
         defaultArchipelagoId={selectedArchipelagoId}
         friends={friends}
         fetchProfilesByUids={fetchProfilesByUids}

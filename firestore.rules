@@ -100,7 +100,11 @@ service cloud.firestore {
     // Admin-managed top-level content collections
     match /islands/{islandId} {
       allow create: if isIslandOwner() || isAdmin();
-      allow read: if ownsIsland() || isCollaboratorOnIsland() || isAdmin();
+      // Read uses a weaker check (no isCollaborative guard) so that
+      // where('collaborators','array-contains',uid) list queries are accepted.
+      // Firestore rejects a list query if the rule has conditions not implied
+      // by the filter; checking collaborators alone is enough here.
+      allow read: if ownsIsland() || (isSignedIn() && request.auth.uid in resource.data.collaborators) || isAdmin();
       allow update: if ownsIsland() || isCollaboratorOnIsland() || isAdmin();
       allow delete: if ownsIsland() || isAdmin();
     }
@@ -115,9 +119,10 @@ service cloud.firestore {
     // Collaborative archipelagos (top-level collection, separate from user-embedded arrays)
     match /archipelagos/{archipelagoId} {
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      // Same reasoning as islands: read omits isCollaborative guard so list queries work.
       allow read: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
-        (resource.data.isCollaborative == true && request.auth.uid in resource.data.collaborators) ||
+        request.auth.uid in resource.data.collaborators ||
         isAdmin()
       );
       allow update: if isSignedIn() && (

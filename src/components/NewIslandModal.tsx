@@ -9,7 +9,7 @@ interface NewIslandModalProps {
   onClose: () => void;
   onSubmit: (name: string, archipelagoId: string | null) => void;
   onSubmitCollaborative?: (name: string, collaboratorUids: string[], archipelagoId: string | null) => void;
-  archipelagos: { id: string; name: string }[];
+  archipelagos: { id: string; name: string; isCollaborative?: boolean; collaborators?: string[] }[];
   defaultArchipelagoId: string | null;
   friends?: string[];
   fetchProfilesByUids?: (uids: string[]) => Promise<UserProfile[]>;
@@ -50,13 +50,19 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
     );
   };
 
+  const selectedArch = archipelagos.find(a => a.id === selectedArchipelagoId);
+  const archIsCollaborative = !!(selectedArch?.isCollaborative && (selectedArch.collaborators?.length ?? 0) > 0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setNameError(true);
       return;
     }
-    if (isCollaborative && onSubmitCollaborative) {
+    if (archIsCollaborative && onSubmitCollaborative) {
+      // Island inherits the archipelago's crew automatically
+      onSubmitCollaborative(name.trim(), selectedArch!.collaborators!, selectedArchipelagoId);
+    } else if (isCollaborative && onSubmitCollaborative) {
       onSubmitCollaborative(name.trim(), selectedFriends, selectedArchipelagoId);
     } else {
       onSubmit(name.trim(), selectedArchipelagoId);
@@ -123,7 +129,19 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
                   </select>
                 </div>
 
-                {onSubmitCollaborative && friends.length > 0 && (
+                {archIsCollaborative && (
+                  <div className="flex items-center gap-3 px-5 py-4 rounded-2xl bg-violet-500/10 border border-violet-500/30">
+                    <Users className="w-4 h-4 text-violet-300 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-violet-300">Crew Island</p>
+                      <p className="text-[10px] text-violet-300/70 mt-0.5">
+                        Automatically shared with {selectedArch!.collaborators!.length} crew member{selectedArch!.collaborators!.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!archIsCollaborative && onSubmitCollaborative && friends.length > 0 && (
                   <div>
                     <button
                       type="button"

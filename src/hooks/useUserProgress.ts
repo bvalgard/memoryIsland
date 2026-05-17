@@ -1801,7 +1801,18 @@ export function useUserProgress() {
       throw new Error('Only the archipelago owner can add collaborators.');
     }
     try {
-      await updateDoc(doc(db, 'archipelagos', archipelagoId), { collaborators: arrayUnion(uid) });
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'archipelagos', archipelagoId), { collaborators: arrayUnion(uid) });
+      // Cascade: add the new collaborator to every island inside this archipelago
+      progress.islands
+        .filter(i => i.archipelagoId === archipelagoId)
+        .forEach(island => {
+          batch.update(doc(db, 'islands', island.id), {
+            collaborators: arrayUnion(uid),
+            isCollaborative: true,
+          });
+        });
+      await batch.commit();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
     }
@@ -1814,7 +1825,15 @@ export function useUserProgress() {
       throw new Error('Only the archipelago owner can remove collaborators.');
     }
     try {
-      await updateDoc(doc(db, 'archipelagos', archipelagoId), { collaborators: arrayRemove(uid) });
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'archipelagos', archipelagoId), { collaborators: arrayRemove(uid) });
+      // Cascade: remove the collaborator from every island they don't own inside this archipelago
+      progress.islands
+        .filter(i => i.archipelagoId === archipelagoId && i.ownerId !== uid)
+        .forEach(island => {
+          batch.update(doc(db, 'islands', island.id), { collaborators: arrayRemove(uid) });
+        });
+      await batch.commit();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
     }
