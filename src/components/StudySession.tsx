@@ -106,6 +106,7 @@ interface StudySessionProps {
 
 export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
+  const cardIslandRef = useRef<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [direction, setDirection] = useState(0); // 1 for right, -1 for left
@@ -259,6 +260,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   }, [mode]);
 
   const currentCard = shuffledCards[currentIndex];
+
+  useEffect(() => {
+    if (currentCard?.front && currentCard.islandName) {
+      cardIslandRef.current[currentCard.front] = currentCard.islandName;
+    }
+  }, [currentCard]);
 
   const buildMeta = (): SessionMeta => ({
     sessionDurationMs: Date.now() - sessionStartTime.current,
@@ -1085,9 +1092,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const incorrectAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'struggling').length;
     const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
     const meta = buildMeta();
-    const strugglingCardNames = Object.entries(cardUpdates)
+    const strugglingCards = Object.entries(cardUpdates)
       .filter(([, u]) => (u as any).status === 'struggling')
-      .map(([front]) => front);
+      .map(([front]) => ({ name: front, islandName: cardIslandRef.current[front] }));
 
     return (
       <motion.div
@@ -1127,21 +1134,26 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         </div>
 
         {/* Cards to revisit */}
-        {strugglingCardNames.length > 0 && (
+        {strugglingCards.length > 0 && (
           <div className="border-l-2 border-red-500/50 pl-3 mb-6 text-left">
             <div className="text-[10px] font-bold tracking-widest uppercase text-red-400 mb-2">Cards to revisit</div>
             <div className="flex flex-col gap-1">
-              {strugglingCardNames.slice(0, 5).map((name, i) => (
-                <div key={i} className="flex items-start gap-1.5">
-                  <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
-                  <div className="flex flex-col">
-                    <span className="text-sm text-brand-muted leading-tight">{name}</span>
-                    <span className="text-[10px] text-brand-muted/50">{archipelagoName ? `${archipelagoName} → ${island.name}` : island.name}</span>
+              {strugglingCards.slice(0, 5).map((card, i) => {
+                const archLabel = archipelagoName ?? (card.islandName ? island.name : undefined);
+                const islandLabel = card.islandName ?? (archipelagoName ? island.name : undefined);
+                const locationLabel = archLabel && islandLabel ? `${archLabel} → ${islandLabel}` : island.name;
+                return (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
+                    <div className="flex flex-col">
+                      <span className="text-sm text-brand-muted leading-tight">{card.name}</span>
+                      <span className="text-[10px] text-brand-muted/50">{locationLabel}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {strugglingCardNames.length > 5 && (
-                <div className="text-xs text-brand-muted pl-4.5">+ {strugglingCardNames.length - 5} more</div>
+                );
+              })}
+              {strugglingCards.length > 5 && (
+                <div className="text-xs text-brand-muted pl-4.5">+ {strugglingCards.length - 5} more</div>
               )}
             </div>
           </div>

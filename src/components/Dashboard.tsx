@@ -363,7 +363,7 @@ export default function Dashboard() {
   const archipelagoName = selectedArchipelago ? selectedArchipelago.name : 'The Archipelago';
 
   // Combine all cards for Archipelago Study (imported islands excluded)
-  const allCards = islandsInArchipelago.flatMap(i => i.cards) || [];
+  const allCards = islandsInArchipelago.flatMap(i => i.cards.map(c => ({ ...c, islandName: i.name }))) || [];
   const archipelagoIsland: Island = {
     id: 'archipelago',
     name: archipelagoName,
@@ -2133,18 +2133,34 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                     {filteredIslands.map((island) => {
                       const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
-                      const learningCount = island.cards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
                       const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
 
                       let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
-                      if (trackingMode !== 'srs') {
+                      if (trackingMode === 'srs') {
+                        const now = Date.now();
+                        const endOfToday = new Date();
+                        endOfToday.setHours(23, 59, 59, 999);
+                        const endOfTodayMs = endOfToday.getTime();
+                        const sevenDaysMs = now + 7 * 24 * 60 * 60 * 1000;
+
+                        if (island.cards.length > 0) {
+                          const hasDueToday = island.cards.some((c: any) => !c.srsNextReview || c.srsNextReview <= endOfTodayMs);
+                          if (hasDueToday) {
+                            masteryLevel = 'struggling';
+                          } else if (island.cards.some((c: any) => c.srsNextReview <= sevenDaysMs)) {
+                            masteryLevel = 'learning';
+                          } else {
+                            masteryLevel = 'mastered';
+                          }
+                        }
+                      } else {
                         if (strugglingCount > 0) {
                           masteryLevel = 'struggling';
                         } else if (island.cards.length > 0 && masteredCount === island.cards.length) {
                           masteryLevel = 'mastered';
                         }
                       }
-                      
+
                       const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
                       let imageSrc = '';
                       if (masteryLevel === 'struggling') imageSrc = `${basePath}/struggling.jpeg`;
@@ -2152,11 +2168,12 @@ export default function Dashboard() {
                       else imageSrc = `${basePath}/mastered.jpeg`;
 
                       return (
-                        <IslandCard 
-                          key={island.id} 
-                          island={island} 
+                        <IslandCard
+                          key={island.id}
+                          island={island}
                           masteryLevel={masteryLevel}
                           islandImageSrc={imageSrc}
+                          trackingMode={trackingMode}
                           onClick={() => setSelectedIslandId(island.id)}
                         />
                       );
@@ -2515,11 +2532,12 @@ interface IslandCardProps {
   island: any;
   masteryLevel: 'struggling' | 'learning' | 'mastered';
   islandImageSrc: string;
+  trackingMode?: string;
   onClick: () => void;
   key?: string | number;
 }
 
-function IslandCard({ island, masteryLevel, islandImageSrc, onClick }: IslandCardProps) {
+function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClick }: IslandCardProps) {
   const getMasteryStyles = () => {
     switch (masteryLevel) {
       case 'struggling':
@@ -2534,6 +2552,14 @@ function IslandCard({ island, masteryLevel, islandImageSrc, onClick }: IslandCar
   };
 
   const getStatusDescription = () => {
+    if (trackingMode === 'srs') {
+      switch (masteryLevel) {
+        case 'struggling': return "Cards due — some are overdue for review.";
+        case 'learning': return "Coming up — cards due within the next 7 days.";
+        case 'mastered': return "All caught up — nothing due for over a week!";
+        default: return "";
+      }
+    }
     switch (masteryLevel) {
       case 'struggling':
         return "Struggling Island — you have some items in the struggling category.";

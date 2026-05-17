@@ -66,6 +66,7 @@ export interface Card {
   srsRepetitions?: number;
   totalAnswers?: number;
   totalCorrect?: number;
+  islandName?: string;
 }
 
 export interface Archipelago {
