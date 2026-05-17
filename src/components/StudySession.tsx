@@ -102,9 +102,10 @@ interface StudySessionProps {
   onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onViewQuestion?: (question: Question) => void;
+  onProgressUpdate?: (cardUpdates: CardUpdateRecord, scoreDelta: number, sessionMaxStreak: number) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const cardIslandRef = useRef<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -266,6 +267,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       cardIslandRef.current[currentCard.front] = currentCard.islandName;
     }
   }, [currentCard]);
+
+  useEffect(() => {
+    if (Object.keys(cardUpdates).length > 0) {
+      onProgressUpdate?.(cardUpdates, scoreDelta, sessionMaxStreak);
+    }
+  }, [cardUpdates, scoreDelta, sessionMaxStreak]);
 
   const buildMeta = (): SessionMeta => ({
     sessionDurationMs: Date.now() - sessionStartTime.current,

@@ -175,6 +175,64 @@ export default function Dashboard() {
     onConfirm: () => void;
   }>({ open: false, title: '', message: '', onConfirm: () => {} });
 
+  // Session draft — persists partial study sessions to localStorage so crashes / navigations don't lose progress
+  interface SessionDraft {
+    islandId: string;
+    islandName: string;
+    cardUpdates: CardUpdateRecord;
+    scoreDelta: number;
+    sessionMaxStreak: number;
+    timestamp: number;
+    isArchipelago: boolean;
+  }
+  const draftKey = user ? `mi_draft_${user.uid}` : null;
+  const [sessionDraft, setSessionDraft] = useState<SessionDraft | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft: SessionDraft = JSON.parse(raw);
+      if (Date.now() - draft.timestamp > 48 * 60 * 60 * 1000) {
+        localStorage.removeItem(draftKey);
+        return;
+      }
+      setSessionDraft(draft);
+    } catch {
+      // corrupt data — ignore
+    }
+  }, [draftKey]);
+  const saveDraft = (
+    islandId: string, islandName: string, cardUpdates: CardUpdateRecord,
+    scoreDelta: number, sessionMaxStreak: number, isArchipelago: boolean,
+  ) => {
+    if (!draftKey) return;
+    localStorage.setItem(draftKey, JSON.stringify({
+      islandId, islandName, cardUpdates, scoreDelta, sessionMaxStreak,
+      timestamp: Date.now(), isArchipelago,
+    }));
+  };
+  const clearDraft = () => {
+    if (!draftKey) return;
+    localStorage.removeItem(draftKey);
+    setSessionDraft(null);
+  };
+  const flushDraftToFirestore = async () => {
+    if (!sessionDraft) return;
+    setIsSavingDraft(true);
+    try {
+      if (sessionDraft.isArchipelago) {
+        await processArchipelagoResults(sessionDraft.scoreDelta, sessionDraft.cardUpdates, sessionDraft.sessionMaxStreak);
+      } else {
+        await processSessionResults(sessionDraft.islandId, sessionDraft.scoreDelta, sessionDraft.cardUpdates, sessionDraft.sessionMaxStreak);
+      }
+      clearDraft();
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   // Persistence for "Read" state of badges (user-specific, loaded synchronously to avoid race)
   const uid = user?.uid ?? 'guest';
   const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(() => {
@@ -532,13 +590,42 @@ export default function Dashboard() {
         if (card?.id) closeQuestionForCard(card.id);
       }
     });
+    clearDraft();
     setIsStudying(false);
     setSelectedIslandId(null);
   };
 
   return (
     <div className="h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative overflow-hidden">
-      <NewIslandModal 
+      <AnimatePresence>
+        {sessionDraft && !isStudying && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-[#111] border border-white/10 rounded-2xl px-5 py-3 shadow-2xl"
+          >
+            <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            <span className="text-sm text-white/80">
+              Unsaved session on <span className="text-white font-semibold">"{sessionDraft.islandName}"</span>
+            </span>
+            <button
+              onClick={flushDraftToFirestore}
+              disabled={isSavingDraft}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-brand-primary/20 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary/30 transition-colors disabled:opacity-50"
+            >
+              {isSavingDraft ? 'Saving…' : 'Save Progress'}
+            </button>
+            <button
+              onClick={clearDraft}
+              className="text-xs text-brand-muted hover:text-white transition-colors"
+            >
+              Dismiss
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <NewIslandModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={addIsland}
@@ -1882,6 +1969,11 @@ export default function Dashboard() {
                   currentUserName={user?.displayName || 'Explorer'}
                   onViewQuestion={handleViewQuestion}
                   onFinish={handleFinishStudy}
+                  onProgressUpdate={(cu, sd, sms) => {
+                    if (selectedIslandId && selectedIsland) {
+                      saveDraft(selectedIslandId, selectedIsland.name, cu, sd, sms, selectedIslandId === 'archipelago');
+                    }
+                  }}
                   onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
                     else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
@@ -1892,6 +1984,7 @@ export default function Dashboard() {
                       });
                       if (unlocked.length) enqueueToasts(unlocked);
                     }
+                    clearDraft();
                     setIsStudying(false);
                   }}
                   onBackToMap={async (delta, cardUpdates, maxStreak, sessionMeta) => {
@@ -1904,6 +1997,7 @@ export default function Dashboard() {
                       });
                       if (unlocked.length) enqueueToasts(unlocked);
                     }
+                    clearDraft();
                     setIsStudying(false);
                     setSelectedIslandId(null);
                   }}
@@ -1917,6 +2011,7 @@ export default function Dashboard() {
                       });
                       if (unlocked.length) enqueueToasts(unlocked);
                     }
+                    clearDraft();
                     setStudyMode(newMode);
                   }}
                 />
