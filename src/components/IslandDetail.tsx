@@ -877,9 +877,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                             className="absolute top-0 right-full mr-3 w-64 glass p-5 rounded-[24px] border border-red-500/20 shadow-2xl z-[70] bg-red-500/5 backdrop-blur-xl"
                           >
                             <p className="text-xs font-bold text-white mb-2 text-red-500">Delete Island?</p>
-                            <p className="text-[10px] text-brand-muted leading-relaxed mb-4">
+                            <p className="text-[10px] text-brand-muted leading-relaxed mb-2">
                               This will permanently sink <span className="font-bold text-white">{island.name}</span>. This action cannot be undone. Are you sure?
                             </p>
+                            {isCollabOwner && (island.collaborators || []).length > 0 && (
+                              <p className="text-[10px] text-amber-400/90 leading-relaxed mb-2">
+                                This is a crew island — deleting it removes it for all {(island.collaborators || []).length} crew member{(island.collaborators || []).length !== 1 ? 's' : ''} too.
+                              </p>
+                            )}
                             <div className="flex gap-2">
                               <button 
                                 onClick={() => {

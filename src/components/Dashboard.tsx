@@ -135,6 +135,31 @@ export default function Dashboard() {
     localStorage.setItem('islandSortOrder', sortOrder);
   }, [sortOrder]);
 
+  // Detect when a collaborative island/archipelago is deleted by its owner while we're viewing it
+  useEffect(() => {
+    if (loading || !progress) return;
+    if (selectedIslandId && selectedIslandId !== 'archipelago') {
+      const stillExists = (progress.islands || []).some(i => i.id === selectedIslandId);
+      if (!stillExists) {
+        setSelectedIslandId(null);
+        setIsStudying(false);
+        setDeletedCollabMessage('This island was deleted by its owner.');
+      }
+    }
+  }, [progress?.islands, selectedIslandId, loading]);
+
+  useEffect(() => {
+    if (loading || !progress) return;
+    if (selectedArchipelagoId) {
+      const stillExists = (progress.archipelagos || []).some(a => a.id === selectedArchipelagoId);
+      if (!stillExists) {
+        setSelectedArchipelagoId(null);
+        setIsStudying(false);
+        setDeletedCollabMessage('This archipelago was deleted by its owner.');
+      }
+    }
+  }, [progress?.archipelagos, selectedArchipelagoId, loading]);
+
   useEffect(() => {
     if (selectedArchipelagoId) {
       localStorage.setItem('selectedArchipelagoId', selectedArchipelagoId);
@@ -173,6 +198,7 @@ export default function Dashboard() {
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
+  const [deletedCollabMessage, setDeletedCollabMessage] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -1564,6 +1590,27 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Collaborative deletion notice */}
+      <AnimatePresence>
+        {deletedCollabMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 bg-[#1a1a2e]/95 border border-white/10 backdrop-blur-xl rounded-2xl px-5 py-3 shadow-2xl max-w-sm w-full"
+          >
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-sm text-white/80 flex-1">{deletedCollabMessage}</span>
+            <button
+              onClick={() => setDeletedCollabMessage(null)}
+              className="text-brand-muted hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Stats Modal */}
       <AnimatePresence>
         {activeModal === 'stats' && (
@@ -2186,7 +2233,7 @@ export default function Dashboard() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="text-base sm:text-xl font-bold truncate mb-1">{archipelagoName} Study</h3>
-                          {selectedArchipelagoId && (
+                          {selectedArchipelagoId && selectedArchipelago && (
                             <div className="flex items-center gap-2 mb-1">
                               {(() => {
                                 const archipelagoPrivacyState = selectedArchipelago.isPublic
@@ -2669,6 +2716,11 @@ export default function Dashboard() {
               <p className="text-brand-muted text-sm leading-relaxed mb-2 px-4">
                 This will permanently delete <span className="text-white font-bold">"{selectedArchipelago.name}"</span> and all of its islands and cards.
               </p>
+              {selectedArchipelago.isCollaborative && (selectedArchipelago.collaborators || []).length > 0 && (
+                <p className="text-amber-400/90 text-xs leading-relaxed mb-2 px-4">
+                  This is a collaborative archipelago — deleting it will remove it for all {(selectedArchipelago.collaborators || []).length} crew member{(selectedArchipelago.collaborators || []).length !== 1 ? 's' : ''} too.
+                </p>
+              )}
               <p className="text-red-400/70 text-xs font-bold uppercase tracking-widest mb-10">This cannot be undone.</p>
               <div className="flex flex-col gap-3">
                 <button
