@@ -15,6 +15,7 @@ interface NewArchipelagoModalProps {
 
 export default function NewArchipelagoModal({ isOpen, onClose, onSubmit, onSubmitCollaborative, friends = [], fetchProfilesByUids = async () => [] }: NewArchipelagoModalProps) {
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState(false);
   const [isCollaborative, setIsCollaborative] = useState(false);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [friendProfiles, setFriendProfiles] = useState<UserProfile[]>([]);
@@ -23,6 +24,7 @@ export default function NewArchipelagoModal({ isOpen, onClose, onSubmit, onSubmi
   React.useEffect(() => {
     if (isOpen) {
       setName('');
+      setNameError(false);
       setIsCollaborative(false);
       setSelectedFriends([]);
     }
@@ -46,7 +48,10 @@ export default function NewArchipelagoModal({ isOpen, onClose, onSubmit, onSubmi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setNameError(true);
+      return;
+    }
     if (isCollaborative && onSubmitCollaborative) {
       onSubmitCollaborative(name.trim(), selectedFriends);
     } else {
@@ -91,10 +96,13 @@ export default function NewArchipelagoModal({ isOpen, onClose, onSubmit, onSubmi
                     autoFocus
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => { setName(e.target.value); if (e.target.value.trim()) setNameError(false); }}
                     placeholder="e.g. Science Subjects"
-                    className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors"
+                    className={`w-full bg-white/5 border rounded-2xl px-5 py-4 text-white outline-none transition-colors ${nameError ? 'border-red-500/70 focus:border-red-500' : 'border-brand-border focus:border-brand-primary/50'}`}
                   />
+                  {nameError && (
+                    <p className="text-red-400 text-[11px] font-medium mt-2 ml-1">Please give your archipelago a name first.</p>
+                  )}
                 </div>
 
                 {onSubmitCollaborative && friends.length > 0 && (
@@ -164,8 +172,7 @@ export default function NewArchipelagoModal({ isOpen, onClose, onSubmit, onSubmi
 
                 <button
                   type="submit"
-                  disabled={!name.trim()}
-                  className="w-full btn-primary h-14 disabled:opacity-50"
+                  className="w-full btn-primary h-14"
                 >
                   {isCollaborative ? 'Create Crew Archipelago' : 'Create Archipelago'}
                 </button>

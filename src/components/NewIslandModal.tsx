@@ -17,6 +17,7 @@ interface NewIslandModalProps {
 
 export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitCollaborative, archipelagos, defaultArchipelagoId, friends = [], fetchProfilesByUids = async () => [] }: NewIslandModalProps) {
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState(false);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(defaultArchipelagoId);
   const [isCollaborative, setIsCollaborative] = useState(false);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
@@ -27,6 +28,7 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
     if (isOpen) {
       setSelectedArchipelagoId(defaultArchipelagoId);
       setName('');
+      setNameError(false);
       setIsCollaborative(false);
       setSelectedFriends([]);
     }
@@ -50,7 +52,10 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setNameError(true);
+      return;
+    }
     if (isCollaborative && onSubmitCollaborative) {
       onSubmitCollaborative(name.trim(), selectedFriends, selectedArchipelagoId);
     } else {
@@ -95,10 +100,13 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
                     autoFocus
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => { setName(e.target.value); if (e.target.value.trim()) setNameError(false); }}
                     placeholder="e.g. Quantum Physics"
-                    className="w-full mb-4 bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors"
+                    className={`w-full bg-white/5 border rounded-2xl px-5 py-4 text-white outline-none transition-colors ${nameError ? 'border-red-500/70 focus:border-red-500' : 'border-brand-border focus:border-brand-primary/50'}`}
                   />
+                  {nameError && (
+                    <p className="text-red-400 text-[11px] font-medium mt-2 ml-1">Please give your island a name first.</p>
+                  )}
 
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-4">
                     Archipelago (Collection)
@@ -182,8 +190,7 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
 
                 <button
                   type="submit"
-                  disabled={!name.trim()}
-                  className="w-full btn-primary h-14 disabled:opacity-50"
+                  className="w-full btn-primary h-14"
                 >
                   {isCollaborative ? 'Create Crew Island' : 'Anchor Island'}
                 </button>

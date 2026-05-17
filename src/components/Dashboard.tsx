@@ -167,6 +167,7 @@ export default function Dashboard() {
   const [inboundSharedIslands, setInboundSharedIslands] = useState<any[]>([]);
   const [inboundSharedArchipelagos, setInboundSharedArchipelagos] = useState<any[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [collabOwnerProfiles, setCollabOwnerProfiles] = useState<Record<string, string>>({});
   const [importingIslandId, setImportingIslandId] = useState<string | null>(null);
   const [importingArchipelagoId, setImportingArchipelagoId] = useState<string | null>(null);
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
@@ -296,6 +297,22 @@ export default function Dashboard() {
       loadFriends();
     }
   }, [activeModal, friends, fetchProfilesByUids]);
+
+  useEffect(() => {
+    const collabIslandOwnerUids = (progress?.islands || [])
+      .filter(i => i.isCollaborative && i.ownerId && i.ownerId !== user?.uid)
+      .map(i => i.ownerId as string);
+    const collabArchOwnerUids = (progress?.archipelagos || [])
+      .filter(a => a.isCollaborative && a.ownerId && a.ownerId !== user?.uid)
+      .map(a => a.ownerId as string);
+    const ownerUids = [...new Set([...collabIslandOwnerUids, ...collabArchOwnerUids])];
+    if (ownerUids.length === 0) return;
+    fetchProfilesByUids(ownerUids).then(profiles => {
+      const map: Record<string, string> = {};
+      profiles.forEach(p => { map[p.uid] = p.displayName || 'A friend'; });
+      setCollabOwnerProfiles(map);
+    });
+  }, [progress?.islands, progress?.archipelagos, user?.uid, fetchProfilesByUids]);
 
   useEffect(() => {
     if (activeModal === 'users') {
@@ -517,11 +534,35 @@ export default function Dashboard() {
       !seenNotificationIds.has(`question_response_${q.id}_${q.lastActivityAt?.seconds ?? 0}`)
   ) ?? null;
 
+  const collabIslandInviteNotifications = (progress?.islands || [])
+    .filter(i => i.isCollaborative && i.ownerId && i.ownerId !== user?.uid)
+    .map(island => ({
+      id: `collab_island_${island.id}`,
+      islandId: `collab_island:${island.id}`,
+      title: 'Crew Invite',
+      message: `${collabOwnerProfiles[island.ownerId!] || 'A friend'} invited you to co-create "${island.name}"`,
+      type: 'info' as const,
+      timestamp: island.createdAt || Date.now(),
+    }));
+
+  const collabArchipelagoInviteNotifications = (progress?.archipelagos || [])
+    .filter(a => a.isCollaborative && a.ownerId && a.ownerId !== user?.uid && a.isTopLevel)
+    .map(arch => ({
+      id: `collab_arch_${arch.id}`,
+      islandId: `collab_arch:${arch.id}`,
+      title: 'Crew Invite',
+      message: `${collabOwnerProfiles[arch.ownerId!] || 'A friend'} invited you to co-create "${arch.name}"`,
+      type: 'info' as const,
+      timestamp: Date.now(),
+    }));
+
   const notifications = [
     ...friendRequestNotifications,
     ...islandShareNotifications,
     ...archipelagoShareNotifications,
     ...questionResponseNotifications,
+    ...collabIslandInviteNotifications,
+    ...collabArchipelagoInviteNotifications,
   ].sort((a, b) => b.timestamp - a.timestamp);
   const unreadCount = notifications.filter(n => !seenNotificationIds.has(n.id)).length;
   const unreadSocialCount = friendRequests.filter(uid => !seenSocialIds.has(uid)).length;
@@ -547,6 +588,14 @@ export default function Dashboard() {
       setActiveModal('discover');
       setDiscoveryTab('archipelagos');
       setDiscoverySearch(name);
+    } else if (islandId.startsWith('collab_island:')) {
+      const collabId = islandId.split(':')[1];
+      setSelectedArchipelagoId(null);
+      setSelectedIslandId(collabId);
+    } else if (islandId.startsWith('collab_arch:')) {
+      const archId = islandId.split(':')[1];
+      setSelectedArchipelagoId(archId);
+      setSelectedIslandId(null);
     } else {
       setSelectedIslandId(islandId);
     }
