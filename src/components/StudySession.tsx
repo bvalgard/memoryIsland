@@ -88,6 +88,28 @@ function getActiveTierCards(allCards: Card[]): Card[] {
   return roots.flatMap(root => getActiveNodes(root));
 }
 
+function NavAction({ icon: Icon, label, onClick, variant = 'muted' }: { icon: React.ElementType, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) {
+  return (
+    <div className="relative group">
+      <button
+        onClick={onClick}
+        className={cn(
+          "flex items-center gap-2 transition-colors border border-transparent px-3 py-2 rounded-xl",
+          variant === 'muted'
+            ? "text-brand-muted group-hover:text-white group-hover:border-white/10"
+            : "text-brand-primary group-hover:bg-brand-primary/10 group-hover:border-brand-primary/20 bg-brand-primary/5 border-brand-primary/10"
+        )}
+      >
+        <Icon className="w-5 h-5 md:w-4 md:h-4" />
+        <span className="text-sm font-medium hidden md:inline">{label}</span>
+      </button>
+      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-brand-bg/95 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg opacity-0 group-hover:opacity-100 md:group-hover:opacity-0 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-2xl">
+        {label}
+      </div>
+    </div>
+  );
+}
+
 interface StudySessionProps {
   island: Island;
   mode?: 'all' | 'struggling' | 'learning' | 'mastered' | 'due';
@@ -196,27 +218,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     };
   }, []);
 
-  // Helper for responsive nav buttons
-  const NavAction = ({ icon: Icon, label, onClick, variant = 'muted' }: { icon: any, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) => (
-    <div className="relative group">
-      <button 
-        onClick={onClick} 
-        className={cn(
-          "flex items-center gap-2 transition-all border border-transparent px-3 py-2 rounded-xl",
-          variant === 'muted' 
-            ? "text-brand-muted hover:text-white hover:border-white/10" 
-            : "text-brand-primary hover:bg-brand-primary/10 hover:border-brand-primary/20 bg-brand-primary/5 border-brand-primary/10"
-        )}
-      >
-        <Icon className="w-5 h-5 md:w-4 md:h-4 group-hover:scale-110 transition-transform" />
-        <span className="text-sm font-medium hidden md:inline">{label}</span>
-      </button>
-      {/* Tooltip for mobile/tablets where text is hidden */}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-brand-bg/95 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg opacity-0 group-hover:opacity-100 md:group-hover:opacity-0 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-2xl backdrop-blur-md">
-        {label}
-      </div>
-    </div>
-  );
   
   const [shuffledCards, setShuffledCards] = useState(() => {
     const activeTierCards = getActiveTierCards(island.cards);
@@ -1690,7 +1691,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             onClick={(e: any) => handleOptionSelect(opt, e)}
                             disabled={selectedOption !== null}
                             className={cn(
-                              "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all flex flex-col group",
+                              "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-colors flex flex-col group",
                               btnClass
                             )}
                           >
@@ -1699,7 +1700,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                 <span className="font-bold text-white/70 shrink-0">{letter}.</span>
                                 <span className={cn(
                                   "font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1",
-                                  !selectedOption && "group-hover:translate-x-1 transition-transform"
+                                  ""
                                 )}>
                                   {opt}
                                 </span>

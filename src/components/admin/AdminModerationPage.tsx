@@ -144,7 +144,7 @@ export default function AdminModerationPage() {
               <thead className="bg-white/[0.02] text-[11px] font-black uppercase tracking-[0.18em] text-brand-muted">
                 <tr>
                   <th className="px-6 py-4">Island Name</th>
-                  <th className="px-6 py-4">Creator ID</th>
+                  <th className="px-6 py-4">Creator</th>
                   <th className="px-6 py-4">Date Submitted</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -158,7 +158,10 @@ export default function AdminModerationPage() {
                         <p className="mt-1 text-xs text-brand-muted">{island.creatorEmail}</p>
                       )}
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs text-brand-muted">{island.creatorId}</td>
+                    <td className="px-6 py-4">
+                      <p className="text-white">{island.creatorEmail ?? island.creatorId}</p>
+                      <p className="mt-1 font-mono text-xs text-brand-muted">{island.creatorId}</p>
+                    </td>
                     <td className="px-6 py-4 text-brand-muted">{formatTimestamp(island.submittedAt)}</td>
                     <td className="px-6 py-4">
                       <div className="flex justify-end gap-2">

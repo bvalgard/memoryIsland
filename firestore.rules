@@ -95,6 +95,7 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isOwner(userId) && isValidUserCreate(incoming(), userId);
       allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Admin-managed top-level content collections
@@ -146,6 +147,7 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if true;
       allow write: if isOwner(userId);
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     // Friendships Collection for mutual social relationships

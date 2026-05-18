@@ -1,5 +1,6 @@
 const admin = require('firebase-admin');
 const { onDocumentCreated, onDocumentDeleted, onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { logger } = require('firebase-functions');
 
 admin.initializeApp();
@@ -74,6 +75,22 @@ exports.onCardCreated = onDocumentCreated('cards/{cardId}', async () => {
 
 exports.onCardDeleted = onDocumentDeleted('cards/{cardId}', async () => {
   await updateStats({ totalCards: -1 });
+});
+
+exports.deleteAuthUser = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Must be authenticated.');
+
+  const callerDoc = await db.doc(`users/${request.auth.uid}`).get();
+  if (!callerDoc.exists || callerDoc.data().isAdmin !== true)
+    throw new HttpsError('permission-denied', 'Must be an admin.');
+
+  const { uid } = request.data;
+  if (!uid || typeof uid !== 'string')
+    throw new HttpsError('invalid-argument', 'uid is required.');
+
+  await admin.auth().deleteUser(uid);
+  logger.info(`Admin ${request.auth.uid} deleted Auth user ${uid}`);
+  return { success: true };
 });
 
 exports.syncPublishedIsland = onDocumentWritten('islands/{islandId}', async (event) => {

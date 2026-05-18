@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Layers3, Users as UsersIcon } from 'lucide-react';
+import { BookOpen, Layers3, Map, Users as UsersIcon } from 'lucide-react';
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -7,12 +7,14 @@ interface OverviewMetrics {
   totalUsers: number;
   totalIslands: number;
   totalCards: number;
+  totalArchipelagos: number;
 }
 
 const metricCards = [
   { key: 'totalUsers', label: 'Total Users', icon: UsersIcon, accent: 'text-sky-300', bg: 'bg-sky-500/10 border-sky-500/20' },
   { key: 'totalIslands', label: 'Total Islands', icon: Layers3, accent: 'text-emerald-300', bg: 'bg-emerald-500/10 border-emerald-500/20' },
   { key: 'totalCards', label: 'Total Cards', icon: BookOpen, accent: 'text-amber-300', bg: 'bg-amber-500/10 border-amber-500/20' },
+  { key: 'totalArchipelagos', label: 'Total Archipelagos', icon: Map, accent: 'text-purple-300', bg: 'bg-purple-500/10 border-purple-500/20' },
 ] as const;
 
 export default function AdminOverviewPage() {
@@ -20,6 +22,7 @@ export default function AdminOverviewPage() {
     totalUsers: 0,
     totalIslands: 0,
     totalCards: 0,
+    totalArchipelagos: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +45,14 @@ export default function AdminOverviewPage() {
             totalUsers: statsData.totalUsers,
             totalIslands: statsData.totalIslands,
             totalCards: statsData.totalCards,
+            totalArchipelagos: statsData.totalArchipelagos ?? 0,
           });
         } else {
-          const [usersCount, islandsCount, cardsCount] = await Promise.all([
+          const [usersCount, islandsCount, cardsCount, archipelagosCount] = await Promise.all([
             getCountFromServer(collection(db, 'users')),
             getCountFromServer(collection(db, 'islands')),
             getCountFromServer(collection(db, 'cards')),
+            getCountFromServer(collection(db, 'archipelagos')),
           ]);
 
           if (!active) return;
@@ -56,6 +61,7 @@ export default function AdminOverviewPage() {
             totalUsers: usersCount.data().count,
             totalIslands: islandsCount.data().count,
             totalCards: cardsCount.data().count,
+            totalArchipelagos: archipelagosCount.data().count,
           });
         }
       } catch (err) {
@@ -92,7 +98,7 @@ export default function AdminOverviewPage() {
           {error}
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {metricCards.map(({ key, label, icon: Icon, accent, bg }) => (
             <div key={key} className={`rounded-[32px] border p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] ${bg}`}>
               <div className="flex items-start justify-between">
