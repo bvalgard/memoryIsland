@@ -427,6 +427,7 @@ export function useUserProgress() {
   const [collabCardsLoaded, setCollabCardsLoaded] = useState(false);
   const [topLevelArchipelagosLoaded, setTopLevelArchipelagosLoaded] = useState(false);
   const migrationInProgress = useRef(false);
+  const archipelagoHealingDone = useRef(false);
   const user = auth.currentUser;
 
   useEffect(() => {
@@ -860,9 +861,23 @@ export function useUserProgress() {
     }));
     const allArchipelagos = [...legacyArchipelagos, ...topLevelArchipelagos];
 
+    // Recover archipelago entries lost from the user doc due to past concurrent writes.
+    // Islands still carry their archipelagoId; synthesize a placeholder entry so the
+    // grouping remains visible and the user can rename it to heal the data.
+    const knownArchipelagoIds = new Set(allArchipelagos.map((a) => a.id));
+    let orphanCounter = 1;
+    const orphanedEntries: Archipelago[] = [];
+    for (const island of assembledIslands) {
+      if (island.archipelagoId && !island.isImported && !knownArchipelagoIds.has(island.archipelagoId)) {
+        knownArchipelagoIds.add(island.archipelagoId);
+        orphanedEntries.push({ id: island.archipelagoId, name: `Recovered Archipelago ${orphanCounter++}`, isTopLevel: false });
+      }
+    }
+    const finalArchipelagos = orphanedEntries.length > 0 ? [...allArchipelagos, ...orphanedEntries] : allArchipelagos;
+
     setProgress({
       last_active: userData.last_active || Timestamp.now(),
-      archipelagos: allArchipelagos,
+      archipelagos: finalArchipelagos,
       stats: { ...defaultStats, ...(userData.stats || {}) },
       settings: { ...defaultSettings, ...(userData.settings || {}) },
       islands: assembledIslands,
@@ -870,6 +885,33 @@ export function useUserProgress() {
     });
     setLoading(false);
   }, [userLoaded, islandsLoaded, cardsLoaded, collabIslandsLoaded, collabCardsLoaded, topLevelArchipelagosLoaded, userData, islandDocs, cardDocs, collabIslandDocs, collabCardDocs, topLevelArchipelagoDocs, user]);
+
+  // One-shot per session: write recovered orphan archipelago entries back to Firestore
+  // so they survive as real entries and can be renamed by the user.
+  useEffect(() => {
+    if (!user || isConfigPlaceholder || !userData || archipelagoHealingDone.current) return;
+    const knownIds = new Set([
+      ...(userData.archipelagos || []).map((a: any) => a.id),
+      ...topLevelArchipelagoDocs.map((d) => d.id),
+    ]);
+    const orphanedIds = new Set<string>();
+    for (const { data } of islandDocs) {
+      if (data.archipelagoId && !data.isImported && !knownIds.has(data.archipelagoId)) {
+        orphanedIds.add(data.archipelagoId);
+      }
+    }
+    if (orphanedIds.size === 0) return;
+    archipelagoHealingDone.current = true;
+    let counter = 1;
+    const toRestore = Array.from(orphanedIds).map((id) =>
+      omitUndefined({ id, name: `Recovered Archipelago ${counter++}` })
+    );
+    setDoc(
+      doc(db, 'users', user.uid),
+      { archipelagos: arrayUnion(...toRestore), last_active: Timestamp.now() },
+      { merge: true }
+    ).catch(() => { archipelagoHealingDone.current = false; });
+  }, [user, userData, islandDocs, topLevelArchipelagoDocs]);
 
   const updateStats = async (newStats: Partial<UserStats>) => {
     if (!user || isConfigPlaceholder || !progress?.stats) return;
@@ -994,11 +1036,20 @@ export function useUserProgress() {
   };
 
   const addArchipelago = async (name: string) => {
+    if (!user || isConfigPlaceholder) return;
     const newArchipelago: Archipelago = {
       id: randomId(),
       name,
     };
-    await updateArchipelagos([...(progress?.archipelagos || []), newArchipelago]);
+    try {
+      await setDoc(
+        doc(db, 'users', user.uid),
+        { archipelagos: arrayUnion(omitUndefined(newArchipelago)), last_active: Timestamp.now() },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+    }
     return newArchipelago.id;
   };
 

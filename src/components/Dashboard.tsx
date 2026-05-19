@@ -2186,11 +2186,26 @@ export default function Dashboard() {
                             onChange={(e) => setSelectedArchipelagoId(e.target.value || null)}
                             className="bg-transparent text-white font-bold text-sm px-3 py-1 outline-none appearance-none cursor-pointer"
                           >
-                            <option value="" className="bg-[#111]">All Islands</option>
+                            <option value="" className="bg-[#111]">All Archipelagos</option>
                             {ownedArchipelagos.map(a => (
                               <option key={a.id} value={a.id} className="bg-[#111]">{a.name}</option>
                             ))}
                           </select>
+                        )}
+                        {selectedArchipelagoId && !isRenamingArchipelago && islandsInArchipelago.length > 0 && (
+                          <>
+                            <span className="text-brand-muted/40 text-xs">/</span>
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) setSelectedIslandId(e.target.value); }}
+                              className="bg-transparent text-brand-muted font-semibold text-sm px-2 py-1 outline-none appearance-none cursor-pointer hover:text-white transition-colors"
+                            >
+                              <option value="" className="bg-[#111]">All Islands</option>
+                              {islandsInArchipelago.map(i => (
+                                <option key={i.id} value={i.id} className="bg-[#111]">{i.name}</option>
+                              ))}
+                            </select>
+                          </>
                         )}
                         {selectedArchipelagoId && !isRenamingArchipelago && (
                           <button
