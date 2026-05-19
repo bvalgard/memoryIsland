@@ -277,8 +277,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const buildMeta = (): SessionMeta => ({
     sessionDurationMs: Date.now() - sessionStartTime.current,
-    cardCount: shuffledCards.length,
-    correctCount: Object.values<{ status: CardStatus }>(cardUpdates as any).filter(c => c.status !== 'struggling').length,
+    cardCount: Object.keys(cardUpdates).length,
+    correctCount: Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length,
     sessionStartHour: new Date(sessionStartTime.current).getHours(),
     calibrationCorrect: sessionCalibration.correct,
     calibrationTotal: sessionCalibration.total,
@@ -1096,8 +1096,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   if (sessionComplete) {
     const cardsReviewed = Object.keys(cardUpdates).length;
-    const correctAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'learning' || c.status === 'mastered').length;
-    const incorrectAnswers = Object.values<{status: string}>(cardUpdates as any).filter(c => c.status === 'struggling').length;
+    const correctAnswers = Object.values<{sessionCorrect?: number}>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length;
+    const incorrectAnswers = Object.values<{sessionCorrect?: number}>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) === 0).length;
     const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
     const meta = buildMeta();
     const strugglingCards = Object.entries(cardUpdates)
@@ -2071,7 +2071,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               animate={{ scale: 1, color: '#ffffff' }}
               className="text-xs md:text-sm font-black"
             >
-              {sessionStats.mastered + sessionStats.learning}
+              {Object.values(cardUpdates as any).filter((c: any) => (c.sessionCorrect ?? 0) > 0).length}
             </motion.span>
             <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80 text-center leading-none">Correct</span>
           </div>
@@ -2084,7 +2084,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               animate={{ scale: 1, color: '#ffffff' }}
               className="text-xs md:text-sm font-black"
             >
-              {sessionStats.struggling}
+              {Object.values(cardUpdates as any).filter((c: any) => (c.sessionCorrect ?? 0) === 0).length}
             </motion.span>
             <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80 text-center leading-none">Incorrect</span>
           </div>
