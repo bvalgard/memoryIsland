@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -78,8 +78,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
+  const [previewCardIndex, setPreviewCardIndex] = useState<number | null>(null);
+  const [previewFlipped, setPreviewFlipped] = useState(false);
+  const [previewSelectedOption, setPreviewSelectedOption] = useState<string | null>(null);
+  const [previewSelectedOptions, setPreviewSelectedOptions] = useState<Set<string>>(new Set());
+  const [previewMultiSubmitted, setPreviewMultiSubmitted] = useState(false);
+  const [previewFibInput, setPreviewFibInput] = useState('');
+  const [previewFibSubmitted, setPreviewFibSubmitted] = useState(false);
+  const [previewShuffledOptions, setPreviewShuffledOptions] = useState<string[]>([]);
+  const [previewSequenceOrder, setPreviewSequenceOrder] = useState<number[]>([]);
+  const [previewSequenceSubmitted, setPreviewSequenceSubmitted] = useState(false);
   const [parentCardForProgression, setParentCardForProgression] = useState<Card | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isScenarioMode, setIsScenarioMode] = useState(false);
+  const [scenarioPassage, setScenarioPassage] = useState('');
+  const [scenarioQuestions, setScenarioQuestions] = useState<Card[]>([]);
+  const [scenarioSubFormOpen, setScenarioSubFormOpen] = useState(false);
   const islandPrivacyState = island.approvalStatus === 'pending'
     ? 'pending'
     : island.approvalStatus === 'approved' && island.isPublic
@@ -114,7 +128,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const resetCardForm = () => {
     setEditingCardIndex(null);
     setParentCardForProgression(null);
-    setCardType('flashcard');
     setFront('');
     setBack('');
     setDistractors('');
@@ -135,10 +148,96 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       { id: Date.now().toString() + '1', text: '' },
       { id: Date.now().toString() + '2', text: '' }
     ]);
+    setIsScenarioMode(false);
+    setScenarioPassage('');
+    setScenarioQuestions([]);
+    setScenarioSubFormOpen(false);
   };
   
+  const handleAddScenarioQuestion = () => {
+    if (!front.trim()) return;
+    if (!['matching', 'multi-select', 'sequencing'].includes(cardType || '') && !back.trim()) return;
+
+    const q: Card = {
+      id: Math.random().toString(36).substring(2, 11),
+      front: front.trim(),
+      back: back.trim(),
+      type: cardType,
+    };
+
+    if (hint.trim()) q.hint = hint.trim();
+    if (explanation.trim()) q.explanation = explanation.trim();
+    if (imageUrl) q.imageUrl = imageUrl;
+    if (backImageUrl) q.backImageUrl = backImageUrl;
+
+    if (cardType === 'mcq') {
+      const optionLines = distractors.split('\n').map(l => l.trim()).filter(l => l);
+      if (optionLines.length === 0) { alert('MCQ needs at least one distractor.'); return; }
+      q.options = [back.trim(), ...optionLines];
+      const expLines = distractorExplanations.split('\n').map(l => l.trim());
+      const explanations: Record<string, string> = {};
+      if (correctAnswerExplanation.trim()) explanations[back.trim()] = correctAnswerExplanation.trim();
+      optionLines.forEach((opt, i) => { if (expLines[i]) explanations[opt] = expLines[i]; });
+      if (Object.keys(explanations).length > 0) q.explanations = explanations;
+    } else if (cardType === 'matching') {
+      const validPairs = matchingPairs.filter(p => p.left.trim() && p.rights.trim())
+        .map(p => ({ id: p.id, left: p.left.trim(), rights: p.rights.split(',').map(r => r.trim()).filter(r => r) }));
+      if (validPairs.length < 2) { alert('Matching requires at least 2 pairs.'); return; }
+      q.pairs = validPairs;
+      q.back = 'Matching Exercise';
+    } else if (cardType === 'multi-select') {
+      const valid = multiSelectOptions.filter(o => o.text.trim());
+      if (valid.length < 2 || !valid.some(o => o.isCorrect)) { alert('Multi-select needs 2+ options with at least 1 correct.'); return; }
+      q.options = valid.map(o => o.text.trim());
+      q.correctOptions = valid.filter(o => o.isCorrect).map(o => o.text.trim());
+      q.back = 'Multi-Select Exercise';
+    } else if (cardType === 'sequencing') {
+      const valid = sequenceItems.filter(i => i.text.trim());
+      if (valid.length < 2) { alert('Sequencing needs at least 2 items.'); return; }
+      q.options = valid.map(i => i.text.trim());
+      q.back = 'Sequencing Exercise';
+    }
+
+    setScenarioQuestions(prev => [...prev, q]);
+    setFront('');
+    setBack('');
+    setDistractors('');
+    setDistractorExplanations('');
+    setCorrectAnswerExplanation('');
+    setHint('');
+    setExplanation('');
+    setImageUrl(undefined);
+    setBackImageUrl(undefined);
+    setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
+    setMultiSelectOptions([
+      { id: Date.now().toString() + '1', text: '', isCorrect: false },
+      { id: Date.now().toString() + '2', text: '', isCorrect: false }
+    ]);
+    setSequenceItems([
+      { id: Date.now().toString() + '1', text: '' },
+      { id: Date.now().toString() + '2', text: '' }
+    ]);
+    setScenarioSubFormOpen(false);
+  };
+
+  const handleScenarioSubmit = () => {
+    if (!scenarioPassage.trim() || scenarioQuestions.length === 0) return;
+    const sid = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 11);
+    const cards = scenarioQuestions.map((q, i) => ({
+      ...q,
+      scenarioId: sid,
+      scenarioText: scenarioPassage.trim(),
+      scenarioOrder: i + 1,
+    }));
+    onAddCards(cards);
+    resetCardForm();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isScenarioMode) return;
     if (front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing'].includes(cardType))) {
       let newCard: Card = { 
         id: (editingCardIndex !== null && island.cards[editingCardIndex].id) ? island.cards[editingCardIndex].id : Math.random().toString(36).substring(2, 11),
@@ -235,17 +334,34 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       }
       
       if (editingCardIndex !== null && onUpdateCard) {
+        const existingCard = island.cards[editingCardIndex];
+        if (existingCard.scenarioId) {
+          newCard.scenarioId = existingCard.scenarioId;
+          newCard.scenarioOrder = existingCard.scenarioOrder;
+          newCard.scenarioText = scenarioPassage.trim() || existingCard.scenarioText;
+          if (scenarioPassage.trim() && scenarioPassage.trim() !== (existingCard.scenarioText || '')) {
+            island.cards.forEach((c, i) => {
+              if (i !== editingCardIndex && c.scenarioId === existingCard.scenarioId) {
+                onUpdateCard!(i, { ...c, scenarioText: scenarioPassage.trim() });
+              }
+            });
+          }
+        }
         onUpdateCard(editingCardIndex, newCard);
       } else {
         onAddCard(newCard);
       }
-      
+
       resetCardForm();
     }
   };
 
   const handleEditCard = (idx: number) => {
     const card = island.cards[idx];
+    setIsScenarioMode(false);
+    setScenarioQuestions([]);
+    setScenarioSubFormOpen(false);
+    setScenarioPassage(card.scenarioText || '');
     setEditingCardIndex(idx);
     setParentCardForProgression(null);
     setCardType(card.type || 'flashcard');
@@ -330,6 +446,32 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setParentCardForProgression(null);
   };
 
+  const switchCardType = (type: Card['type']) => {
+    setCardType(type);
+    if (isScenarioMode && !scenarioSubFormOpen) {
+      setIsScenarioMode(false);
+      setScenarioPassage('');
+      setScenarioQuestions([]);
+    }
+  };
+
+  const openCardPreview = (e: React.MouseEvent, idx: number) => {
+    e.stopPropagation();
+    const card = island.cards[idx];
+    const opts = card.options || [];
+    setPreviewShuffledOptions([...opts].sort(() => Math.random() - 0.5));
+    setPreviewSequenceOrder(opts.map((_, i) => i).sort(() => Math.random() - 0.5));
+    setPreviewCardIndex(idx);
+    setPreviewFlipped(false);
+    setPreviewSelectedOption(null);
+    setPreviewSelectedOptions(new Set());
+    setPreviewMultiSubmitted(false);
+    setPreviewFibInput('');
+    setPreviewFibSubmitted(false);
+    setPreviewSequenceSubmitted(false);
+  };
+
+  const closeCardPreview = () => setPreviewCardIndex(null);
 
   const downloadFile = (content: string, filename: string) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -1106,29 +1248,29 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               <div className="flex bg-white/5 p-1.5 rounded-xl flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setCardType('flashcard')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", cardType === 'flashcard' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  onClick={() => switchCardType('flashcard')}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'flashcard' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
                   Flashcard
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCardType('mcq')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", cardType === 'mcq' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  onClick={() => switchCardType('mcq')}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'mcq' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
                   MCQ
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCardType('multi-select')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", cardType === 'multi-select' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  onClick={() => switchCardType('multi-select')}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'multi-select' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
                   Multi-Select
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setCardType('matching');
+                    switchCardType('matching');
                     if (matchingPairs.length < 2) {
                       setMatchingPairs([
                         { id: Date.now().toString() + '1', left: '', rights: '' },
@@ -1136,26 +1278,111 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       ]);
                     }
                   }}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", cardType === 'matching' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'matching' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
                   Matching
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCardType('sequencing')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", cardType === 'sequencing' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  onClick={() => switchCardType('sequencing')}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'sequencing' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
                   Sequencing
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCardType('fill-in-the-blank')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", cardType === 'fill-in-the-blank' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  onClick={() => switchCardType('fill-in-the-blank')}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'fill-in-the-blank' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
                   Fill in the Blank
                 </button>
+                <button
+                  type="button"
+                  onClick={() => { resetCardForm(); setIsScenarioMode(true); }}
+                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", isScenarioMode ? 'bg-sky-500 text-white' : 'text-brand-muted hover:text-white')}
+                >
+                  Scenario
+                </button>
               </div>
 
+              {/* Scenario creation mode */}
+              {isScenarioMode && !scenarioSubFormOpen && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
+                      Scenario / Passage
+                    </label>
+                    <textarea
+                      value={scenarioPassage}
+                      onChange={e => setScenarioPassage(e.target.value)}
+                      placeholder="Describe the clinical scenario, vignette, or passage the questions will reference..."
+                      rows={5}
+                      className="w-full bg-sky-500/5 border border-sky-500/20 rounded-2xl px-5 py-4 text-white outline-none focus:border-sky-500/50 transition-colors resize-none custom-scrollbar"
+                    />
+                  </div>
+                  {scenarioQuestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium">Questions Added</p>
+                      {scenarioQuestions.map((q, i) => (
+                        <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
+                          <span className="text-[10px] font-black text-sky-400 uppercase shrink-0">Q{i + 1}</span>
+                          <p className="text-sm text-white/70 flex-1 truncate">{q.front}</p>
+                          <button type="button" onClick={() => setScenarioQuestions(prev => prev.filter((_, j) => j !== i))} className="text-brand-muted hover:text-red-400 transition-colors shrink-0">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setScenarioSubFormOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 border border-dashed border-sky-500/30 hover:border-sky-500/60 text-sky-400/70 hover:text-sky-400 py-3 rounded-xl transition-all text-sm font-bold"
+                  >
+                    <Plus className="w-4 h-4" /> Add Question
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleScenarioSubmit}
+                    disabled={!scenarioPassage.trim() || scenarioQuestions.length === 0}
+                    className="btn-primary h-14 w-full disabled:opacity-50"
+                  >
+                    Save Scenario Group ({scenarioQuestions.length} question{scenarioQuestions.length !== 1 ? 's' : ''})
+                  </button>
+                </div>
+              )}
+
+              {/* Scenario sub-form header */}
+              {isScenarioMode && scenarioSubFormOpen && (
+                <div className="flex items-center justify-between px-4 py-3 bg-sky-500/10 rounded-xl border border-sky-500/20">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-sky-400" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-sky-400">
+                      Question {scenarioQuestions.length + 1} for Scenario
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setScenarioSubFormOpen(false)} className="text-brand-muted hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Editing scenario card: passage field */}
+              {!isScenarioMode && editingCardIndex !== null && island.cards[editingCardIndex]?.scenarioId && (
+                <div>
+                  <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
+                    Scenario Passage <span className="text-sky-400/50 normal-case tracking-normal font-normal">(updates all questions in this group)</span>
+                  </label>
+                  <textarea
+                    value={scenarioPassage}
+                    onChange={e => setScenarioPassage(e.target.value)}
+                    rows={4}
+                    className="w-full bg-sky-500/5 border border-sky-500/20 rounded-2xl px-5 py-4 text-white outline-none focus:border-sky-500/50 transition-colors resize-none custom-scrollbar"
+                  />
+                </div>
+              )}
+
+              {(!isScenarioMode || scenarioSubFormOpen) && (
               <div>
                 <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
                   {['matching', 'sequencing'].includes(cardType) ? 'Title / Instructions' : 'Front Side (Question)'}
@@ -1168,8 +1395,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
                 />
               </div>
+              )}
 
-              {!['matching', 'multi-select', 'sequencing'].includes(cardType) && (
+              {(!isScenarioMode || scenarioSubFormOpen) && !['matching', 'multi-select', 'sequencing'].includes(cardType) && (
                 <div>
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
                     {cardType === 'mcq' ? 'Correct Answer' : 'Back Side (Answer)'}
@@ -1184,7 +1412,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </div>
               )}
 
-              {(cardType === 'flashcard' || cardType === 'mcq' || cardType === 'fill-in-the-blank') && (
+              {(!isScenarioMode || scenarioSubFormOpen) && (cardType === 'flashcard' || cardType === 'mcq' || cardType === 'fill-in-the-blank') && (
                 <div className="space-y-4">
                   <ImageUpload
                     label={cardType === 'flashcard' ? 'Front Image (optional)' : 'Question Image (optional)'}
@@ -1221,7 +1449,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </div>
               )}
 
-              {cardType === 'matching' && (
+              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'matching' && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                   <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
                     Pairs
@@ -1273,7 +1501,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </motion.div>
               )}
 
-              {cardType === 'mcq' && (
+              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'mcq' && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
                     Distractors (One per line)
@@ -1318,7 +1546,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </motion.div>
               )}
 
-              {cardType === 'multi-select' && (
+              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'multi-select' && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                   <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
                     Options
@@ -1372,7 +1600,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </motion.div>
               )}
 
-              {cardType === 'sequencing' && (
+              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'sequencing' && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                   <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
                     Sequence Items
@@ -1417,6 +1645,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </motion.div>
               )}
 
+              {(!isScenarioMode || scenarioSubFormOpen) && (
               <div>
                 <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
                   Explanation <span className="text-brand-muted/40 normal-case tracking-normal">(shown after incorrect answers)</span>
@@ -1429,33 +1658,60 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
                 />
               </div>
+              )}
 
               <div className="flex gap-3">
-                {editingCardIndex !== null && (
-                  <button
-                    type="button"
-                    onClick={handleCancelEdit}
-                    className="w-1/3 glass hover:bg-white/5 border border-white/10 h-14 rounded-[16px] transition-colors"
-                  >
-                    Cancel
-                  </button>
+                {isScenarioMode && scenarioSubFormOpen ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setScenarioSubFormOpen(false)}
+                      className="w-1/3 glass hover:bg-white/5 border border-white/10 h-14 rounded-[16px] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddScenarioQuestion}
+                      disabled={!front.trim() ||
+                               (!['matching', 'multi-select', 'sequencing'].includes(cardType) && !back.trim()) ||
+                               (cardType === 'mcq' && !distractors.trim()) ||
+                               (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
+                               (cardType === 'multi-select' && (multiSelectOptions.filter(o => o.text.trim()).length < 2 || !multiSelectOptions.some(o => o.isCorrect))) ||
+                               (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)}
+                      className="btn-primary h-14 w-2/3 disabled:opacity-50"
+                    >
+                      Save Question to Group
+                    </button>
+                  </>
+                ) : !isScenarioMode && (
+                  <>
+                    {editingCardIndex !== null && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="w-1/3 glass hover:bg-white/5 border border-white/10 h-14 rounded-[16px] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={!front.trim() ||
+                               (!['matching', 'multi-select', 'sequencing'].includes(cardType) && !back.trim()) ||
+                               (cardType === 'mcq' && !distractors.trim()) ||
+                               (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
+                               (cardType === 'multi-select' && (multiSelectOptions.filter(o => o.text.trim()).length < 2 || !multiSelectOptions.some(o => o.isCorrect))) ||
+                               (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)}
+                      className={cn(
+                        "btn-primary h-14 disabled:opacity-50",
+                        editingCardIndex !== null ? "w-2/3" : "w-full"
+                      )}
+                    >
+                      {editingCardIndex !== null ? 'Update Card' : 'Assemble Card'}
+                    </button>
+                  </>
                 )}
-                <button
-                  type="submit"
-                  disabled={!front.trim() || 
-                           (!['matching', 'multi-select', 'sequencing'].includes(cardType) && !back.trim()) || 
-                           (cardType === 'mcq' && !distractors.trim()) || 
-                           (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
-                           (cardType === 'multi-select' && (multiSelectOptions.filter(o => o.text.trim()).length < 2 || !multiSelectOptions.some(o => o.isCorrect))) ||
-                           (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)
-                           }
-                  className={cn(
-                    "btn-primary h-14 disabled:opacity-50",
-                    editingCardIndex !== null ? "w-2/3" : "w-full"
-                  )}
-                >
-                  {editingCardIndex !== null ? 'Update Card' : 'Assemble Card'}
-                </button>
               </div>
             </form>
           </div>
@@ -1473,21 +1729,44 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 <p>No cards created yet</p>
               </div>
             ) : (
-              displayCards.map(({ card, originalIdx: idx }, displayIdx) => (
+              displayCards.map(({ card, originalIdx: idx }, displayIdx) => {
+                const prevSid = displayIdx > 0 ? displayCards[displayIdx - 1].card.scenarioId : undefined;
+                const isGroupStart = !!card.scenarioId && card.scenarioId !== prevSid;
+                const isGroupMember = !!card.scenarioId && card.scenarioId === prevSid;
+                const groupSize = card.scenarioId ? island.cards.filter(c => c.scenarioId === card.scenarioId).length : 0;
+                return (
+                <React.Fragment key={`frag-${idx}`}>
+                  {isGroupStart && (
+                    <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-sky-500/5 border border-sky-500/15">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+                        <p className="text-[10px] text-white/50 line-clamp-1 max-w-[220px]">
+                          {card.scenarioText?.slice(0, 60)}{(card.scenarioText?.length ?? 0) > 60 ? '…' : ''}
+                        </p>
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-sky-400/70 shrink-0 ml-2">{groupSize} Qs</span>
+                    </div>
+                  )}
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: displayIdx * 0.05 }}
                   key={idx}
                   onClick={() => handleEditCard(idx)}
-                  style={{ marginLeft: card.tier && card.tier > 1 ? `${(card.tier - 1) * 24}px` : undefined }}
+                  style={{ marginLeft: card.tier && card.tier > 1 ? `${(card.tier - 1) * 24}px` : isGroupMember || isGroupStart ? '12px' : undefined }}
                   className={cn(
                     "glass rounded-2xl p-6 border-white/5 group relative cursor-pointer hover:border-brand-primary/30 transition-colors",
-                    editingCardIndex === idx && "border-brand-primary bg-brand-primary/5"
+                    editingCardIndex === idx && "border-brand-primary bg-brand-primary/5",
+                    card.scenarioId && "border-l-2 border-l-sky-500/20"
                   )}
                 >
                   {card.tier && card.tier > 1 && (
                     <div className="absolute -left-4 top-1/2 -mt-4 w-4 h-8 border-l-2 border-b-2 border-white/20 rounded-bl-lg pointer-events-none" />
+                  )}
+                  {card.scenarioId && (
+                    <div className="absolute top-2 left-2 text-[8px] font-black uppercase tracking-widest text-sky-400/50">
+                      Q{card.scenarioOrder}
+                    </div>
                   )}
                   <div className="flex gap-4">
                     <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
@@ -1599,6 +1878,13 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                               >
                                 <ArrowUp className="w-4 h-4" />
                               </button>
+                              <button
+                                onClick={(e) => openCardPreview(e, idx)}
+                                className="text-brand-muted hover:text-white transition-colors opacity-40 group-hover:opacity-100 p-1"
+                                title="Preview Card"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1610,7 +1896,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     </div>
                   </div>
                 </motion.div>
-              ))
+                </React.Fragment>
+                );
+              })
             )}
           </div>
         </section>
@@ -1677,6 +1965,317 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             </motion.div>
           </>
         )}
+      </AnimatePresence>
+
+      {/* Card Preview Modal */}
+      <AnimatePresence>
+        {previewCardIndex !== null && (() => {
+          const card = island.cards[previewCardIndex];
+          const isFlashcard = !card.type || card.type === 'flashcard';
+          const isMcq = card.type === 'mcq';
+          const isFib = card.type === 'fill-in-the-blank';
+          const isMulti = card.type === 'multi-select';
+          const isSeq = card.type === 'sequencing';
+          const isMatching = card.type === 'matching';
+          const typeLabel = isMcq ? 'Multiple Choice' : isFib ? 'Fill in the Blank' : isMulti ? 'Multi-Select' : isSeq ? 'Sequencing' : isMatching ? 'Matching' : 'Flashcard';
+
+          return (
+            <>
+              <motion.div
+                key="preview-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm"
+                onClick={closeCardPreview}
+              />
+              <motion.div
+                key="preview-modal"
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg glass p-6 sm:p-8 rounded-[32px] border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] z-[101] max-h-[85vh] overflow-y-auto custom-scrollbar"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-brand-primary/20 flex items-center justify-center">
+                      <Eye className="w-4 h-4 text-brand-primary" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-brand-muted font-medium">{typeLabel}</p>
+                      <p className="text-xs text-white/40">Card Preview</p>
+                    </div>
+                  </div>
+                  <button onClick={closeCardPreview} className="p-2 text-brand-muted hover:text-white rounded-xl bg-white/5 transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Card Content */}
+                {isFlashcard && (
+                  <div>
+                    {/* Front face */}
+                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-4 min-h-[120px] flex flex-col items-center justify-center gap-4">
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Front</p>
+                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-32 rounded-xl object-contain" />}
+                      <p className="text-lg font-bold leading-snug">{card.front}</p>
+                    </div>
+                    <AnimatePresence>
+                      {!previewFlipped ? (
+                        <motion.button
+                          key="reveal-btn"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          onClick={() => setPreviewFlipped(true)}
+                          className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30"
+                        >
+                          Reveal Answer
+                        </motion.button>
+                      ) : (
+                        <motion.div
+                          key="back-face"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                        >
+                          <div className="glass rounded-2xl p-6 border border-emerald-500/20 text-center min-h-[100px] flex flex-col items-center justify-center gap-4 mb-4">
+                            <p className="text-[10px] uppercase tracking-widest text-emerald-400/60 font-medium">Back</p>
+                            {card.backImageUrl && <img src={card.backImageUrl} alt="" className="max-h-32 rounded-xl object-contain" />}
+                            <p className="text-base font-medium leading-snug text-white/90">{card.back}</p>
+                            {card.explanation && <p className="text-xs text-brand-muted mt-1 leading-relaxed">{card.explanation}</p>}
+                          </div>
+                          <button
+                            onClick={() => setPreviewFlipped(false)}
+                            className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors"
+                          >
+                            Flip Back
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {isMcq && (
+                  <div>
+                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Select the Correct Answer</p>
+                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
+                      <p className="text-lg font-bold leading-snug">{card.front}</p>
+                    </div>
+                    <div className="space-y-2">
+                      {previewShuffledOptions.map((opt, i) => {
+                        const isCorrect = opt === card.back;
+                        const isSelected = previewSelectedOption === opt;
+                        const revealed = previewSelectedOption !== null;
+                        let cls = "bg-white/5 border border-white/10 hover:bg-white/10 text-white/70";
+                        if (revealed) {
+                          if (isCorrect) cls = "bg-emerald-500/10 border-emerald-500/50 text-white";
+                          else if (isSelected) cls = "bg-red-500/10 border-red-500/50 text-white";
+                          else cls = "bg-white/5 border-transparent text-brand-muted/30 opacity-40";
+                        }
+                        const letter = String.fromCharCode(65 + i);
+                        return (
+                          <button
+                            key={opt}
+                            disabled={revealed}
+                            onClick={() => setPreviewSelectedOption(opt)}
+                            className={cn("w-full text-left px-4 py-3 rounded-xl transition-colors flex items-start gap-3 text-sm font-medium", cls)}
+                          >
+                            <span className="font-bold text-white/50 shrink-0">{letter}.</span>
+                            <span className="flex-1">{opt}</span>
+                            {revealed && isCorrect && <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
+                            {revealed && isSelected && !isCorrect && <X className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {previewSelectedOption && card.explanation && (
+                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-brand-muted mt-4 p-3 rounded-xl bg-white/5 leading-relaxed">
+                        {card.explanation}
+                      </motion.p>
+                    )}
+                    {previewSelectedOption && (
+                      <button onClick={() => { setPreviewSelectedOption(null); setPreviewShuffledOptions(p => [...p].sort(() => Math.random() - 0.5)); }} className="w-full mt-3 py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
+                        Try Again
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {isFib && (
+                  <div>
+                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Fill in the Blank</p>
+                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
+                      <p className="text-lg font-bold leading-snug">{card.front}</p>
+                    </div>
+                    {!previewFibSubmitted ? (
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={previewFibInput}
+                          onChange={e => setPreviewFibInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && previewFibInput.trim() && setPreviewFibSubmitted(true)}
+                          placeholder="Type your answer..."
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 focus:outline-none focus:border-brand-primary/50"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => previewFibInput.trim() && setPreviewFibSubmitted(true)}
+                          disabled={!previewFibInput.trim()}
+                          className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30 disabled:opacity-40"
+                        >
+                          Check Answer
+                        </button>
+                      </div>
+                    ) : (
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                        <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] uppercase tracking-widest text-brand-muted/60">Your answer</p>
+                          </div>
+                          <p className="text-sm font-medium text-white/80">{previewFibInput}</p>
+                        </div>
+                        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                          <p className="text-[10px] uppercase tracking-widest text-emerald-400/60">Correct answer</p>
+                          <p className="text-sm font-bold text-emerald-300">{card.back}</p>
+                        </div>
+                        {card.explanation && <p className="text-xs text-brand-muted p-3 rounded-xl bg-white/5 leading-relaxed">{card.explanation}</p>}
+                        <button onClick={() => { setPreviewFibInput(''); setPreviewFibSubmitted(false); }} className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
+                          Try Again
+                        </button>
+                      </motion.div>
+                    )}
+                  </div>
+                )}
+
+                {isMulti && (
+                  <div>
+                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Select All That Apply</p>
+                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
+                      <p className="text-lg font-bold leading-snug">{card.front}</p>
+                    </div>
+                    <div className="space-y-2 mb-4">
+                      {previewShuffledOptions.map((opt) => {
+                        const isCorrectOpt = (card.correctOptions || []).includes(opt);
+                        const isChecked = previewSelectedOptions.has(opt);
+                        let cls = "bg-white/5 border-white/10";
+                        if (previewMultiSubmitted) {
+                          if (isCorrectOpt) cls = "bg-emerald-500/10 border-emerald-500/50";
+                          else if (isChecked) cls = "bg-red-500/10 border-red-500/50";
+                          else cls = "bg-white/5 border-transparent opacity-40";
+                        } else if (isChecked) {
+                          cls = "bg-brand-primary/10 border-brand-primary/50";
+                        }
+                        return (
+                          <button
+                            key={opt}
+                            disabled={previewMultiSubmitted}
+                            onClick={() => {
+                              const next = new Set(previewSelectedOptions);
+                              next.has(opt) ? next.delete(opt) : next.add(opt);
+                              setPreviewSelectedOptions(next);
+                            }}
+                            className={cn("w-full text-left px-4 py-3 rounded-xl border transition-colors flex items-center gap-3 text-sm", cls)}
+                          >
+                            <div className={cn("w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors", isChecked ? "bg-brand-primary border-brand-primary" : "border-white/30")}>
+                              {isChecked && <Check className="w-2.5 h-2.5 text-white" />}
+                            </div>
+                            <span className="flex-1 font-medium">{opt}</span>
+                            {previewMultiSubmitted && isCorrectOpt && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                            {previewMultiSubmitted && isChecked && !isCorrectOpt && <X className="w-4 h-4 text-red-400 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {!previewMultiSubmitted ? (
+                      <button
+                        onClick={() => setPreviewMultiSubmitted(true)}
+                        disabled={previewSelectedOptions.size === 0}
+                        className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30 disabled:opacity-40"
+                      >
+                        Submit
+                      </button>
+                    ) : (
+                      <button onClick={() => { setPreviewSelectedOptions(new Set()); setPreviewMultiSubmitted(false); setPreviewShuffledOptions(p => [...p].sort(() => Math.random() - 0.5)); }} className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
+                        Try Again
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {isSeq && (
+                  <div>
+                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Put in the Correct Order</p>
+                      <p className="text-lg font-bold leading-snug">{card.front}</p>
+                    </div>
+                    <div className="space-y-2 mb-4">
+                      {previewSequenceOrder.map((origIdx, pos) => {
+                        const opts = card.options || [];
+                        const isCorrectPos = previewSequenceSubmitted && origIdx === pos;
+                        const isWrongPos = previewSequenceSubmitted && origIdx !== pos;
+                        return (
+                          <div key={origIdx} className={cn("flex items-center gap-3 p-3 rounded-xl border transition-colors", previewSequenceSubmitted ? (isCorrectPos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/10 border-red-500/30") : "bg-white/5 border-white/10")}>
+                            <span className="text-xs font-bold text-brand-muted/60 w-5 shrink-0">{pos + 1}.</span>
+                            <span className="flex-1 text-sm font-medium">{opts[origIdx]}</span>
+                            {!previewSequenceSubmitted && (
+                              <div className="flex gap-1">
+                                <button disabled={pos === 0} onClick={() => { const o = [...previewSequenceOrder]; [o[pos-1], o[pos]] = [o[pos], o[pos-1]]; setPreviewSequenceOrder(o); }} className="p-1 text-brand-muted hover:text-white disabled:opacity-20 transition-colors">
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button disabled={pos === previewSequenceOrder.length - 1} onClick={() => { const o = [...previewSequenceOrder]; [o[pos], o[pos+1]] = [o[pos+1], o[pos]]; setPreviewSequenceOrder(o); }} className="p-1 text-brand-muted hover:text-white disabled:opacity-20 transition-colors" style={{ transform: 'rotate(180deg)' }}>
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                            {previewSequenceSubmitted && isCorrectPos && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                            {previewSequenceSubmitted && isWrongPos && <X className="w-4 h-4 text-red-400 shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {!previewSequenceSubmitted ? (
+                      <button onClick={() => setPreviewSequenceSubmitted(true)} className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30">
+                        Check Order
+                      </button>
+                    ) : (
+                      <button onClick={() => { setPreviewSequenceOrder((card.options || []).map((_, i) => i).sort(() => Math.random() - 0.5)); setPreviewSequenceSubmitted(false); }} className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
+                        Try Again
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {isMatching && (card.pairs || []).length > 0 && (
+                  <div>
+                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Match the Pairs</p>
+                      <p className="text-lg font-bold leading-snug">{card.front}</p>
+                    </div>
+                    <div className="space-y-3">
+                      {(card.pairs || []).map((pair, i) => (
+                        <div key={pair.id} className="flex items-center gap-3">
+                          <div className="flex-1 p-3 rounded-xl bg-white/5 border border-white/10 text-sm font-medium text-center">{pair.left}</div>
+                          <div className="text-brand-muted/40 shrink-0">↔</div>
+                          <div className="flex-1 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-sm font-medium text-center text-emerald-300">{pair.rights[0]}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hint */}
+                {card.hint && (
+                  <p className="text-xs text-brand-muted/60 mt-4 text-center italic">Hint: {card.hint}</p>
+                )}
+              </motion.div>
+            </>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );

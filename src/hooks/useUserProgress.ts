@@ -82,6 +82,9 @@ export interface Card {
   totalCorrect?: number;
   islandName?: string;
   userProgress?: Record<string, UserCardProgress>;
+  scenarioId?: string;
+  scenarioText?: string;
+  scenarioOrder?: number;
 }
 
 export interface Archipelago {
@@ -338,6 +341,9 @@ function sanitizeCardForPublic(card: Card) {
     ...(card.backImageCredit ? { backImageCredit: card.backImageCredit } : {}),
     ...(card.tier ? { tier: card.tier } : {}),
     ...(card.prevTierCardId ? { prevTierCardId: card.prevTierCardId } : {}),
+    ...(card.scenarioId ? { scenarioId: card.scenarioId } : {}),
+    ...(card.scenarioText ? { scenarioText: card.scenarioText } : {}),
+    ...(card.scenarioOrder !== undefined ? { scenarioOrder: card.scenarioOrder } : {}),
   };
 }
 
@@ -794,6 +800,9 @@ export function useUserProgress() {
         totalAnswers: userProg?.totalAnswers ?? data.totalAnswers,
         totalCorrect: userProg?.totalCorrect ?? data.totalCorrect,
         userProgress: isCollab ? data.userProgress : undefined,
+        scenarioId: data.scenarioId,
+        scenarioText: data.scenarioText,
+        scenarioOrder: data.scenarioOrder,
       };
     };
 

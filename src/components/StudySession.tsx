@@ -88,6 +88,39 @@ function getActiveTierCards(allCards: Card[]): Card[] {
   return roots.flatMap(root => getActiveNodes(root));
 }
 
+function buildStudyDeck(cards: Card[], sortBy: 'lastReviewed' | 'srsNextReview'): Card[] {
+  const groupMap = new Map<string, Card[]>();
+  const standalones: Card[] = [];
+
+  for (const card of cards) {
+    if (card.scenarioId) {
+      const g = groupMap.get(card.scenarioId) ?? [];
+      g.push(card);
+      groupMap.set(card.scenarioId, g);
+    } else {
+      standalones.push(card);
+    }
+  }
+
+  for (const g of groupMap.values()) {
+    g.sort((a, b) => (a.scenarioOrder ?? 0) - (b.scenarioOrder ?? 0));
+  }
+
+  const units: Card[][] = [
+    ...standalones.map(c => [c]),
+    ...[...groupMap.values()],
+  ];
+
+  const shuffledUnits = shuffleArray(units);
+  shuffledUnits.sort((a, b) => {
+    const aTime = Math.min(...a.map(c => c[sortBy] ?? 0));
+    const bTime = Math.min(...b.map(c => c[sortBy] ?? 0));
+    return aTime - bTime;
+  });
+
+  return shuffledUnits.flat();
+}
+
 function NavAction({ icon: Icon, label, onClick, variant = 'muted' }: { icon: React.ElementType, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) {
   return (
     <div className="relative group">
@@ -228,12 +261,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
     else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now);
 
-    const shuffled = shuffleArray(targetCards);
-    if (mode === 'due') {
-      shuffled.sort((a, b) => (a.srsNextReview || 0) - (b.srsNextReview || 0));
-    } else {
-      shuffled.sort((a, b) => (a.lastReviewed || 0) - (b.lastReviewed || 0));
-    }
+    const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     return shuffled;
   });
 
@@ -250,18 +278,20 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
     else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now);
 
-    const shuffled = shuffleArray(targetCards);
-    if (mode === 'due') {
-      shuffled.sort((a, b) => (a.srsNextReview || 0) - (b.srsNextReview || 0));
-    } else {
-      shuffled.sort((a, b) => (a.lastReviewed || 0) - (b.lastReviewed || 0));
-    }
+    const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     setShuffledCards(shuffled);
     setCurrentIndex(0);
     setSessionComplete(shuffled.length === 0);
   }, [mode]);
 
   const currentCard = shuffledCards[currentIndex];
+
+  const activeScenario = currentCard?.scenarioId ? {
+    id: currentCard.scenarioId,
+    text: currentCard.scenarioText ?? '',
+    questionNumber: currentCard.scenarioOrder ?? 1,
+    groupSize: shuffledCards.filter(c => c.scenarioId === currentCard.scenarioId).length,
+  } : null;
 
   useEffect(() => {
     if (currentCard?.front && currentCard.islandName) {
@@ -1265,6 +1295,32 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         </div>
       </div>
 
+      {/* Scenario passage panel — stays mounted while all cards in the group are active */}
+      <AnimatePresence>
+        {activeScenario && (
+          <motion.div
+            key={activeScenario.id}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="w-full mb-6 p-5 rounded-2xl bg-sky-500/5 border border-sky-500/20"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] uppercase tracking-widest font-bold text-sky-400">
+                Scenario
+              </span>
+              <span className="text-[10px] uppercase tracking-widest font-bold text-sky-400/60">
+                Question {activeScenario.questionNumber} of {activeScenario.groupSize}
+              </span>
+            </div>
+            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
+              {activeScenario.text}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Card Arena */}
       <div className="w-full perspective-1000 relative">
         <AnimatePresence mode="popLayout" initial={false} custom={direction}>
@@ -1765,7 +1821,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         )}
                       </div>
                     )}
-                    {selectedOption && selectedOption !== currentCard?.back && currentCard?.explanation && (
+                    {selectedOption && currentCard?.explanation && (
                       <motion.div
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
