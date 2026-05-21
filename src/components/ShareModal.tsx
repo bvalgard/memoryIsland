@@ -99,7 +99,7 @@ export default function ShareModal({
           const lastShared = sharedAtTimestamps[uid];
           return lastShared && lastShared + RESHARE_COOLDOWN_MS - Date.now() > 0;
         });
-        const mergedUids = Array.from(new Set([...Array.from(selectedUids), ...cooldownBlockedUids]));
+        const mergedUids = [...new Set([...selectedUids, ...cooldownBlockedUids])] as string[];
         await onShareTargeted(mergedUids);
       }
       onClose();

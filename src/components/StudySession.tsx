@@ -217,8 +217,20 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [cluesUsed, setCluesUsed] = useState(0);
   const [revealedIndices, setRevealedIndices] = useState<number[]>([]);
 
-  // Multi-Select State
+  // Multi-Select / Multi-Answer MCQ State
   const [selectedMultiOptions, setSelectedMultiOptions] = useState<Set<string>>(new Set());
+
+  // Normalizes correct answers across card types:
+  //   - Legacy MCQ cards:       back field holds the single correct answer (no correctOptions)
+  //   - New unified MCQ cards:  correctOptions array holds all correct answers
+  //   - Legacy multi-select:    correctOptions array (unchanged; type kept for Firestore compat)
+  // Returns a string[] so all downstream logic can treat single and multi-answer identically.
+  const getMcqCorrectOpts = (card: typeof currentCard): string[] => {
+    if (!card) return [];
+    if (card.type === 'multi-select') return card.correctOptions ?? [];
+    if (card.type === 'mcq') return card.correctOptions?.length ? card.correctOptions : [card.back];
+    return [];
+  };
 
   // Sequencing State
   const [shuffledSequence, setShuffledSequence] = useState<{ id: string, text: string }[]>([]);
@@ -376,8 +388,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   useEffect(() => {
     if ((currentCard?.type === 'mcq' || currentCard?.type === 'multi-select') && currentCard.options) {
-      // Shuffle options reliably on card switch
-      const shuffled = shuffleArray(currentCard.options);
+      const shuffled = currentCard.lockOptionOrder ? [...currentCard.options] : shuffleArray(currentCard.options);
       setShuffledOptions(shuffled);
     } else {
       setShuffledOptions([]);
@@ -707,10 +718,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const handleMultiSelectSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentCard || !currentCard.correctOptions) return;
+    if (!currentCard) return;
 
     setIsFlipped(true);
-    const correctOptionsSet = new Set(currentCard.correctOptions);
+    // Use getMcqCorrectOpts so this handler works for both legacy multi-select and multi-answer MCQ cards
+    const correctOptionsSet = new Set(getMcqCorrectOpts(currentCard));
     let isCorrect = true;
 
     if (selectedMultiOptions.size !== correctOptionsSet.size) {
@@ -899,9 +911,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       return;
     }
 
-    // For Multi-Select
-    if (currentCard?.type === 'multi-select') {
-      const correctOptionsSet = new Set(currentCard.correctOptions);
+    // Multi-answer MCQ cards (≥2 correct options) use the same submit flow as legacy multi-select
+    if (currentCard?.type === 'multi-select' || (currentCard?.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1)) {
+      const correctOptionsSet = new Set(getMcqCorrectOpts(currentCard));
       let isCorrect = selectedMultiOptions.size === correctOptionsSet.size;
       if (isCorrect) {
         for (const opt of selectedMultiOptions) {
@@ -1387,7 +1399,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   {currentCard?.consecutiveCorrect ?? 0}✓
                 </span>
                 <p className="text-brand-muted uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-4 sm:mb-6 shrink-0">
-                  {currentCard?.type === 'mcq' ? 'Select the Correct Answer' : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? 'Fill in the Blank' : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : 'Front Side'}
+                  {currentCard?.type === 'mcq' ? (getMcqCorrectOpts(currentCard).length > 1 ? 'Select All That Apply' : 'Select the Correct Answer') : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? 'Fill in the Blank' : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : 'Front Side'}
                   {tierInfo && (
                     <span className="ml-3 px-2.5 py-1 bg-white/10 rounded-full border border-white/20 text-white font-bold text-[10px] shadow-sm">
                       Tier {tierInfo.current} / {tierInfo.total}
@@ -1559,7 +1571,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       </div>
                     </form>
                   </div>
-                ) : currentCard?.type === 'multi-select' ? (
+                ) : (currentCard?.type === 'multi-select' || (currentCard?.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1)) ? (
                   <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
                     <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
                       {shuffledOptions.map((opt, idx) => {
@@ -1570,7 +1582,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         if (!isFlipped) {
                           btnClass = isSelected ? "bg-brand-primary/20 border-brand-primary/50 text-white" : "bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-white/70";
                         } else {
-                          const isCorrectOpt = currentCard.correctOptions?.includes(opt);
+                          // Use getMcqCorrectOpts so legacy multi-select and new multi-answer MCQ both work
+                          const isCorrectOpt = getMcqCorrectOpts(currentCard).includes(opt);
                           if (isCorrectOpt) {
                             btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
                             if (isSelected) {
@@ -1609,8 +1622,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       )}
                     </form>
                     {isFlipped && currentCard?.explanation &&
-                      !(selectedMultiOptions.size === (currentCard.correctOptions?.length ?? 0) &&
-                        Array.from(selectedMultiOptions).every(o => currentCard.correctOptions?.includes(o))) && (
+                      !(selectedMultiOptions.size === getMcqCorrectOpts(currentCard).length &&
+                        [...selectedMultiOptions].every(o => getMcqCorrectOpts(currentCard).includes(o))) && (
                       <motion.div
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -2058,13 +2071,13 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank') && (
         <div className="w-full mt-8 sm:mt-12 flex justify-center min-h-[64px] relative z-[60]">
           <AnimatePresence>
-            {(selectedOption !== null || (isFlipped && (currentCard.type === 'multi-select' || currentCard.type === 'sequencing' || currentCard.type === 'fill-in-the-blank'))) && (
+            {(selectedOption !== null || (isFlipped && (currentCard.type === 'multi-select' || (currentCard.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1) || currentCard.type === 'sequencing' || currentCard.type === 'fill-in-the-blank'))) && (
               <div className="flex flex-col sm:flex-row gap-4 w-full justify-center max-w-xl px-4 sm:px-0">
                 <motion.button
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 20 }}
-                  onClick={currentCard.type === 'mcq' ? handleNextMCQ : handleNextComplex}
+                  onClick={(currentCard.type === 'mcq' && getMcqCorrectOpts(currentCard).length <= 1) ? handleNextMCQ : handleNextComplex}
                   className="btn-primary h-14 sm:h-16 px-12 flex items-center justify-center gap-2 group text-sm sm:text-base shadow-[0_20px_40px_rgba(255,255,255,0.1)] relative overflow-hidden w-full sm:flex-1"
                 >
                   <span>Continue</span>

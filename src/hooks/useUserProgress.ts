@@ -86,6 +86,7 @@ export interface Card {
   scenarioId?: string;
   scenarioText?: string;
   scenarioOrder?: number;
+  lockOptionOrder?: boolean;
 }
 
 export interface Archipelago {

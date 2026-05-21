@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -55,16 +55,18 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [cardType, setCardType] = useState<Card['type']>('flashcard');
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
-  const [distractors, setDistractors] = useState('');
-  const [distractorExplanations, setDistractorExplanations] = useState('');
-  const [correctAnswerExplanation, setCorrectAnswerExplanation] = useState('');
   const [hint, setHint] = useState('');
   const [explanation, setExplanation] = useState('');
   const [matchingPairs, setMatchingPairs] = useState<{ id: string; left: string; rights: string }[]>([{ id: Date.now().toString(), left: '', rights: '' }]);
-  const [multiSelectOptions, setMultiSelectOptions] = useState<{ id: string; text: string; isCorrect: boolean }[]>([
-    { id: Date.now().toString() + '1', text: '', isCorrect: false },
-    { id: Date.now().toString() + '2', text: '', isCorrect: false }
+  // Unified MCQ options — one correct marker per option handles both single-answer (radio-like)
+  // and multi-answer (checkbox-like) in one builder. The number of marked-correct options at
+  // save time determines which study-session interaction the card gets.
+  const [mcqInlineOptions, setMcqInlineOptions] = useState<{ id: string; text: string; isCorrect: boolean; explanation: string }[]>([
+    { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
+    { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
   ]);
+  const [mcqLockOrder, setMcqLockOrder] = useState(false);
+  const [expandedMcqExp, setExpandedMcqExp] = useState<Set<string>>(new Set());
   const [sequenceItems, setSequenceItems] = useState<{ id: string; text: string }[]>([
     { id: Date.now().toString() + '1', text: '' },
     { id: Date.now().toString() + '2', text: '' }
@@ -130,9 +132,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setParentCardForProgression(null);
     setFront('');
     setBack('');
-    setDistractors('');
-    setDistractorExplanations('');
-    setCorrectAnswerExplanation('');
     setHint('');
     setExplanation('');
     setImageUrl(undefined);
@@ -140,10 +139,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setImageCredit('');
     setBackImageCredit('');
     setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
-    setMultiSelectOptions([
-      { id: Date.now().toString() + '1', text: '', isCorrect: false },
-      { id: Date.now().toString() + '2', text: '', isCorrect: false }
+    setMcqInlineOptions([
+      { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
+      { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
     ]);
+    setMcqLockOrder(false);
+    setExpandedMcqExp(new Set());
     setSequenceItems([
       { id: Date.now().toString() + '1', text: '' },
       { id: Date.now().toString() + '2', text: '' }
@@ -156,7 +157,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   
   const handleAddScenarioQuestion = () => {
     if (!front.trim()) return;
-    if (!['matching', 'multi-select', 'sequencing'].includes(cardType || '') && !back.trim()) return;
+    if (!['matching', 'sequencing', 'mcq'].includes(cardType || '') && !back.trim()) return;
 
     const q: Card = {
       id: Math.random().toString(36).substring(2, 11),
@@ -171,26 +172,25 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     if (backImageUrl) q.backImageUrl = backImageUrl;
 
     if (cardType === 'mcq') {
-      const optionLines = distractors.split('\n').map(l => l.trim()).filter(l => l);
-      if (optionLines.length === 0) { alert('MCQ needs at least one distractor.'); return; }
-      q.options = [back.trim(), ...optionLines];
-      const expLines = distractorExplanations.split('\n').map(l => l.trim());
-      const explanations: Record<string, string> = {};
-      if (correctAnswerExplanation.trim()) explanations[back.trim()] = correctAnswerExplanation.trim();
-      optionLines.forEach((opt, i) => { if (expLines[i]) explanations[opt] = expLines[i]; });
-      if (Object.keys(explanations).length > 0) q.explanations = explanations;
+      const valid = mcqInlineOptions.filter(o => o.text.trim());
+      if (valid.length < 2) { alert('MCQ needs at least 2 options.'); return; }
+      const correctOpts = valid.filter(o => o.isCorrect);
+      if (correctOpts.length === 0) { alert('MCQ requires at least one correct answer.'); return; }
+      // Always write correctOptions so StudySession can distinguish single vs multi-answer.
+      // Also write back = first correct answer for legacy compat.
+      q.correctOptions = correctOpts.map(o => o.text.trim());
+      q.back = correctOpts[0].text.trim();
+      q.options = valid.map(o => o.text.trim());
+      if (mcqLockOrder) q.lockOptionOrder = true;
+      const exps: Record<string, string> = {};
+      valid.forEach(o => { if (o.explanation.trim()) exps[o.text.trim()] = o.explanation.trim(); });
+      if (Object.keys(exps).length) q.explanations = exps;
     } else if (cardType === 'matching') {
       const validPairs = matchingPairs.filter(p => p.left.trim() && p.rights.trim())
         .map(p => ({ id: p.id, left: p.left.trim(), rights: p.rights.split(',').map(r => r.trim()).filter(r => r) }));
       if (validPairs.length < 2) { alert('Matching requires at least 2 pairs.'); return; }
       q.pairs = validPairs;
       q.back = 'Matching Exercise';
-    } else if (cardType === 'multi-select') {
-      const valid = multiSelectOptions.filter(o => o.text.trim());
-      if (valid.length < 2 || !valid.some(o => o.isCorrect)) { alert('Multi-select needs 2+ options with at least 1 correct.'); return; }
-      q.options = valid.map(o => o.text.trim());
-      q.correctOptions = valid.filter(o => o.isCorrect).map(o => o.text.trim());
-      q.back = 'Multi-Select Exercise';
     } else if (cardType === 'sequencing') {
       const valid = sequenceItems.filter(i => i.text.trim());
       if (valid.length < 2) { alert('Sequencing needs at least 2 items.'); return; }
@@ -201,18 +201,17 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setScenarioQuestions(prev => [...prev, q]);
     setFront('');
     setBack('');
-    setDistractors('');
-    setDistractorExplanations('');
-    setCorrectAnswerExplanation('');
     setHint('');
     setExplanation('');
     setImageUrl(undefined);
     setBackImageUrl(undefined);
     setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
-    setMultiSelectOptions([
-      { id: Date.now().toString() + '1', text: '', isCorrect: false },
-      { id: Date.now().toString() + '2', text: '', isCorrect: false }
+    setMcqInlineOptions([
+      { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
+      { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
     ]);
+    setMcqLockOrder(false);
+    setExpandedMcqExp(new Set());
     setSequenceItems([
       { id: Date.now().toString() + '1', text: '' },
       { id: Date.now().toString() + '2', text: '' }
@@ -238,7 +237,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isScenarioMode) return;
-    if (front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing'].includes(cardType))) {
+    if (front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing', 'mcq'].includes(cardType))) {
       let newCard: Card = { 
         id: (editingCardIndex !== null && island.cards[editingCardIndex].id) ? island.cards[editingCardIndex].id : Math.random().toString(36).substring(2, 11),
         front: front.trim(), 
@@ -274,27 +273,19 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       if (backImageCredit.trim()) newCard.backImageCredit = backImageCredit.trim();
 
       if (cardType === 'mcq') {
-        const optionLines = distractors.split('\n').map(l => l.trim()).filter(l => l);
-        const explanationLines = distractorExplanations.split('\n').map(l => l.trim());
-        newCard.options = [back.trim(), ...optionLines]; // correct answer is first before shuffling
-        
-        const explanations: Record<string, string> = {};
-        
-        // Correct answer explanation
-        if (correctAnswerExplanation.trim()) {
-          explanations[back.trim()] = correctAnswerExplanation.trim();
-        }
-
-        // Distractor explanations
-        optionLines.forEach((opt, idx) => {
-          if (explanationLines[idx]) {
-            explanations[opt] = explanationLines[idx];
-          }
-        });
-        
-        if (Object.keys(explanations).length > 0) {
-          newCard.explanations = explanations;
-        }
+        const valid = mcqInlineOptions.filter(o => o.text.trim());
+        if (valid.length < 2) { alert('MCQ needs at least 2 options.'); return; }
+        const correctOpts = valid.filter(o => o.isCorrect);
+        if (correctOpts.length === 0) { alert('MCQ requires at least one correct answer.'); return; }
+        // Always write correctOptions so StudySession can distinguish single vs multi-answer.
+        // Also write back = first correct answer for legacy compat with old single-answer rendering.
+        newCard.correctOptions = correctOpts.map(o => o.text.trim());
+        newCard.back = correctOpts[0].text.trim();
+        newCard.options = valid.map(o => o.text.trim());
+        if (mcqLockOrder) newCard.lockOptionOrder = true;
+        const exps: Record<string, string> = {};
+        valid.forEach(o => { if (o.explanation.trim()) exps[o.text.trim()] = o.explanation.trim(); });
+        if (Object.keys(exps).length) newCard.explanations = exps;
       } else if (cardType === 'matching') {
         const validPairs = matchingPairs
           .filter(p => p.left.trim() && p.rights.trim())
@@ -308,21 +299,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           return;
         }
         newCard.pairs = validPairs;
-        newCard.back = 'Matching Exercise'; // Dummy back
-      } else if (cardType === 'multi-select') {
-        const validOptions = multiSelectOptions.filter(o => o.text.trim());
-        if (validOptions.length < 2) {
-          alert('Multi-select requires at least two options.');
-          return;
-        }
-        const hasCorrect = validOptions.some(o => o.isCorrect);
-        if (!hasCorrect) {
-          alert('Multi-select requires at least one correct option.');
-          return;
-        }
-        newCard.options = validOptions.map(o => o.text.trim());
-        newCard.correctOptions = validOptions.filter(o => o.isCorrect).map(o => o.text.trim());
-        newCard.back = 'Multi-Select Exercise';
+        newCard.back = 'Matching Exercise';
       } else if (cardType === 'sequencing') {
         const validItems = sequenceItems.filter(i => i.text.trim());
         if (validItems.length < 2) {
@@ -364,7 +341,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setScenarioPassage(card.scenarioText || '');
     setEditingCardIndex(idx);
     setParentCardForProgression(null);
-    setCardType(card.type || 'flashcard');
+    // Treat legacy multi-select as unified mcq — editing it will re-save it as mcq type.
+    setCardType(card.type === 'multi-select' ? 'mcq' : (card.type || 'flashcard'));
     setFront(card.front);
     setBack(card.back);
     setHint(card.hint || '');
@@ -373,22 +351,27 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setBackImageUrl(card.backImageUrl);
     setImageCredit(card.imageCredit || '');
     setBackImageCredit(card.backImageCredit || '');
-    if (card.type === 'mcq' && card.options) {
-      // Options format is [correctAnswer, ...distractors]
-      const currentDistractors = card.options.filter(opt => opt !== card.back);
-      setDistractors(currentDistractors.join('\n'));
-      if (card.explanations) {
-        setCorrectAnswerExplanation(card.explanations[card.back] || '');
-        const explanationsArray = currentDistractors.map(opt => card.explanations![opt] || '');
-        setDistractorExplanations(explanationsArray.join('\n'));
-      } else {
-        setCorrectAnswerExplanation('');
-        setDistractorExplanations('');
-      }
+    if ((card.type === 'mcq' || card.type === 'multi-select') && card.options) {
+      const opts = card.options.map(opt => ({
+        id: Date.now().toString() + Math.random(),
+        text: opt,
+        // Legacy MCQ: back holds the single correct answer (no correctOptions).
+        // New MCQ and multi-select: use correctOptions array.
+        isCorrect: card.correctOptions?.length
+          ? card.correctOptions.includes(opt)
+          : opt === card.back,
+        explanation: card.explanations?.[opt] || '',
+      }));
+      setMcqInlineOptions(opts);
+      setMcqLockOrder(card.lockOptionOrder || false);
+      setExpandedMcqExp(new Set(opts.filter(o => o.explanation).map(o => o.id)));
     } else {
-      setCorrectAnswerExplanation('');
-      setDistractors('');
-      setDistractorExplanations('');
+      setMcqInlineOptions([
+        { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
+        { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
+      ]);
+      setMcqLockOrder(false);
+      setExpandedMcqExp(new Set());
     }
     if (card.type === 'matching' && card.pairs) {
       setMatchingPairs(card.pairs.map(p => ({
@@ -398,18 +381,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       })));
     } else {
       setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
-    }
-    if (card.type === 'multi-select' && card.options) {
-      setMultiSelectOptions(card.options.map(o => ({
-        id: Date.now().toString() + Math.random(),
-        text: o,
-        isCorrect: card.correctOptions?.includes(o) || false
-      })));
-    } else {
-      setMultiSelectOptions([
-        { id: Date.now().toString() + '1', text: '', isCorrect: false },
-        { id: Date.now().toString() + '2', text: '', isCorrect: false }
-      ]);
     }
     if (card.type === 'sequencing' && card.options) {
       setSequenceItems(card.options.map((o, idx) => ({
@@ -1260,13 +1231,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 >
                   MCQ
                 </button>
-                <button
-                  type="button"
-                  onClick={() => switchCardType('multi-select')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'multi-select' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  Multi-Select
-                </button>
+                {/* Multi-Select merged into MCQ: mark multiple options correct in the MCQ builder */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1397,16 +1362,16 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               </div>
               )}
 
-              {(!isScenarioMode || scenarioSubFormOpen) && !['matching', 'multi-select', 'sequencing'].includes(cardType) && (
+              {(!isScenarioMode || scenarioSubFormOpen) && !['matching', 'sequencing', 'mcq'].includes(cardType) && (
                 <div>
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
-                    {cardType === 'mcq' ? 'Correct Answer' : 'Back Side (Answer)'}
+                    Back Side (Answer)
                   </label>
                   <textarea
                     value={back}
                     onChange={(e) => setBack(e.target.value)}
-                    placeholder={cardType === 'mcq' ? "The unequivocally correct answer..." : "The detailed explanation..."}
-                    rows={cardType === 'mcq' ? 2 : 3}
+                    placeholder="The detailed explanation..."
+                    rows={3}
                     className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
                   />
                 </div>
@@ -1503,36 +1468,91 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
               {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'mcq' && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                  <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
-                    Distractors (One per line)
-                  </label>
-                  <textarea
-                    value={distractors}
-                    onChange={(e) => setDistractors(e.target.value)}
-                    placeholder="Wrong answer 1&#10;Wrong answer 2&#10;Wrong answer 3"
-                    rows={3}
-                    className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar uppercase-placeholder"
-                  />
-                  <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
-                    Distractor Explanations (One per line, matches above)
-                  </label>
-                  <textarea
-                    value={distractorExplanations}
-                    onChange={(e) => setDistractorExplanations(e.target.value)}
-                    placeholder="Explanation for wrong answer 1&#10;Explanation for wrong answer 2&#10;Explanation for wrong answer 3"
-                    rows={3}
-                    className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
-                  />
-                  <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
-                    Correct Answer Explanation
-                  </label>
-                  <textarea
-                    value={correctAnswerExplanation}
-                    onChange={(e) => setCorrectAnswerExplanation(e.target.value)}
-                    placeholder="Why is the right answer correct?"
-                    rows={2}
-                    className="w-full bg-emerald-500/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
-                  />
+                  <div className="flex items-center justify-between mb-1 mt-4">
+                    <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black">
+                      Options
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setMcqLockOrder(!mcqLockOrder)}
+                      className={cn("flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 rounded-lg transition-colors",
+                        mcqLockOrder ? "bg-amber-500/10 text-amber-400 border border-amber-500/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
+                    >
+                      {mcqLockOrder ? <Lock className="w-3 h-3" /> : <Shuffle className="w-3 h-3" />}
+                      {mcqLockOrder ? 'Order locked' : 'Shuffle on'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
+                    Click the circle to mark correct answers. Mark one for single-answer, multiple for "select all that apply". Use <strong>exp</strong> to add per-option explanations.
+                  </p>
+                  <div className="space-y-2">
+                    {mcqInlineOptions.map((opt, idx) => (
+                      <div key={opt.id}>
+                        <div className={cn("flex gap-2 items-center p-1", opt.isCorrect ? "bg-emerald-500/5 border border-emerald-500/20 rounded-xl" : "rounded-xl")}>
+                          {/* Toggle correct: single click marks/unmarks. Multiple can be correct (becomes "select all that apply"). */}
+                          <button
+                            type="button"
+                            onClick={() => setMcqInlineOptions(mcqInlineOptions.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o))}
+                            className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-colors",
+                              opt.isCorrect ? "border-emerald-500 bg-emerald-500/20" : "border-white/20 bg-white/5 hover:border-white/40")}
+                          >
+                            {opt.isCorrect && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                          </button>
+                          <input
+                            value={opt.text}
+                            onChange={(e) => {
+                              const updated = [...mcqInlineOptions];
+                              updated[idx] = { ...updated[idx], text: e.target.value };
+                              setMcqInlineOptions(updated);
+                            }}
+                            placeholder={opt.isCorrect ? "Correct answer..." : `Distractor ${idx}...`}
+                            className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newSet = new Set(expandedMcqExp);
+                              if (newSet.has(opt.id)) newSet.delete(opt.id); else newSet.add(opt.id);
+                              setExpandedMcqExp(newSet);
+                            }}
+                            className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors",
+                              expandedMcqExp.has(opt.id) || opt.explanation ? "bg-brand-primary/10 text-brand-primary border border-brand-primary/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
+                          >
+                            exp
+                          </button>
+                          <button
+                            type="button"
+                            disabled={mcqInlineOptions.length <= 2}
+                            onClick={() => setMcqInlineOptions(mcqInlineOptions.filter((_, i) => i !== idx))}
+                            className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
+                              mcqInlineOptions.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {(expandedMcqExp.has(opt.id) || opt.explanation) && (
+                          <textarea
+                            value={opt.explanation}
+                            onChange={(e) => {
+                              const updated = [...mcqInlineOptions];
+                              updated[idx] = { ...updated[idx], explanation: e.target.value };
+                              setMcqInlineOptions(updated);
+                            }}
+                            placeholder="Explanation shown after answering..."
+                            rows={2}
+                            className="w-full mt-1 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50 resize-none"
+                          />
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setMcqInlineOptions([...mcqInlineOptions, { id: Date.now().toString(), text: '', isCorrect: false, explanation: '' }])}
+                      className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
+                    >
+                      <Plus className="w-4 h-4" /> Add Option
+                    </button>
+                  </div>
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
                     Optional Hint
                   </label>
@@ -1543,60 +1563,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     rows={2}
                     className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
                   />
-                </motion.div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'multi-select' && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                  <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
-                    Options
-                  </label>
-                  <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
-                    Check the boxes to mark the correct answers. You need at least one correct option.
-                  </p>
-                  <div className="space-y-3">
-                    {multiSelectOptions.map((opt, idx) => (
-                      <div key={opt.id} className="flex gap-2 items-center">
-                        <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-2 rounded-xl text-brand-muted hover:text-white">
-                          <input 
-                            type="checkbox" 
-                            checked={opt.isCorrect} 
-                            onChange={(e) => {
-                              const newOpts = [...multiSelectOptions];
-                              newOpts[idx].isCorrect = e.target.checked;
-                              setMultiSelectOptions(newOpts);
-                            }}
-                            className="w-4 h-4 rounded appearance-none border border-white/20 checked:bg-brand-primary checked:border-transparent flex-shrink-0 relative after:content-[''] checked:after:absolute checked:after:inset-0 checked:after:bg-[url('data:image/svg+xml;utf8,<svg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%20fill=%22none%22%20stroke=%22black%22%20stroke-width=%224%22%20stroke-linecap=%22round%22%20stroke-linejoin=%22round%22><polyline%20points=%2220%206%209%2017%204%2012%22></polyline></svg>')] checked:after:bg-no-repeat checked:after:bg-center checked:after:bg-[length:10px_10px]"
-                          />
-                        </label>
-                        <input
-                          value={opt.text}
-                          onChange={(e) => {
-                            const newOpts = [...multiSelectOptions];
-                            newOpts[idx].text = e.target.value;
-                            setMultiSelectOptions(newOpts);
-                          }}
-                          placeholder={`Option ${idx + 1}`}
-                          className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                        />
-                        <button 
-                          type="button"
-                          disabled={multiSelectOptions.length <= 2}
-                          onClick={() => setMultiSelectOptions(multiSelectOptions.filter((_, i) => i !== idx))}
-                          className={cn("w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors", multiSelectOptions.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button 
-                      type="button"
-                      onClick={() => setMultiSelectOptions([...multiSelectOptions, { id: Date.now().toString(), text: '', isCorrect: false }])}
-                      className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
-                    >
-                      <Plus className="w-4 h-4" /> Add Option
-                    </button>
-                  </div>
                 </motion.div>
               )}
 
@@ -1674,10 +1640,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       type="button"
                       onClick={handleAddScenarioQuestion}
                       disabled={!front.trim() ||
-                               (!['matching', 'multi-select', 'sequencing'].includes(cardType) && !back.trim()) ||
-                               (cardType === 'mcq' && !distractors.trim()) ||
+                               (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
+                               (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim()).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
                                (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
-                               (cardType === 'multi-select' && (multiSelectOptions.filter(o => o.text.trim()).length < 2 || !multiSelectOptions.some(o => o.isCorrect))) ||
                                (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)}
                       className="btn-primary h-14 w-2/3 disabled:opacity-50"
                     >
@@ -1698,10 +1663,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     <button
                       type="submit"
                       disabled={!front.trim() ||
-                               (!['matching', 'multi-select', 'sequencing'].includes(cardType) && !back.trim()) ||
-                               (cardType === 'mcq' && !distractors.trim()) ||
+                               (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
+                               (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim()).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
                                (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
-                               (cardType === 'multi-select' && (multiSelectOptions.filter(o => o.text.trim()).length < 2 || !multiSelectOptions.some(o => o.isCorrect))) ||
                                (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)}
                       className={cn(
                         "btn-primary h-14 disabled:opacity-50",
@@ -1770,12 +1734,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   )}
                   <div className="flex gap-4">
                     <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
-                      {card.type === 'mcq' ? (
+                      {(card.type === 'mcq' || card.type === 'multi-select') ? (
+                        // multi-select is the legacy type name; unified under mcq display
                         <div className={cn("text-[9px] uppercase font-black", card.needsWork ? "text-amber-400" : "text-brand-primary")}>MCQ</div>
                       ) : card.type === 'fill-in-the-blank' ? (
                         <Type className={cn("w-4 h-4", card.needsWork ? "text-amber-400" : "text-purple-400")} />
-                      ) : card.type === 'multi-select' ? (
-                        <CheckSquare className={cn("w-4 h-4", card.needsWork ? "text-amber-400" : "text-blue-400")} />
                       ) : card.type === 'sequencing' ? (
                         <ListOrdered className={cn("w-4 h-4", card.needsWork ? "text-amber-400" : "text-cyan-400")} />
                       ) : (
@@ -1972,12 +1935,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         {previewCardIndex !== null && (() => {
           const card = island.cards[previewCardIndex];
           const isFlashcard = !card.type || card.type === 'flashcard';
-          const isMcq = card.type === 'mcq';
+          // Treat legacy multi-select as MCQ in the preview — both use options + correctOptions
+          const isMcq = card.type === 'mcq' || card.type === 'multi-select';
           const isFib = card.type === 'fill-in-the-blank';
-          const isMulti = card.type === 'multi-select';
           const isSeq = card.type === 'sequencing';
           const isMatching = card.type === 'matching';
-          const typeLabel = isMcq ? 'Multiple Choice' : isFib ? 'Fill in the Blank' : isMulti ? 'Multi-Select' : isSeq ? 'Sequencing' : isMatching ? 'Matching' : 'Flashcard';
+          const typeLabel = isMcq ? 'Multiple Choice' : isFib ? 'Fill in the Blank' : isSeq ? 'Sequencing' : isMatching ? 'Matching' : 'Flashcard';
 
           return (
             <>
@@ -2059,14 +2022,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
                 {isMcq && (
                   <div>
+                    {/* Normalize correctness: new cards use correctOptions, legacy MCQ uses back */}
+                    {(() => {
+                      const correctSet = card.correctOptions?.length
+                        ? new Set(card.correctOptions)
+                        : new Set([card.back]);
+                      const isMultiAnswer = correctSet.size > 1;
+                      return (
+                    <div>
                     <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Select the Correct Answer</p>
+                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">{isMultiAnswer ? 'Select All That Apply' : 'Select the Correct Answer'}</p>
                       {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
                       <p className="text-lg font-bold leading-snug">{card.front}</p>
                     </div>
                     <div className="space-y-2">
                       {previewShuffledOptions.map((opt, i) => {
-                        const isCorrect = opt === card.back;
+                        const isCorrect = correctSet.has(opt);
                         const isSelected = previewSelectedOption === opt;
                         const revealed = previewSelectedOption !== null;
                         let cls = "bg-white/5 border border-white/10 hover:bg-white/10 text-white/70";
@@ -2101,6 +2072,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                         Try Again
                       </button>
                     )}
+                    </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -2147,62 +2121,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           Try Again
                         </button>
                       </motion.div>
-                    )}
-                  </div>
-                )}
-
-                {isMulti && (
-                  <div>
-                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Select All That Apply</p>
-                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
-                      <p className="text-lg font-bold leading-snug">{card.front}</p>
-                    </div>
-                    <div className="space-y-2 mb-4">
-                      {previewShuffledOptions.map((opt) => {
-                        const isCorrectOpt = (card.correctOptions || []).includes(opt);
-                        const isChecked = previewSelectedOptions.has(opt);
-                        let cls = "bg-white/5 border-white/10";
-                        if (previewMultiSubmitted) {
-                          if (isCorrectOpt) cls = "bg-emerald-500/10 border-emerald-500/50";
-                          else if (isChecked) cls = "bg-red-500/10 border-red-500/50";
-                          else cls = "bg-white/5 border-transparent opacity-40";
-                        } else if (isChecked) {
-                          cls = "bg-brand-primary/10 border-brand-primary/50";
-                        }
-                        return (
-                          <button
-                            key={opt}
-                            disabled={previewMultiSubmitted}
-                            onClick={() => {
-                              const next = new Set(previewSelectedOptions);
-                              next.has(opt) ? next.delete(opt) : next.add(opt);
-                              setPreviewSelectedOptions(next);
-                            }}
-                            className={cn("w-full text-left px-4 py-3 rounded-xl border transition-colors flex items-center gap-3 text-sm", cls)}
-                          >
-                            <div className={cn("w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors", isChecked ? "bg-brand-primary border-brand-primary" : "border-white/30")}>
-                              {isChecked && <Check className="w-2.5 h-2.5 text-white" />}
-                            </div>
-                            <span className="flex-1 font-medium">{opt}</span>
-                            {previewMultiSubmitted && isCorrectOpt && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-                            {previewMultiSubmitted && isChecked && !isCorrectOpt && <X className="w-4 h-4 text-red-400 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {!previewMultiSubmitted ? (
-                      <button
-                        onClick={() => setPreviewMultiSubmitted(true)}
-                        disabled={previewSelectedOptions.size === 0}
-                        className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30 disabled:opacity-40"
-                      >
-                        Submit
-                      </button>
-                    ) : (
-                      <button onClick={() => { setPreviewSelectedOptions(new Set()); setPreviewMultiSubmitted(false); setPreviewShuffledOptions(p => [...p].sort(() => Math.random() - 0.5)); }} className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
-                        Try Again
-                      </button>
                     )}
                   </div>
                 )}
