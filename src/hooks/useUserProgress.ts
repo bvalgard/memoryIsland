@@ -14,6 +14,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -851,11 +852,22 @@ export function useUserProgress() {
         cards: cardsByIsland.get(id) || [],
       }));
 
-    // Merge legacy embedded archipelagos with top-level collaborative ones
-    const legacyArchipelagos: Archipelago[] = (userData.archipelagos || []).map((a) => ({
-      ...a,
-      isTopLevel: false,
-    }));
+    // Merge legacy embedded archipelagos with top-level collaborative ones.
+    // Deduplicate by ID — arrayUnion race conditions can create duplicate entries for the
+    // same archipelago ID (one with the user's renamed name, one with "Recovered Archipelago N").
+    // Keeping the first occurrence preserves the user's intended name since the rename write
+    // arrives at Firestore before the healing arrayUnion in the common race condition order.
+    const seenLegacyIds = new Set<string>();
+    const legacyArchipelagos: Archipelago[] = (userData.archipelagos || [])
+      .filter((a: any) => {
+        if (!a.id || seenLegacyIds.has(a.id)) return false;
+        seenLegacyIds.add(a.id);
+        return true;
+      })
+      .map((a) => ({
+        ...a,
+        isTopLevel: false,
+      }));
     const topLevelArchipelagos: Archipelago[] = topLevelArchipelagoDocs.map(({ id, data }) => ({
       id,
       name: data.name,
@@ -973,8 +985,15 @@ export function useUserProgress() {
 
   const updateArchipelagos = async (newArchipelagos: Archipelago[]) => {
     if (!user || isConfigPlaceholder) return;
-    // Only persist legacy embedded archipelagos to the user doc — top-level ones have their own collection
-    const embeddedOnly = newArchipelagos.filter((a) => !a.isTopLevel);
+    // Only persist legacy embedded archipelagos to the user doc — top-level ones have their own collection.
+    // Deduplicate by ID to clean up any duplicate entries that may have been created by race conditions.
+    const seenIds = new Set<string>();
+    const embeddedOnly = newArchipelagos.filter((a) => {
+      if (a.isTopLevel) return false;
+      if (!a.id || seenIds.has(a.id)) return false;
+      seenIds.add(a.id);
+      return true;
+    });
     try {
       await setDoc(
         doc(db, 'users', user.uid),
@@ -984,6 +1003,37 @@ export function useUserProgress() {
         },
         { merge: true }
       );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  // Rename an embedded archipelago using a transaction so it reads the server's authoritative
+  // state rather than potentially-stale local state. This prevents the race condition where a
+  // healing arrayUnion write arrives at Firestore after the rename, creating a duplicate entry
+  // that reverts the visible name back to "Recovered Archipelago N".
+  const renameArchipelago = async (id: string, newName: string) => {
+    if (!user || isConfigPlaceholder) return;
+    const userRef = doc(db, 'users', user.uid);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        const current: any[] = userDoc.data()?.archipelagos || [];
+        // Deduplicate by ID and rename the target entry atomically
+        const seenTxIds = new Set<string>();
+        const updated = current
+          .filter((a: any) => {
+            if (!a.id || seenTxIds.has(a.id)) return false;
+            seenTxIds.add(a.id);
+            return true;
+          })
+          .map((a: any) => (a.id === id ? { ...a, name: newName } : a));
+        transaction.set(
+          userRef,
+          { archipelagos: omitUndefined(updated), last_active: Timestamp.now() },
+          { merge: true }
+        );
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     }
@@ -1919,6 +1969,7 @@ export function useUserProgress() {
     loading,
     updateIslands,
     updateArchipelagos,
+    renameArchipelago,
     updateSettings,
     addArchipelago,
     removeArchipelago,

@@ -51,6 +51,7 @@ export default function Dashboard() {
     dismissShare,
     removeArchipelago,
     updateArchipelagos,
+    renameArchipelago,
     createCollaborativeIsland,
     addCollaborator,
     removeCollaborator,
@@ -2166,11 +2167,8 @@ export default function Dashboard() {
                             onChange={(e) => setRenameArchipelagoValue(e.target.value)}
                             onBlur={() => {
                               const trimmed = renameArchipelagoValue.trim();
-                              if (trimmed && selectedArchipelago && trimmed !== selectedArchipelago.name) {
-                                const updated = (progress?.archipelagos || []).map(a =>
-                                  a.id === selectedArchipelagoId ? { ...a, name: trimmed } : a
-                                );
-                                updateArchipelagos(updated);
+                              if (trimmed && selectedArchipelago && trimmed !== selectedArchipelago.name && selectedArchipelagoId) {
+                                renameArchipelago(selectedArchipelagoId, trimmed);
                               }
                               setIsRenamingArchipelago(false);
                             }}
