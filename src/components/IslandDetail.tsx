@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Info, Repeat2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Info, Repeat2, Copy } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -92,6 +92,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [previewSequenceSubmitted, setPreviewSequenceSubmitted] = useState(false);
   const [parentCardForProgression, setParentCardForProgression] = useState<Card | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const frontRef = useRef<HTMLTextAreaElement>(null);
+  const backRef = useRef<HTMLTextAreaElement>(null);
+  const mcqOptionRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [isScenarioMode, setIsScenarioMode] = useState(false);
   const [scenarioPassage, setScenarioPassage] = useState('');
   const [scenarioQuestions, setScenarioQuestions] = useState<Card[]>([]);
@@ -107,6 +110,21 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const isCollaborative = island.isCollaborative === true;
   const isCollabOwner = isCollaborative && island.ownerId === currentUserId;
   const isCollabMember = isCollaborative && !isCollabOwner;
+
+  useEffect(() => {
+    const t = setTimeout(() => frontRef.current?.focus(), 50);
+    return () => clearTimeout(t);
+  }, [cardType, editingCardIndex]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && editingCardIndex !== null) handleCancelEdit();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editingCardIndex]);
+
+  const isDirty = front.trim().length > 0 || back.trim().length > 0;
 
   const openCollaboratorPanel = async () => {
     setShowCollaboratorPanel(true);
@@ -330,6 +348,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       }
 
       resetCardForm();
+      setTimeout(() => frontRef.current?.focus(), 50);
     }
   };
 
@@ -1137,6 +1156,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               <h3 className="text-lg sm:text-xl font-bold flex items-center gap-3">
                 <Plus className="w-5 h-5 text-brand-primary" />
                 {editingCardIndex !== null ? 'Edit Card' : (parentCardForProgression ? `Add Progression (Tier ${(parentCardForProgression.tier || 1) + 1})` : 'Creator Mode')}
+                {isDirty && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Unsaved changes" />}
               </h3>
               
               <div className="flex items-center gap-2">
@@ -1210,7 +1230,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form
+              onSubmit={handleSubmit}
+              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLFormElement).requestSubmit(); } }}
+              className="space-y-6"
+            >
               {parentCardForProgression && (
                 <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-xl p-4 flex items-start justify-between">
                   <div>
@@ -1380,8 +1404,15 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   {['matching', 'sequencing'].includes(cardType) ? 'Title / Instructions' : 'Front Side (Question)'}
                 </label>
                 <textarea
+                  ref={frontRef}
                   value={front}
                   onChange={(e) => setFront(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !['matching', 'sequencing', 'mcq'].includes(cardType)) {
+                      e.preventDefault();
+                      backRef.current?.focus();
+                    }
+                  }}
                   placeholder={['matching', 'sequencing'].includes(cardType) ? (cardType === 'matching' ? "Match the countries to their capitals" : "Put the following in the correct order") : "The concept to remember..."}
                   rows={2}
                   className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
@@ -1395,6 +1426,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     Back Side (Answer)
                   </label>
                   <textarea
+                    ref={backRef}
                     value={back}
                     onChange={(e) => setBack(e.target.value)}
                     placeholder="The detailed explanation..."
@@ -1516,18 +1548,28 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           {/* Toggle correct: single click marks/unmarks. Multiple can be correct (becomes "select all that apply"). */}
                           <button
                             type="button"
-                            onClick={() => setMcqInlineOptions(mcqInlineOptions.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o))}
+                            onClick={() => {
+                              setMcqInlineOptions(mcqInlineOptions.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o));
+                              setTimeout(() => mcqOptionRefs.current[idx]?.focus(), 0);
+                            }}
                             className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-colors",
                               opt.isCorrect ? "border-emerald-500 bg-emerald-500/20" : "border-white/20 bg-white/5 hover:border-white/40")}
                           >
                             {opt.isCorrect && <Check className="w-3.5 h-3.5 text-emerald-400" />}
                           </button>
                           <input
+                            ref={(el) => { mcqOptionRefs.current[idx] = el; }}
                             value={opt.text}
                             onChange={(e) => {
                               const updated = [...mcqInlineOptions];
                               updated[idx] = { ...updated[idx], text: e.target.value };
                               setMcqInlineOptions(updated);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Tab' && !e.shiftKey) {
+                                const next = mcqOptionRefs.current[idx + 1];
+                                if (next) { e.preventDefault(); next.focus(); }
+                              }
                             }}
                             placeholder={opt.isCorrect ? "Correct answer..." : `Distractor ${idx}...`}
                             className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
@@ -1879,6 +1921,17 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                                 title="Add Progression Tier — create a harder version of this card"
                               >
                                 <ArrowUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const src = island.cards[idx];
+                                  onAddCard({ ...src, id: Math.random().toString(36).substring(2, 11), status: undefined, consecutiveCorrect: 0, lastReviewed: undefined, needsWork: false });
+                                }}
+                                className="text-brand-muted hover:text-cyan-400 transition-colors opacity-40 group-hover:opacity-100 p-1"
+                                title="Duplicate Card"
+                              >
+                                <Copy className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={(e) => openCardPreview(e, idx)}
