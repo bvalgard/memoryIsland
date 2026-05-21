@@ -10,10 +10,12 @@ import AdminOverviewPage from './components/admin/AdminOverviewPage';
 import AdminModerationPage from './components/admin/AdminModerationPage';
 import AdminUsersPage from './components/admin/AdminUsersPage';
 import AdminSystemPage from './components/admin/AdminSystemPage';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const isOnline = useOnlineStatus();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -33,6 +35,14 @@ export default function App() {
 
   return (
     <Router>
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-2 bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 text-amber-300 text-xs font-semibold tracking-wide backdrop-blur-sm">
+          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M6.343 6.343a9 9 0 000 12.728M9.172 9.172a5 5 0 000 7.071M12 12h.01" />
+          </svg>
+          You're offline — only pinned islands are available for study
+        </div>
+      )}
       <Routes>
         <Route
           path="/"
@@ -55,4 +65,5 @@ export default function App() {
       </Routes>
     </Router>
   );
+
 }

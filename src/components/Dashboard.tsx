@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -20,6 +20,7 @@ import { useSocial } from '../hooks/useSocial';
 import ConfirmDialog from './ConfirmDialog';
 import QuestionsBoard from './QuestionsBoard';
 import { useQuestions } from '../hooks/useQuestions';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -76,6 +77,14 @@ export default function Dashboard() {
   const notifRef = useRef<HTMLDivElement>(null);
   const appLoadCheckDone = useRef(false);
   const defaultStudyModeApplied = useRef(false);
+
+  // Offline sync
+  const { isOnline, syncStatus, pendingCount, pin, unpin, queueSession, isPinned } = useOfflineSync({
+    progress,
+    processSessionResults,
+    processArchipelagoResults,
+  });
+  const [offlineQueuedToast, setOfflineQueuedToast] = useState(false);
 
   // Achievement system
   const { checkAndAwardAchievements } = useAchievements();
@@ -649,6 +658,24 @@ export default function Dashboard() {
   const selectedIsland = selectedIslandId === 'archipelago' ? archipelagoIsland : currentIslands.find(i => i.id === selectedIslandId);
 
   const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
+    if (!isOnline) {
+      // Queue results for sync when back online
+      await queueSession({
+        islandId: selectedIslandId ?? '',
+        isArchipelago: selectedIslandId === 'archipelago',
+        cardUpdates,
+        sessionMaxStreak: maxStreak,
+        sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 },
+        timestamp: Date.now(),
+      });
+      setOfflineQueuedToast(true);
+      setTimeout(() => setOfflineQueuedToast(false), 5000);
+      clearDraft();
+      setIsStudying(false);
+      setSelectedIslandId(null);
+      return;
+    }
+
     if (selectedIslandId === 'archipelago') {
       await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
     } else if (selectedIslandId) {
@@ -679,6 +706,46 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative overflow-hidden">
+      {/* Offline sync status toasts */}
+      <AnimatePresence>
+        {syncStatus === 'syncing' && (
+          <motion.div
+            key="syncing"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-[#111] border border-white/10 rounded-2xl px-5 py-3 shadow-2xl"
+          >
+            <div className="w-3.5 h-3.5 border-2 border-brand-primary border-t-transparent rounded-full animate-spin shrink-0" />
+            <span className="text-sm text-white/80">Syncing {pendingCount} offline {pendingCount === 1 ? 'session' : 'sessions'}…</span>
+          </motion.div>
+        )}
+        {syncStatus === 'synced' && (
+          <motion.div
+            key="synced"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-[#111] border border-emerald-500/30 rounded-2xl px-5 py-3 shadow-2xl"
+          >
+            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="text-sm text-white/80">Offline sessions synced</span>
+          </motion.div>
+        )}
+        {offlineQueuedToast && (
+          <motion.div
+            key="offline-queued"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-[#111] border border-amber-500/30 rounded-2xl px-5 py-3 shadow-2xl"
+          >
+            <CloudOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-sm text-white/80">Session saved — will sync when you're back online</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {sessionDraft && !isStudying && (
           <motion.div
@@ -2068,6 +2135,7 @@ export default function Dashboard() {
                   islandId={selectedIslandId || selectedIsland.id}
                   archipelagoName={selectedIslandId !== 'archipelago' ? selectedArchipelago?.name : undefined}
                   currentUserName={user?.displayName || 'Explorer'}
+                  isOnline={isOnline}
                   onViewQuestion={handleViewQuestion}
                   onFinish={handleFinishStudy}
                   onProgressUpdate={(cu, sd, sms) => {
@@ -2076,41 +2144,50 @@ export default function Dashboard() {
                     }
                   }}
                   onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
-                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
-                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
-                    if (progress && sessionMeta) {
-                      const unlocked = await checkAndAwardAchievements({
-                        progress, cardUpdates, sessionMeta, trigger: 'session-abandon',
-                        islandId: selectedIslandId || undefined,
-                      });
-                      if (unlocked.length) enqueueToasts(unlocked);
+                    if (!isOnline) {
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      setOfflineQueuedToast(true);
+                      setTimeout(() => setOfflineQueuedToast(false), 5000);
+                    } else {
+                      if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+                      if (progress && sessionMeta) {
+                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
+                        if (unlocked.length) enqueueToasts(unlocked);
+                      }
                     }
                     clearDraft();
                     setIsStudying(false);
                   }}
                   onBackToMap={async (delta, cardUpdates, maxStreak, sessionMeta) => {
-                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
-                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
-                    if (progress && sessionMeta) {
-                      const unlocked = await checkAndAwardAchievements({
-                        progress, cardUpdates, sessionMeta, trigger: 'session-abandon',
-                        islandId: selectedIslandId || undefined,
-                      });
-                      if (unlocked.length) enqueueToasts(unlocked);
+                    if (!isOnline) {
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      setOfflineQueuedToast(true);
+                      setTimeout(() => setOfflineQueuedToast(false), 5000);
+                    } else {
+                      if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+                      if (progress && sessionMeta) {
+                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
+                        if (unlocked.length) enqueueToasts(unlocked);
+                      }
                     }
                     clearDraft();
                     setIsStudying(false);
                     setSelectedIslandId(null);
                   }}
                   onSwitchMode={async (newMode, delta, cardUpdates, maxStreak, sessionMeta) => {
-                    if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
-                    else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
-                    if (progress && sessionMeta) {
-                      const unlocked = await checkAndAwardAchievements({
-                        progress, cardUpdates, sessionMeta, trigger: 'session-complete',
-                        islandId: selectedIslandId || undefined,
-                      });
-                      if (unlocked.length) enqueueToasts(unlocked);
+                    if (!isOnline) {
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      setOfflineQueuedToast(true);
+                      setTimeout(() => setOfflineQueuedToast(false), 5000);
+                    } else {
+                      if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+                      if (progress && sessionMeta) {
+                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-complete', islandId: selectedIslandId || undefined });
+                        if (unlocked.length) enqueueToasts(unlocked);
+                      }
                     }
                     clearDraft();
                     setStudyMode(newMode);
@@ -2381,6 +2458,16 @@ export default function Dashboard() {
                           islandImageSrc={imageSrc}
                           trackingMode={trackingMode}
                           onClick={() => setSelectedIslandId(island.id)}
+                          isPinned={isPinned(island.id)}
+                          isOnline={isOnline}
+                          onPinToggle={async (e) => {
+                            e.stopPropagation();
+                            if (isPinned(island.id)) {
+                              await unpin(island.id);
+                            } else {
+                              await pin(island);
+                            }
+                          }}
                         />
                       );
                     })}
@@ -2749,9 +2836,12 @@ interface IslandCardProps {
   trackingMode?: string;
   onClick: () => void;
   key?: string | number;
+  isPinned?: boolean;
+  isOnline?: boolean;
+  onPinToggle?: (e: { stopPropagation: () => void }) => void;
 }
 
-function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClick }: IslandCardProps) {
+function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClick, isPinned = false, isOnline = true, onPinToggle }: IslandCardProps) {
   const getMasteryStyles = () => {
     switch (masteryLevel) {
       case 'struggling':
@@ -2786,13 +2876,17 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClic
     }
   };
 
+  const isOfflineUnavailable = !isOnline && !isPinned;
+
   return (
-    <motion.div 
+    <motion.div
       layoutId={island.id}
-      onClick={onClick}
+      onClick={isOfflineUnavailable ? undefined : onClick}
       className={cn(
-        "rounded-[32px] p-6 flex flex-row items-center gap-6 transition-all duration-300 cursor-pointer group relative border hover:-translate-y-1 h-40",
-        getMasteryStyles()
+        "rounded-[32px] p-6 flex flex-row items-center gap-6 transition-all duration-300 relative border h-40",
+        isOfflineUnavailable
+          ? "opacity-40 cursor-not-allowed border-white/5 bg-white/[0.02]"
+          : cn("cursor-pointer group hover:-translate-y-1", getMasteryStyles())
       )}
     >
       
@@ -2826,9 +2920,25 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClic
           {island.cards?.length || 0} Core Cards
         </p>
         <p className="text-[10px] text-brand-muted/70 italic leading-tight group-hover:text-brand-muted transition-colors">
-          {getStatusDescription()}
+          {isOfflineUnavailable ? 'Not available offline — pin to study without internet' : getStatusDescription()}
         </p>
       </div>
+
+      {/* Pin toggle button */}
+      {onPinToggle && (
+        <button
+          onClick={onPinToggle}
+          title={isPinned ? 'Remove from offline' : 'Save for offline study'}
+          className={cn(
+            "absolute top-3 right-3 p-1.5 rounded-xl border transition-all",
+            isPinned
+              ? "text-brand-primary border-brand-primary/30 bg-brand-primary/10 hover:bg-brand-primary/20"
+              : "text-brand-muted/40 border-transparent hover:text-brand-muted hover:border-white/10 hover:bg-white/5"
+          )}
+        >
+          {isPinned ? <CloudDownload className="w-3.5 h-3.5" /> : <CloudOff className="w-3.5 h-3.5" />}
+        </button>
+      )}
     </motion.div>
   );
 }

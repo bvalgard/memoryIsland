@@ -100,6 +100,19 @@ function buildStudyDeck(cards: Card[], sortBy: 'lastReviewed' | 'srsNextReview')
   return shuffledUnits.flat();
 }
 
+function OfflineImageNotice() {
+  return (
+    <div className="w-full max-h-48 rounded-xl border border-amber-500/20 bg-amber-500/5 flex flex-col items-center justify-center gap-2 py-6 px-4 text-center">
+      <svg className="w-6 h-6 text-amber-400/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M6.343 6.343a9 9 0 000 12.728M9.172 9.172a5 5 0 000 7.071M12 12h.01" />
+      </svg>
+      <p className="text-[11px] text-amber-300/70 leading-snug max-w-[200px]">
+        You're studying offline — images aren't available without a connection
+      </p>
+    </div>
+  );
+}
+
 function NavAction({ icon: Icon, label, onClick, variant = 'muted' }: { icon: React.ElementType, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) {
   return (
     <div className="relative group">
@@ -131,6 +144,7 @@ interface StudySessionProps {
   islandId?: string;
   archipelagoName?: string;
   currentUserName?: string;
+  isOnline?: boolean;
   onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
@@ -139,7 +153,7 @@ interface StudySessionProps {
   onProgressUpdate?: (cardUpdates: CardUpdateRecord, scoreDelta: number, sessionMaxStreak: number) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', isOnline = true, onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const cardIslandRef = useRef<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -1415,10 +1429,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   {(!currentCard?.type || currentCard.type === 'flashcard') ? (
                     <div className="flex-1 flex flex-col items-center justify-center w-full">
                       {currentCard?.imageUrl && (
-                        <div className="mb-4">
-                          <LightboxImage src={currentCard.imageUrl} className="w-full max-h-48 object-contain rounded-xl" />
-                          {currentCard.imageCredit && (
-                            <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">{currentCard.imageCredit}</p>
+                        <div className="mb-4 w-full">
+                          {isOnline ? (
+                            <>
+                              <LightboxImage src={currentCard.imageUrl} className="w-full max-h-48 object-contain rounded-xl" />
+                              {currentCard.imageCredit && (
+                                <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">{currentCard.imageCredit}</p>
+                              )}
+                            </>
+                          ) : (
+                            <OfflineImageNotice />
                           )}
                         </div>
                       )}
@@ -1429,15 +1449,21 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   ) : (
                     <>
                       {currentCard?.imageUrl && (
-                        <div className="mb-4">
-                          <LightboxImage
-                            src={currentCard.imageUrl}
-                            className="w-full max-h-48 object-contain rounded-xl"
-                          />
-                          {currentCard.imageCredit && (
-                            <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
-                              {currentCard.imageCredit}
-                            </p>
+                        <div className="mb-4 w-full">
+                          {isOnline ? (
+                            <>
+                              <LightboxImage
+                                src={currentCard.imageUrl}
+                                className="w-full max-h-48 object-contain rounded-xl"
+                              />
+                              {currentCard.imageCredit && (
+                                <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                                  {currentCard.imageCredit}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <OfflineImageNotice />
                           )}
                         </div>
                       )}
@@ -1981,15 +2007,21 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     ) : (
                       <>
                         {currentCard?.backImageUrl && (
-                          <div className="mb-4">
-                            <LightboxImage
-                              src={currentCard.backImageUrl}
-                              className="w-full max-h-48 object-contain rounded-xl"
-                            />
-                            {currentCard.backImageCredit && (
-                              <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
-                                {currentCard.backImageCredit}
-                              </p>
+                          <div className="mb-4 w-full">
+                            {isOnline ? (
+                              <>
+                                <LightboxImage
+                                  src={currentCard.backImageUrl}
+                                  className="w-full max-h-48 object-contain rounded-xl"
+                                />
+                                {currentCard.backImageCredit && (
+                                  <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                                    {currentCard.backImageCredit}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <OfflineImageNotice />
                             )}
                           </div>
                         )}
