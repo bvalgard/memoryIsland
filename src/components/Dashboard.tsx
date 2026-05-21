@@ -8,7 +8,7 @@ import { collection, query, where, limit, onSnapshot } from 'firebase/firestore'
 import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
 import { useAchievements } from '../hooks/useAchievements';
 import { Achievement, SessionMeta } from '../achievements';
-import { cn } from '../lib/utils';
+import { cn, getActiveTierCards } from '../lib/utils';
 import AchievementToast from './AchievementToast';
 import TrophyRoom from './TrophyRoom';
 import NewIslandModal from './NewIslandModal';
@@ -123,7 +123,7 @@ export default function Dashboard() {
     defaultStudyModeApplied.current = true;
     if (progress.settings.progressTrackingMode === 'srs') {
       const now = Date.now();
-      const due = (progress.islands || []).flatMap(i => i.cards).filter(c => !c.srsNextReview || c.srsNextReview <= now).length;
+      const due = (progress.islands || []).flatMap(i => getActiveTierCards(i.cards)).filter(c => !c.srsNextReview || c.srsNextReview <= now).length;
       setStudyMode(due > 0 ? 'due' : 'all');
     }
   }, [progress?.settings]);
@@ -483,7 +483,7 @@ export default function Dashboard() {
   const globalStrugglingCount = allCards.filter(c => c.status === 'struggling' || c.needsWork).length;
   const globalLearningCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
-  const globalDueCount = allCards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
+  const globalDueCount = getActiveTierCards(allCards).filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
 
   // Learning insights computations
   const weakSpotCards = [...allCards]
@@ -1401,36 +1401,6 @@ export default function Dashboard() {
                     <option value="alpha-desc">Z to A</option>
                     <option value="creation">Creation Date</option>
                   </select>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                  <div>
-                    <p className="text-sm font-bold text-white mb-1">Learning Streak</p>
-                    <p className="text-xs text-brand-muted">Correct in a row to move from Struggling to Learning.</p>
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={progress?.settings?.learningStreakNeeded || 1}
-                    onChange={(e) => updateSettings({ learningStreakNeeded: parseInt(e.target.value) || 1 })}
-                    className="w-16 bg-[#222] border border-white/10 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-brand-primary text-center"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                  <div>
-                    <p className="text-sm font-bold text-white mb-1">Mastery Streak</p>
-                    <p className="text-xs text-brand-muted">Correct in a row to move from Learning to Mastered.</p>
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={progress?.settings?.masteryStreakNeeded || 3}
-                    onChange={(e) => updateSettings({ masteryStreakNeeded: parseInt(e.target.value) || 3 })}
-                    className="w-16 bg-[#222] border border-white/10 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-brand-primary text-center"
-                  />
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
@@ -2379,10 +2349,11 @@ export default function Dashboard() {
                         const sevenDaysMs = now + 7 * 24 * 60 * 60 * 1000;
 
                         if (island.cards.length > 0) {
-                          const hasDueOrOverdue = island.cards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now);
+                          const activeTierCards = getActiveTierCards(island.cards);
+                          const hasDueOrOverdue = activeTierCards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now);
                           if (hasDueOrOverdue) {
                             masteryLevel = 'struggling';
-                          } else if (island.cards.some((c: any) => c.srsNextReview <= sevenDaysMs)) {
+                          } else if (activeTierCards.some((c: any) => c.srsNextReview <= sevenDaysMs)) {
                             masteryLevel = 'learning';
                           } else {
                             masteryLevel = 'mastered';

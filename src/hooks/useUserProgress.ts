@@ -141,8 +141,6 @@ export interface UserStats {
 }
 
 export interface UserSettings {
-  learningStreakNeeded: number;
-  masteryStreakNeeded: number;
   showOnGlobalLeaderboard: boolean;
   progressTrackingMode: 'srs' | 'status' | 'both';
   sessionDisplay: 'focused' | 'stats';
@@ -262,8 +260,6 @@ const defaultStats: UserStats = {
 };
 
 const defaultSettings: UserSettings = {
-  learningStreakNeeded: 1,
-  masteryStreakNeeded: 3,
   showOnGlobalLeaderboard: true,
   progressTrackingMode: 'srs',
   sessionDisplay: 'stats',
@@ -1338,7 +1334,6 @@ export function useUserProgress() {
       const prefix = `userProgress.${uid}`;
       const payload: Record<string, unknown> = {
         [`${prefix}.status`]: update.status,
-        [`${prefix}.consecutiveCorrect`]: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
         [`${prefix}.needsWork`]: update.status === 'struggling',
         [`${prefix}.lastReviewed`]: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
         [`${prefix}.totalAnswers`]: increment((update.sessionAnswers || 1)),
@@ -1358,7 +1353,6 @@ export function useUserProgress() {
 
     const payload: Record<string, unknown> = {
       status: update.status,
-      consecutiveCorrect: update.consecutiveCorrect ?? card.consecutiveCorrect ?? 0,
       needsWork: update.status === 'struggling',
       lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
       totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
