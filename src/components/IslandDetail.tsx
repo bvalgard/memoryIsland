@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Info, Repeat2 } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -419,10 +419,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const switchCardType = (type: Card['type']) => {
     setCardType(type);
-    if (isScenarioMode && !scenarioSubFormOpen) {
-      setIsScenarioMode(false);
-      setScenarioPassage('');
-      setScenarioQuestions([]);
+    setIsScenarioMode(false);
+    if (type === 'matching' && matchingPairs.length < 2) {
+      setMatchingPairs([
+        { id: Date.now().toString() + '1', left: '', rights: '' },
+        { id: Date.now().toString() + '2', left: '', rights: '' },
+      ]);
     }
   };
 
@@ -1221,20 +1223,25 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </div>
               )}
 
+
               <div className="flex bg-white/5 p-1.5 rounded-xl flex-wrap gap-1.5">
                 <button
                   type="button"
                   onClick={() => switchCardType('flashcard')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'flashcard' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  title="Classic front/back flip card"
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'flashcard' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
-                  Flashcard
+                  <CreditCard className="w-3 h-3 shrink-0" />
+                  <span>Flash</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => switchCardType('mcq')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'mcq' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  title="Multiple choice — mark one or many correct options"
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'mcq' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
-                  MCQ
+                  <CheckSquare className="w-3 h-3 shrink-0" />
+                  <span>MCQ</span>
                 </button>
                 {/* Multi-Select merged into MCQ: mark multiple options correct in the MCQ builder */}
                 <button
@@ -1248,36 +1255,51 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       ]);
                     }
                   }}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'matching' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  title="Pair terms to their matches"
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'matching' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
-                  Matching
+                  <Repeat2 className="w-3 h-3 shrink-0" />
+                  <span>Match</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => switchCardType('sequencing')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'sequencing' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  title="Put items in the correct order"
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'sequencing' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
-                  Sequencing
+                  <ListOrdered className="w-3 h-3 shrink-0" />
+                  <span>Order</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => switchCardType('fill-in-the-blank')}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'fill-in-the-blank' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
+                  title="Fill in the blank — user types the answer"
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'fill-in-the-blank' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
                 >
-                  Fill in the Blank
+                  <Type className="w-3 h-3 shrink-0" />
+                  <span>Fill ___</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => { resetCardForm(); setIsScenarioMode(true); }}
-                  className={cn("flex-1 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", isScenarioMode ? 'bg-sky-500 text-white' : 'text-brand-muted hover:text-white')}
+                  onClick={() => setIsScenarioMode(true)}
+                  title="Group multiple questions under a shared passage or vignette"
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", isScenarioMode ? 'bg-sky-500 text-white' : 'text-brand-muted hover:text-white')}
                 >
-                  Scenario
+                  <BookOpen className="w-3 h-3 shrink-0" />
+                  <span>Scenario</span>
                 </button>
               </div>
 
               {/* Scenario creation mode */}
               {isScenarioMode && !scenarioSubFormOpen && (
                 <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider">
+                    <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioPassage.trim() ? "bg-sky-500/20 text-sky-400" : "bg-sky-500 text-white")}>1 · Passage</span>
+                    <span className="text-white/20">›</span>
+                    <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioQuestions.length > 0 ? "bg-sky-500/20 text-sky-400" : scenarioPassage.trim() ? "bg-sky-500 text-white" : "text-white/20")}>2 · Questions</span>
+                    <span className="text-white/20">›</span>
+                    <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioQuestions.length > 0 ? "bg-sky-500 text-white" : "text-white/20")}>3 · Save</span>
+                  </div>
                   <div>
                     <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
                       Scenario / Passage
@@ -1487,9 +1509,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       {mcqLockOrder ? 'Order locked' : 'Shuffle on'}
                     </button>
                   </div>
-                  <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
-                    Click the circle to mark correct answers. Mark one for single-answer, multiple for "select all that apply". Use <strong>exp</strong> to add per-option explanations.
-                  </p>
                   <div className="space-y-2">
                     {mcqInlineOptions.map((opt, idx) => (
                       <div key={opt.id}>
@@ -1515,15 +1534,16 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           />
                           <button
                             type="button"
+                            title="Add explanation for this option (shown after answering)"
                             onClick={() => {
                               const newSet = new Set(expandedMcqExp);
                               if (newSet.has(opt.id)) newSet.delete(opt.id); else newSet.add(opt.id);
                               setExpandedMcqExp(newSet);
                             }}
-                            className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors",
+                            className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
                               expandedMcqExp.has(opt.id) || opt.explanation ? "bg-brand-primary/10 text-brand-primary border border-brand-primary/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
                           >
-                            exp
+                            <Info className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
@@ -1677,7 +1697,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                         editingCardIndex !== null ? "w-2/3" : "w-full"
                       )}
                     >
-                      {editingCardIndex !== null ? 'Update Card' : 'Assemble Card'}
+                      {editingCardIndex !== null ? 'Update Card' : 'Save Card'}
                     </button>
                   </>
                 )}
@@ -1694,8 +1714,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           
           <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
             {island.cards.length === 0 ? (
-              <div className="h-40 rounded-[32px] border border-dashed border-brand-border flex items-center justify-center text-brand-muted/20">
-                <p>No cards created yet</p>
+              <div className="rounded-[24px] border border-dashed border-brand-border p-8 flex flex-col items-center justify-center gap-4 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+                  <CreditCard className="w-6 h-6 text-brand-muted/40" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white/40 mb-1">No cards yet</p>
+                  <p className="text-xs text-brand-muted/40">Build your first card using the form, or</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 text-xs text-brand-muted hover:text-white px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Import CSV
+                </button>
               </div>
             ) : (
               displayCards.map(({ card, originalIdx: idx }, displayIdx) => {
@@ -1842,7 +1876,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                                   handleAddProgression(idx);
                                 }}
                                 className="text-brand-muted hover:text-brand-primary transition-colors opacity-40 group-hover:opacity-100 p-1"
-                                title="Add Progression"
+                                title="Add Progression Tier — create a harder version of this card"
                               >
                                 <ArrowUp className="w-4 h-4" />
                               </button>
