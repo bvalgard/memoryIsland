@@ -577,7 +577,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOver(true);
+    // Don't show CSV overlay when dragging image files — let ImageUpload handle those
+    const items = Array.from(e.dataTransfer.items);
+    const hasImage = items.some(item => item.kind === 'file' && item.type.startsWith('image/'));
+    if (!hasImage) {
+      setIsDragOver(true);
+    }
   };
 
   const onDragLeave = (e: React.DragEvent) => {
