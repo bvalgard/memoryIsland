@@ -1329,6 +1329,32 @@ export function useUserProgress() {
     });
   };
 
+  // Sync variant: uses Firestore increment() for totalAnswers/totalCorrect/demotionCount so that
+  // a concurrent online session written by another device isn't overwritten when this offline
+  // session syncs (the non-sync path reads from the local snapshot and would clobber newer data).
+  const buildSyncCardPayload = (card: Card, update: CardUpdateRecord[string], isCollab: boolean, uid: string): Record<string, unknown> => {
+    if (isCollab) {
+      return buildCardPayload(card, update, isCollab, uid);
+    }
+    const payload: Record<string, unknown> = {
+      status: update.status,
+      needsWork: update.status === 'struggling',
+      lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
+      totalAnswers: increment(update.sessionAnswers || 1),
+      totalCorrect: increment(update.sessionCorrect || 0),
+    };
+    if (update.wasDemoted) {
+      payload.demotionCount = increment(1);
+    }
+    if (update.srsInterval !== undefined) {
+      payload.srsInterval = update.srsInterval;
+      payload.srsEaseFactor = update.srsEaseFactor;
+      payload.srsNextReview = update.srsNextReview;
+      payload.srsRepetitions = update.srsRepetitions;
+    }
+    return payload;
+  };
+
   const buildCardPayload = (card: Card, update: CardUpdateRecord[string], isCollab: boolean, uid: string): Record<string, unknown> => {
     if (isCollab) {
       const prefix = `userProgress.${uid}`;
@@ -1404,6 +1430,52 @@ export function useUserProgress() {
         const update = cardUpdates[card.front];
         if (update && card.id) {
           batch.update(doc(db, 'cards', card.id), buildCardPayload(card, update, isCollab, uid));
+        }
+      });
+    });
+
+    try {
+      await batch.commit();
+      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'archipelago-session');
+    }
+  };
+
+  const syncOfflineResults = async (islandId: string, delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+    if (!progress || !user) return;
+    const island = progress.islands.find((entry) => entry.id === islandId);
+    if (!island) return;
+
+    const isCollab = island.isCollaborative === true;
+    const uid = user.uid;
+
+    const batch = writeBatch(db);
+    island.cards.forEach((card) => {
+      const update = cardUpdates[card.front];
+      if (update && card.id) {
+        batch.update(doc(db, 'cards', card.id), buildSyncCardPayload(card, update, isCollab, uid));
+      }
+    });
+    try {
+      await batch.commit();
+      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
+    }
+  };
+
+  const syncOfflineArchipelagoResults = async (delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+    if (!progress || !user) return;
+
+    const uid = user.uid;
+    const batch = writeBatch(db);
+    progress.islands.forEach((island) => {
+      const isCollab = island.isCollaborative === true;
+      island.cards.forEach((card) => {
+        const update = cardUpdates[card.front];
+        if (update && card.id) {
+          batch.update(doc(db, 'cards', card.id), buildSyncCardPayload(card, update, isCollab, uid));
         }
       });
     });
@@ -1978,6 +2050,8 @@ export function useUserProgress() {
     moveCardBetweenIslands,
     processSessionResults,
     processArchipelagoResults,
+    syncOfflineResults,
+    syncOfflineArchipelagoResults,
     shareIsland,
     unshareIsland,
     shareArchipelago,

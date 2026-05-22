@@ -32,6 +32,52 @@ interface IslandDetailProps {
   onRemoveCollaborator?: (uid: string) => Promise<void>;
 }
 
+function wrapSelection(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  setter: (v: string) => void,
+  before: string,
+  after: string
+) {
+  const el = ref.current;
+  if (!el) return;
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const value = el.value;
+  const newValue = value.slice(0, start) + before + value.slice(start, end) + after + value.slice(end);
+  setter(newValue);
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(start + before.length, end + before.length);
+  });
+}
+
+const FORMAT_BUTTONS = [
+  { label: 'B', title: 'Bold', before: '**', after: '**', cls: 'font-bold' },
+  { label: 'I', title: 'Italic', before: '*', after: '*', cls: 'italic' },
+  { label: '`', title: 'Code', before: '`', after: '`', cls: 'font-mono' },
+  { label: '∑', title: 'Inline math ($…$)', before: '$', after: '$', cls: '' },
+  { label: '∑∑', title: 'Block math ($$…$$)', before: '$$\n', after: '\n$$', cls: '' },
+] as const;
+
+function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaElement | null>; setter: (v: string) => void }) {
+  return (
+    <div className="flex gap-1 mb-1.5">
+      {FORMAT_BUTTONS.map(({ label, title, before, after, cls }) => (
+        <button
+          key={label}
+          type="button"
+          title={title}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => wrapSelection(taRef, setter, before, after)}
+          className={cn('px-2 py-0.5 text-[10px] rounded-md bg-white/5 border border-white/10 text-brand-muted hover:text-white hover:bg-white/10 transition-colors', cls)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator }: IslandDetailProps) {
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
@@ -94,6 +140,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const fileInputRef = useRef<HTMLInputElement>(null);
   const frontRef = useRef<HTMLTextAreaElement>(null);
   const backRef = useRef<HTMLTextAreaElement>(null);
+  const hintRef = useRef<HTMLTextAreaElement>(null);
+  const explanationRef = useRef<HTMLTextAreaElement>(null);
+  const scenarioPassageRef = useRef<HTMLTextAreaElement>(null);
   const mcqOptionRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [isScenarioMode, setIsScenarioMode] = useState(false);
   const [scenarioPassage, setScenarioPassage] = useState('');
@@ -599,7 +648,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     // Don't show CSV overlay when dragging image files — let ImageUpload handle those
-    const items = Array.from(e.dataTransfer.items);
+    const items = Array.from<DataTransferItem>(e.dataTransfer.items);
     const hasImage = items.some(item => item.kind === 'file' && item.type.startsWith('image/'));
     if (!hasImage) {
       setIsDragOver(true);
@@ -1328,7 +1377,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
                       Scenario / Passage
                     </label>
+                    <FormatToolbar taRef={scenarioPassageRef} setter={setScenarioPassage} />
                     <textarea
+                      ref={scenarioPassageRef}
                       value={scenarioPassage}
                       onChange={e => setScenarioPassage(e.target.value)}
                       placeholder="Describe the clinical scenario, vignette, or passage the questions will reference..."
@@ -1389,7 +1440,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
                     Scenario Passage <span className="text-sky-400/50 normal-case tracking-normal font-normal">(updates all questions in this group)</span>
                   </label>
+                  <FormatToolbar taRef={scenarioPassageRef} setter={setScenarioPassage} />
                   <textarea
+                    ref={scenarioPassageRef}
                     value={scenarioPassage}
                     onChange={e => setScenarioPassage(e.target.value)}
                     rows={4}
@@ -1403,6 +1456,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
                   {['matching', 'sequencing'].includes(cardType) ? 'Title / Instructions' : 'Front Side (Question)'}
                 </label>
+                <FormatToolbar taRef={frontRef} setter={setFront} />
                 <textarea
                   ref={frontRef}
                   value={front}
@@ -1425,6 +1479,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
                     Back Side (Answer)
                   </label>
+                  <FormatToolbar taRef={backRef} setter={setBack} />
                   <textarea
                     ref={backRef}
                     value={back}
@@ -1623,7 +1678,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
                     Optional Hint
                   </label>
+                  <FormatToolbar taRef={hintRef} setter={setHint} />
                   <textarea
+                    ref={hintRef}
                     value={hint}
                     onChange={(e) => setHint(e.target.value)}
                     placeholder="Provide a hint if the user gets stuck..."
@@ -1683,7 +1740,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
                   Explanation <span className="text-brand-muted/40 normal-case tracking-normal">(shown after incorrect answers)</span>
                 </label>
+                <FormatToolbar taRef={explanationRef} setter={setExplanation} />
                 <textarea
+                  ref={explanationRef}
                   value={explanation}
                   onChange={(e) => setExplanation(e.target.value)}
                   placeholder="Explain why the answer is correct..."

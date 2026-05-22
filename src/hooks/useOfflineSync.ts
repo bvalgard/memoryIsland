@@ -58,14 +58,14 @@ function resolveConflicts(
 
 interface UseOfflineSyncOptions {
   progress: UserProgress | null;
-  processSessionResults: (
+  syncOfflineResults: (
     islandId: string,
     delta: number,
     cardUpdates: CardUpdateRecord,
     sessionMaxStreak?: number,
     sessionMeta?: SessionMeta,
   ) => Promise<void>;
-  processArchipelagoResults: (
+  syncOfflineArchipelagoResults: (
     delta: number,
     cardUpdates: CardUpdateRecord,
     sessionMaxStreak?: number,
@@ -75,8 +75,8 @@ interface UseOfflineSyncOptions {
 
 export function useOfflineSync({
   progress,
-  processSessionResults,
-  processArchipelagoResults,
+  syncOfflineResults,
+  syncOfflineArchipelagoResults,
 }: UseOfflineSyncOptions) {
   const isOnline = useOnlineStatus();
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
@@ -122,9 +122,9 @@ export function useOfflineSync({
           const merged = resolveConflicts(session.cardUpdates, allCards, session.timestamp);
 
           if (session.isArchipelago) {
-            await processArchipelagoResults(0, merged, session.sessionMaxStreak, session.sessionMeta);
+            await syncOfflineArchipelagoResults(0, merged, session.sessionMaxStreak, session.sessionMeta);
           } else {
-            await processSessionResults(session.islandId, 0, merged, session.sessionMaxStreak, session.sessionMeta);
+            await syncOfflineResults(session.islandId, 0, merged, session.sessionMaxStreak, session.sessionMeta);
           }
 
           if (session.queueId !== undefined) await clearQueueItem(session.queueId);

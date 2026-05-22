@@ -7,6 +7,7 @@ import { SessionMeta } from '../achievements';
 import { cn, getActiveTierCards } from '../lib/utils';
 import LightboxImage from './LightboxImage';
 import AskQuestionModal from './AskQuestionModal';
+import { RichText, RichTextInline } from './RichText';
 import { useQuestions, type Question, type Answer } from '../hooks/useQuestions';
 
 // Reliable Fisher-Yates shuffle to prevent duplicate/dropped card bugs caused by Math.random() in sort()
@@ -1346,9 +1347,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   Question {activeScenario.questionNumber} of {activeScenario.groupSize}
                 </span>
               </div>
-              <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
-                {activeScenario.text}
-              </p>
+              <div className="text-sm text-white/80 leading-relaxed">
+                <RichText>{activeScenario.text}</RichText>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1389,35 +1390,18 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 opacity: { duration: 0.2 }
               }}
               className="w-full group"
-              onClick={() => {
-                // Flashcards flip via confidence buttons; MCQ flips only after option selection
-                const type = currentCard?.type;
-                if (type && type !== 'flashcard' && type !== 'mcq') {
-                  setIsFlipped(!isFlipped);
-                }
-              }}
             >
-              <motion.div
-                animate={{ rotateY: isFlipped ? 180 : 0 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 260,
-                  damping: 20,
-                  mass: 1
-                }}
-                style={{ transformStyle: "preserve-3d" }}
-                className="w-full relative grid"
-              >
-                {/* Front */}
+              <div className="w-full relative">
+                {/* Card */}
                 <div
                   className={cn(
-                    "[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px] relative",
+                    "glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px] relative",
                     (!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped ? "justify-between" : "justify-center"
                   )}
                 >
 
                   <p className="text-brand-muted uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-4 sm:mb-6 shrink-0">
-                    {currentCard?.type === 'mcq' ? (getMcqCorrectOpts(currentCard).length > 1 ? 'Select All That Apply' : 'Select the Correct Answer') : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? 'Fill in the Blank' : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : 'Front Side'}
+                    {currentCard?.type === 'mcq' ? (getMcqCorrectOpts(currentCard).length > 1 ? 'Select All That Apply' : 'Select the Correct Answer') : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? (isFlipped && isFibCorrect !== null ? (isFibCorrect ? 'Excellent Work' : 'Correction Analysis') : 'Fill in the Blank') : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : isFlipped ? 'Anchored Response' : 'Front Side'}
                     {tierInfo && (
                       <span className="ml-3 px-2.5 py-1 bg-white/10 rounded-full border border-white/20 text-white font-bold text-[10px] shadow-sm">
                         Tier {tierInfo.current} / {tierInfo.total}
@@ -1442,8 +1426,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           )}
                         </div>
                       )}
-                      <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight whitespace-pre-wrap">
-                        {currentCard?.front}
+                      <h2 className="text-xl sm:text-2xl md:text-3xl font-normal leading-snug tracking-tight">
+                        <RichText>{currentCard?.front}</RichText>
                       </h2>
                     </div>
                   ) : (
@@ -1467,8 +1451,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           )}
                         </div>
                       )}
-                      <h2 className={cn("font-bold leading-snug tracking-tight mb-6 sm:mb-8 whitespace-pre-wrap", currentCard?.type === 'mcq' ? "text-lg sm:text-xl md:text-2xl" : "text-xl sm:text-2xl md:text-3xl")}>
-                        {currentCard?.front}
+                      <h2 className={cn("font-normal leading-snug tracking-tight mb-6 sm:mb-8", currentCard?.type === 'mcq' ? "text-lg sm:text-xl md:text-2xl" : "text-xl sm:text-2xl md:text-3xl")}>
+                        <RichText>{currentCard?.front}</RichText>
                       </h2>
                     </>
                   )}
@@ -1477,7 +1461,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && (
                     <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
                       <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
-                        Rate confidence to flip
+                        Rate your confidence
                       </p>
                       <div className="grid grid-cols-3 gap-2">
                         {([
@@ -1503,7 +1487,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
                         className="mt-3 w-full text-center text-brand-muted/25 hover:text-brand-muted/50 text-[9px] uppercase tracking-[0.2em] transition-colors"
                       >
-                        Skip →
+                        Reveal →
                       </button>
                     </div>
                   )}
@@ -1530,7 +1514,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                       "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                               )}
                             >
-                              <span className={cn(isMatched && "line-through decoration-emerald-500/30")}>{left.text}</span>
+                              <span className={cn(isMatched && "line-through decoration-emerald-500/30")}><RichTextInline>{left.text}</RichTextInline></span>
                             </motion.button>
                           )
                         })}
@@ -1555,52 +1539,127 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                       "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                               )}
                             >
-                              <span className={cn(isMatched && "line-through decoration-emerald-500/30")}>{right.text}</span>
+                              <span className={cn(isMatched && "line-through decoration-emerald-500/30")}><RichTextInline>{right.text}</RichTextInline></span>
                             </motion.button>
                           )
                         })}
                       </div>
                     </div>
                   ) : currentCard?.type === 'fill-in-the-blank' ? (
-                    <div className="w-full flex-1 flex flex-col justify-center items-center gap-6 pb-4 cursor-default" onClick={e => e.stopPropagation()}>
-                      <form onSubmit={handleFibSubmit} className="w-full max-w-sm flex flex-col gap-4">
-                        {cluesUsed > 0 && currentCard?.back && (
-                          <div className="flex flex-wrap justify-center gap-x-4 gap-y-3 mb-4 text-xl md:text-2xl font-mono text-brand-primary">
-                            {currentCard.back.split(' ').map((word, wordIndex, wordsArray) => {
-                              const startIndex = wordsArray.slice(0, wordIndex).join(' ').length + (wordIndex > 0 ? 1 : 0);
-                              return (
-                                <div key={wordIndex} className="flex gap-[2px] whitespace-nowrap">
-                                  {word.split('').map((char, charOffset) => {
-                                    const globalIndex = startIndex + charOffset;
-                                    return (
-                                      <span key={charOffset} className="border-b-2 border-brand-primary pb-1 font-bold min-w-[14px] md:min-w-[18px] text-center inline-block">
-                                        {revealedIndices.includes(globalIndex) ? char : '\u00A0'}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })}
+                    !isFlipped ? (
+                      <div className="w-full flex-1 flex flex-col justify-center items-center gap-6 pb-4 cursor-default" onClick={e => e.stopPropagation()}>
+                        <form onSubmit={handleFibSubmit} className="w-full max-w-sm flex flex-col gap-4">
+                          {cluesUsed > 0 && currentCard?.back && (
+                            <div className="flex flex-wrap justify-center gap-x-4 gap-y-3 mb-4 text-xl md:text-2xl font-mono text-brand-primary">
+                              {currentCard.back.split(' ').map((word, wordIndex, wordsArray) => {
+                                const startIndex = wordsArray.slice(0, wordIndex).join(' ').length + (wordIndex > 0 ? 1 : 0);
+                                return (
+                                  <div key={wordIndex} className="flex gap-[2px] whitespace-nowrap">
+                                    {word.split('').map((char, charOffset) => {
+                                      const globalIndex = startIndex + charOffset;
+                                      return (
+                                        <span key={charOffset} className="border-b-2 border-brand-primary pb-1 font-bold min-w-[14px] md:min-w-[18px] text-center inline-block">
+                                          {revealedIndices.includes(globalIndex) ? char : '\u00A0'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            value={fibInput}
+                            onChange={e => setFibInput(e.target.value)}
+                            placeholder="Type your answer..."
+                            className="w-full bg-white/5 border border-white/20 focus:border-brand-primary rounded-xl px-4 py-3 text-white text-center text-lg outline-none transition-colors"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button type="button" onClick={handleGetClue} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-sm font-bold transition-colors">
+                              Get Clue
+                            </button>
+                            <button type="submit" className="flex-1 bg-brand-primary hover:bg-white text-black py-3 rounded-xl text-sm font-bold transition-colors">
+                              Submit
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    ) : (
+                      <div className="w-full flex-1 flex flex-col justify-center items-center gap-4 pb-4">
+                        {isFibCorrect === false && (
+                          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 w-full max-w-sm">
+                            <div className="flex items-center gap-2 mb-1">
+                              <X className="w-4 h-4 text-red-500" />
+                              <span className="text-[10px] uppercase tracking-widest font-bold text-red-500">Not quite</span>
+                            </div>
+                            <p className="text-lg font-medium text-white line-through opacity-70 mb-1">{lastFibSubmitted}</p>
                           </div>
                         )}
-                        <input
-                          type="text"
-                          value={fibInput}
-                          onChange={e => setFibInput(e.target.value)}
-                          placeholder="Type your answer..."
-                          className="w-full bg-white/5 border border-white/20 focus:border-brand-primary rounded-xl px-4 py-3 text-white text-center text-lg outline-none transition-colors"
-                          autoFocus
-                        />
-                        <div className="flex gap-2">
-                          <button type="button" onClick={handleGetClue} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-sm font-bold transition-colors">
-                            Get Clue
-                          </button>
-                          <button type="submit" className="flex-1 bg-brand-primary hover:bg-white text-black py-3 rounded-xl text-sm font-bold transition-colors">
-                            Submit
-                          </button>
+                        <div className={cn(
+                          "flex flex-col gap-2 p-5 rounded-2xl border w-full max-w-sm",
+                          isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-500/5 border-emerald-500/30"
+                        )}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Check className="w-4 h-4 text-emerald-500" />
+                            <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-500">
+                              {isFibCorrect ? 'Perfectly Answered' : 'Correct Answer'}
+                            </span>
+                          </div>
+                          <div className="text-xl sm:text-2xl font-normal text-white tracking-tight"><RichText>{currentCard?.back}</RichText></div>
                         </div>
-                      </form>
-                    </div>
+                        {isFibCorrect === false && currentCard?.explanation && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full max-w-sm"
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                            <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
+                          </motion.div>
+                        )}
+                        {isFibCorrect && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="text-emerald-400 text-xs font-bold uppercase tracking-[0.2em]"
+                          >
+                            Progress +1
+                          </motion.div>
+                        )}
+                        {isFibCorrect === false && cardAnswers.length > 0 && (
+                          <div className="flex flex-col gap-2 w-full max-w-sm">
+                            {cardAnswers.map((answer, i) => (
+                              <motion.div
+                                key={answer.id}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.08 }}
+                                className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
+                              >
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
+                                <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
+                              </motion.div>
+                            ))}
+                            {renderAcceptPrompt()}
+                          </div>
+                        )}
+                        {isFibCorrect === false && !questionJustAsked && (
+                          <motion.button
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
+                            className="w-full max-w-sm flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
+                          >
+                            <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
+                          </motion.button>
+                        )}
+                        {isFibCorrect === false && questionJustAsked && (
+                          <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">\uD83D\uDD25 Question posted!</p>
+                        )}
+                      </div>
+                    )
                   ) : (currentCard?.type === 'multi-select' || (currentCard?.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1)) ? (
                     <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
                       <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
@@ -1636,7 +1695,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                 btnClass
                               )}
                             >
-                              <span>{opt}</span>
+                              <span><RichTextInline>{opt}</RichTextInline></span>
                               {icon && (
                                 <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                                   {icon}
@@ -1660,7 +1719,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
                           >
                             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                            <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
                           </motion.div>
                         )}
                       {/* Community answers — multi-select wrong answer */}
@@ -1675,7 +1734,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
                             >
                               <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                              <p className="text-sm text-white/70">{answer.bodyText}</p>
+                              <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
                             </motion.div>
                           ))}
                           {renderAcceptPrompt()}
@@ -1733,7 +1792,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                 <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0 pointer-events-none">
                                   {idx + 1}
                                 </div>
-                                <span className="flex-1 pointer-events-none">{item.text}</span>
+                                <span className="flex-1 pointer-events-none"><RichTextInline>{item.text}</RichTextInline></span>
                                 {icon && (
                                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                                     {icon}
@@ -1749,15 +1808,14 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </button>
                         )}
                       </form>
-                      {isFlipped && currentCard?.explanation &&
-                        !shuffledSequence.every((item, idx) => item.text === currentCard.options![idx]) && (
+                      {isFlipped && currentCard?.explanation && (
                           <motion.div
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
                           >
                             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                            <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
                           </motion.div>
                         )}
                     </div>
@@ -1801,7 +1859,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                     "font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1",
                                     ""
                                   )}>
-                                    {opt}
+                                    <RichTextInline>{opt}</RichTextInline>
                                   </span>
                                 </div>
                               </div>
@@ -1833,7 +1891,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                     </div>
                                     {currentCard?.explanations?.[opt] && (
                                       <div className="text-[13px] sm:text-[14px] text-white/70 leading-relaxed mb-2 pr-4">
-                                        {currentCard.explanations[opt]}
+                                        <RichText>{currentCard.explanations[opt]}</RichText>
                                       </div>
                                     )}
                                   </motion.div>
@@ -1859,7 +1917,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               className="text-xs sm:text-sm text-amber-200 bg-amber-500/10 p-4 rounded-xl border border-amber-500/20 text-left w-full mx-auto shadow-inner"
                             >
                               <span className="font-bold uppercase tracking-widest text-[10px] mb-1.5 block text-amber-500">Hint</span>
-                              {currentCard.hint}
+                              <RichText>{currentCard.hint}</RichText>
                             </motion.div>
                           )}
                         </div>
@@ -1871,7 +1929,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
                         >
                           <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                          <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
+                          <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
                         </motion.div>
                       )}
                       {/* Community answers — MCQ/sequencing wrong answer */}
@@ -1886,7 +1944,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
                             >
                               <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                              <p className="text-sm text-white/70">{answer.bodyText}</p>
+                              <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
                             </motion.div>
                           ))}
                           {renderAcceptPrompt()}
@@ -1908,206 +1966,107 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       )}
                     </div>
                   ) : null}
-                </div>
 
-                {/* Back */}
-                <div
-                  style={{ transform: "rotateY(180deg)" }}
-                  className={cn(
-                    "[grid-area:1/1] backface-hidden glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center text-center shadow-2xl overflow-hidden min-h-[50vh] sm:min-h-[500px]",
-                    (!currentCard?.type || currentCard?.type === 'flashcard') ? "justify-between" : "justify-center"
-                  )}
-                >
-                  {/* Subtle Texture/Pattern for back side */}
-                  <div className="absolute inset-0 opacity-10 pointer-events-none">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] bg-[size:24px_24px]" />
-                  </div>
-
-                  {/* Answer content */}
-                  <div className="flex-1 flex flex-col items-center justify-center w-full">
-                    <p className="text-brand-primary uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-6 sm:mb-8 relative z-10">
-                      {currentCard?.type === 'fill-in-the-blank' && isFibCorrect !== null ? (isFibCorrect ? 'Excellent Work' : 'Correction Analysis') : 'Anchored Response'}
-                    </p>
-                    {currentCard?.type === 'fill-in-the-blank' && isFibCorrect !== null ? (
-                      <div className="flex flex-col gap-6 relative z-10 w-full max-w-sm">
-                        {isFibCorrect === false && (
-                          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
-                            <div className="flex items-center gap-2 mb-1">
-                              <X className="w-4 h-4 text-red-500" />
-                              <span className="text-[10px] uppercase tracking-widest font-bold text-red-500">Not quite</span>
-                            </div>
-                            <p className="text-lg font-medium text-white line-through opacity-70 mb-1">{lastFibSubmitted}</p>
-                          </div>
-                        )}
-
-                        <div className={cn(
-                          "flex flex-col gap-2 p-5 rounded-2xl border",
-                          isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-500/5 border-emerald-500/30"
-                        )}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <Check className="w-4 h-4 text-emerald-500" />
-                            <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-500">
-                              {isFibCorrect ? 'Perfectly Answered' : 'Correct Answer'}
-                            </span>
-                          </div>
-                          <p className="text-xl sm:text-2xl font-bold text-white tracking-tight">{currentCard?.back}</p>
+                  {/* Post-reveal answer section — flashcard */}
+                  {(!currentCard?.type || currentCard?.type === 'flashcard') && isFlipped && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="w-full mt-6 pt-6 border-t border-white/10 flex flex-col items-center gap-4"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {currentCard?.backImageUrl && (
+                        <div className="w-full">
+                          {isOnline ? (
+                            <>
+                              <LightboxImage
+                                src={currentCard.backImageUrl}
+                                className="w-full max-h-48 object-contain rounded-xl"
+                              />
+                              {currentCard.backImageCredit && (
+                                <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
+                                  {currentCard.backImageCredit}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <OfflineImageNotice />
+                          )}
                         </div>
-
-                        {isFibCorrect === false && currentCard?.explanation && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left"
-                          >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
-                          </motion.div>
-                        )}
-                        {isFibCorrect && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-emerald-400 text-xs font-bold uppercase tracking-[0.2em]"
-                          >
-                            Progress +1
-                          </motion.div>
-                        )}
-                        {/* Community answers — FIB wrong answer */}
-                        {isFibCorrect === false && cardAnswers.length > 0 && (
-                          <div className="flex flex-col gap-2">
-                            {cardAnswers.map((answer, i) => (
-                              <motion.div
-                                key={answer.id}
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.08 }}
-                                className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
-                              >
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                                <p className="text-sm text-white/70">{answer.bodyText}</p>
-                              </motion.div>
-                            ))}
-                            {renderAcceptPrompt()}
-                          </div>
-                        )}
-                        {isFibCorrect === false && !questionJustAsked && (
-                          <motion.button
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
-                            className="w-full flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
-                          >
-                            <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
-                          </motion.button>
-                        )}
-                        {isFibCorrect === false && questionJustAsked && (
-                          <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">🔥 Question posted!</p>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        {currentCard?.backImageUrl && (
-                          <div className="mb-4 w-full">
-                            {isOnline ? (
-                              <>
-                                <LightboxImage
-                                  src={currentCard.backImageUrl}
-                                  className="w-full max-h-48 object-contain rounded-xl"
-                                />
-                                {currentCard.backImageCredit && (
-                                  <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
-                                    {currentCard.backImageCredit}
-                                  </p>
-                                )}
-                              </>
-                            ) : (
-                              <OfflineImageNotice />
-                            )}
-                          </div>
-                        )}
-                        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold leading-snug tracking-tight text-white relative z-10 whitespace-pre-wrap">{currentCard?.back}</h2>
-                        {currentCard?.explanation && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.15 }}
-                            className="mt-4 w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left"
-                          >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <p className="text-sm text-white/70 leading-relaxed">{currentCard.explanation}</p>
-                          </motion.div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Community answers — flashcard */}
-                  {(!currentCard?.type || currentCard?.type === 'flashcard') && cardAnswers.length > 0 && (
-                    <div className="w-full flex flex-col gap-2 mb-3" onClick={e => e.stopPropagation()}>
-                      {cardAnswers.map((answer, i) => (
-                        <motion.div
-                          key={answer.id}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.08 }}
-                          className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
-                        >
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                          <p className="text-sm text-white/70">{answer.bodyText}</p>
-                        </motion.div>
-                      ))}
-                      {renderAcceptPrompt()}
-                    </div>
-                  )}
-
-                  {/* Yes/No grading — inside card back, flashcard only */}
-                  {(!currentCard?.type || currentCard?.type === 'flashcard') && (
-                    <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
-                      <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
-                        Did you get it correct?
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(false, e); }}
-                          className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                        >
-                          <X className="w-4 h-4" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest">No</span>
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(true, e); }}
-                          className="bg-white/5 border border-white/5 hover:bg-emerald-500/15 hover:border-emerald-500/30 hover:text-emerald-400 text-white h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                        >
-                          <Check className="w-4 h-4" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
-                          className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                          title="This is pretty easy; show me less frequently"
-                        >
-                          <Zap className="w-4 h-4" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
-                        </button>
-                      </div>
-                      {/* Ask the Community / View Community Thread — flashcard back face */}
-                      {!questionJustAsked ? (
-                        <motion.button
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.4 }}
-                          onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
-                          className="w-full mt-3 flex items-center justify-center gap-2 text-orange-400/50 hover:text-orange-400 transition-colors text-[10px] font-bold uppercase tracking-widest py-2"
-                        >
-                          <Flame className="w-3 h-3" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
-                        </motion.button>
-                      ) : (
-                        <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Question posted!</p>
                       )}
-                    </div>
+                      <h2 className="text-xl sm:text-2xl md:text-3xl font-normal leading-snug tracking-tight text-white">
+                        <RichText>{currentCard?.back}</RichText>
+                      </h2>
+                      {currentCard?.explanation && (
+                        <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
+                          <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
+                        </div>
+                      )}
+                      {cardAnswers.length > 0 && (
+                        <div className="w-full flex flex-col gap-2">
+                          {cardAnswers.map((answer, i) => (
+                            <motion.div
+                              key={answer.id}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: i * 0.08 }}
+                              className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
+                            >
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
+                              <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
+                            </motion.div>
+                          ))}
+                          {renderAcceptPrompt()}
+                        </div>
+                      )}
+                      <div className="w-full pt-4 border-t border-white/5">
+                        <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
+                          Did you get it correct?
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(false, e); }}
+                            className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                          >
+                            <X className="w-4 h-4" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">No</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(true, e); }}
+                            className="bg-white/5 border border-white/5 hover:bg-emerald-500/15 hover:border-emerald-500/30 hover:text-emerald-400 text-white h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
+                            className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                            title="This is pretty easy; show me less frequently"
+                          >
+                            <Zap className="w-4 h-4" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
+                          </button>
+                        </div>
+                        {!questionJustAsked ? (
+                          <motion.button
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.4 }}
+                            onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
+                            className="w-full mt-3 flex items-center justify-center gap-2 text-orange-400/50 hover:text-orange-400 transition-colors text-[10px] font-bold uppercase tracking-widest py-2"
+                          >
+                            <Flame className="w-3 h-3" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
+                          </motion.button>
+                        ) : (
+                          <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Question posted!</p>
+                        )}
+                      </div>
+                    </motion.div>
                   )}
                 </div>
-              </motion.div>
+              </div>
             </motion.div>
           </AnimatePresence>
         </div>

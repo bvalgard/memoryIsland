@@ -39,6 +39,8 @@ export default function Dashboard() {
     moveCardBetweenIslands,
     processSessionResults,
     processArchipelagoResults,
+    syncOfflineResults,
+    syncOfflineArchipelagoResults,
     shareIsland,
     unshareIsland,
     shareArchipelago,
@@ -81,8 +83,8 @@ export default function Dashboard() {
   // Offline sync
   const { isOnline, syncStatus, pendingCount, pin, unpin, queueSession, isPinned } = useOfflineSync({
     progress,
-    processSessionResults,
-    processArchipelagoResults,
+    syncOfflineResults,
+    syncOfflineArchipelagoResults,
   });
   const [offlineQueuedToast, setOfflineQueuedToast] = useState(false);
 
