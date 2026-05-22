@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Info, Repeat2, Copy } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Info, Repeat2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -54,6 +54,7 @@ function wrapSelection(
 const FORMAT_BUTTONS = [
   { label: 'B', title: 'Bold', before: '**', after: '**', cls: 'font-bold' },
   { label: 'I', title: 'Italic', before: '*', after: '*', cls: 'italic' },
+  { label: 'U', title: 'Underline', before: '<u>', after: '</u>', cls: 'underline' },
   { label: '`', title: 'Code', before: '`', after: '`', cls: 'font-mono' },
   { label: '∑', title: 'Inline math ($…$)', before: '$', after: '$', cls: '' },
   { label: '∑∑', title: 'Block math ($$…$$)', before: '$$\n', after: '\n$$', cls: '' },
@@ -144,6 +145,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const explanationRef = useRef<HTMLTextAreaElement>(null);
   const scenarioPassageRef = useRef<HTMLTextAreaElement>(null);
   const mcqOptionRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const canvasPaneRef = useRef<HTMLDivElement>(null);
   const [isScenarioMode, setIsScenarioMode] = useState(false);
   const [scenarioPassage, setScenarioPassage] = useState('');
   const [scenarioQuestions, setScenarioQuestions] = useState<Card[]>([]);
@@ -174,6 +176,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   }, [editingCardIndex]);
 
   const isDirty = front.trim().length > 0 || back.trim().length > 0;
+
+  const [leftPaneOpen, setLeftPaneOpen] = useState(() => window.innerWidth >= 1024);
+  const [showHintField, setShowHintField] = useState(false);
+  const [showExplanationField, setShowExplanationField] = useState(false);
+  const [showImageField, setShowImageField] = useState(false);
 
   const openCollaboratorPanel = async () => {
     setShowCollaboratorPanel(true);
@@ -220,6 +227,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setScenarioPassage('');
     setScenarioQuestions([]);
     setScenarioSubFormOpen(false);
+    setShowHintField(false);
+    setShowExplanationField(false);
+    setShowImageField(false);
   };
   
   const handleAddScenarioQuestion = () => {
@@ -419,6 +429,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setBackImageUrl(card.backImageUrl);
     setImageCredit(card.imageCredit || '');
     setBackImageCredit(card.backImageCredit || '');
+    setShowHintField(!!(card.hint));
+    setShowExplanationField(!!(card.explanation));
+    setShowImageField(!!(card.imageUrl || card.backImageUrl));
     if ((card.type === 'mcq' || card.type === 'multi-select') && card.options) {
       const opts = card.options.map(opt => ({
         id: Date.now().toString() + Math.random(),
@@ -462,7 +475,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       ]);
     }
     // Scroll to top smoothly
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    canvasPaneRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
   const handleCancelEdit = () => {
@@ -478,7 +491,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     
     resetCardForm();
     setParentCardForProgression(parentCard);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    canvasPaneRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCancelProgression = () => {
@@ -722,7 +735,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   return (
     <div 
-      className="max-w-4xl mx-auto w-full relative"
+      className="max-w-7xl mx-auto w-full relative"
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -1197,638 +1210,35 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        {/* Card Creator */}
-        <section>
-          <div className="glass rounded-[32px] p-8 border-brand-primary/10">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-lg sm:text-xl font-bold flex items-center gap-3">
-                <Plus className="w-5 h-5 text-brand-primary" />
-                {editingCardIndex !== null ? 'Edit Card' : (parentCardForProgression ? `Add Progression (Tier ${(parentCardForProgression.tier || 1) + 1})` : 'Creator Mode')}
-                {isDirty && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Unsaved changes" />}
-              </h3>
-              
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <button
-                    onClick={handleExport}
-                    className="text-xs flex items-center gap-2 bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white px-3 py-1.5 rounded-lg border border-white/5 transition-all"
-                  >
-                    <Download className="w-3 h-3" />
-                    Export CSV
-                  </button>
+      {/* Three-Pane Workspace */}
+      <div className="flex max-h-[calc(100vh-200px)] overflow-hidden rounded-[32px] border border-brand-border bg-brand-card">
 
-                  <AnimatePresence>
-                    {showExportModal && (
-                      <>
-                        <motion.div 
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
-                          onClick={() => setShowExportModal(false)}
-                        />
-                        <motion.div 
-                          initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                          className="absolute top-full right-0 mt-3 w-56 glass p-4 rounded-[20px] border border-white/10 shadow-2xl z-[70]"
-                        >
-                          <p className="text-[10px] font-bold text-white mb-3 uppercase tracking-widest text-center">Export Options</p>
-                          <div className="flex flex-col gap-2">
-                            <button 
-                              onClick={() => {
-                                downloadFlashcards();
-                                setShowExportModal(false);
-                              }}
-                              className="w-full text-left bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white text-[10px] uppercase tracking-widest font-bold py-2.5 px-3 rounded-xl transition-colors border border-white/5"
-                            >
-                              Download Flashcards
-                            </button>
-                            <button 
-                              onClick={() => {
-                                downloadMcqs();
-                                setShowExportModal(false);
-                              }}
-                              className="w-full text-left bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white text-[10px] uppercase tracking-widest font-bold py-2.5 px-3 rounded-xl transition-colors border border-white/5"
-                            >
-                              Download Multiple Choice
-                            </button>
-                          </div>
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
+        {/* ── LEFT PANE: Knowledge Matrix ── */}
+        <div className={cn(
+          "flex flex-col shrink-0 border-r border-brand-border overflow-hidden transition-all duration-300",
+          leftPaneOpen ? "w-64" : "w-0"
+        )}>
+          <div className="h-12 flex items-center px-4 border-b border-brand-border shrink-0">
+            <span className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium truncate">
+              Knowledge Matrix <span className="text-white/30">({island.cards.length})</span>
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+            {island.cards.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-brand-border p-6 flex flex-col items-center justify-center gap-3 text-center">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
+                  <CreditCard className="w-5 h-5 text-brand-muted/40" />
                 </div>
-
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  ref={fileInputRef} 
-                  onChange={handleFileUpload} 
-                  className="hidden" 
-                />
-                <button 
+                <div>
+                  <p className="text-xs font-bold text-white/40 mb-1">No cards yet</p>
+                  <p className="text-[10px] text-brand-muted/40">Build your first card on the canvas</p>
+                </div>
+                <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="text-xs flex items-center gap-2 bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white px-3 py-1.5 rounded-lg border border-white/5 transition-all"
+                  className="flex items-center gap-1.5 text-[10px] text-brand-muted hover:text-white px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
                 >
                   <Upload className="w-3 h-3" />
-                  {isUploading ? 'Parsing...' : 'Import CSV'}
-                </button>
-              </div>
-            </div>
-
-            <form
-              onSubmit={handleSubmit}
-              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLFormElement).requestSubmit(); } }}
-              className="space-y-6"
-            >
-              {parentCardForProgression && (
-                <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-xl p-4 flex items-start justify-between">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-brand-primary mb-1">Building on:</p>
-                    <p className="text-sm text-white line-clamp-2">{parentCardForProgression.front}</p>
-                  </div>
-                  <button type="button" onClick={handleCancelProgression} className="text-brand-muted hover:text-white mt-1 shrink-0 ml-4">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-
-              <div className="flex bg-white/5 p-1.5 rounded-xl flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => switchCardType('flashcard')}
-                  title="Classic front/back flip card"
-                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'flashcard' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  <CreditCard className="w-3 h-3 shrink-0" />
-                  <span>Flash</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchCardType('mcq')}
-                  title="Multiple choice — mark one or many correct options"
-                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'mcq' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  <CheckSquare className="w-3 h-3 shrink-0" />
-                  <span>MCQ</span>
-                </button>
-                {/* Multi-Select merged into MCQ: mark multiple options correct in the MCQ builder */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    switchCardType('matching');
-                    if (matchingPairs.length < 2) {
-                      setMatchingPairs([
-                        { id: Date.now().toString() + '1', left: '', rights: '' },
-                        { id: Date.now().toString() + '2', left: '', rights: '' }
-                      ]);
-                    }
-                  }}
-                  title="Pair terms to their matches"
-                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'matching' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  <Repeat2 className="w-3 h-3 shrink-0" />
-                  <span>Match</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchCardType('sequencing')}
-                  title="Put items in the correct order"
-                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'sequencing' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  <ListOrdered className="w-3 h-3 shrink-0" />
-                  <span>Order</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchCardType('fill-in-the-blank')}
-                  title="Fill in the blank — user types the answer"
-                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", !isScenarioMode && cardType === 'fill-in-the-blank' ? 'bg-brand-primary text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  <Type className="w-3 h-3 shrink-0" />
-                  <span>Fill ___</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsScenarioMode(true)}
-                  title="Group multiple questions under a shared passage or vignette"
-                  className={cn("flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors whitespace-nowrap", isScenarioMode ? 'bg-sky-500 text-white' : 'text-brand-muted hover:text-white')}
-                >
-                  <BookOpen className="w-3 h-3 shrink-0" />
-                  <span>Scenario</span>
-                </button>
-              </div>
-
-              {/* Scenario creation mode */}
-              {isScenarioMode && !scenarioSubFormOpen && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider">
-                    <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioPassage.trim() ? "bg-sky-500/20 text-sky-400" : "bg-sky-500 text-white")}>1 · Passage</span>
-                    <span className="text-white/20">›</span>
-                    <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioQuestions.length > 0 ? "bg-sky-500/20 text-sky-400" : scenarioPassage.trim() ? "bg-sky-500 text-white" : "text-white/20")}>2 · Questions</span>
-                    <span className="text-white/20">›</span>
-                    <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioQuestions.length > 0 ? "bg-sky-500 text-white" : "text-white/20")}>3 · Save</span>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
-                      Scenario / Passage
-                    </label>
-                    <FormatToolbar taRef={scenarioPassageRef} setter={setScenarioPassage} />
-                    <textarea
-                      ref={scenarioPassageRef}
-                      value={scenarioPassage}
-                      onChange={e => setScenarioPassage(e.target.value)}
-                      placeholder="Describe the clinical scenario, vignette, or passage the questions will reference..."
-                      rows={5}
-                      className="w-full bg-sky-500/5 border border-sky-500/20 rounded-2xl px-5 py-4 text-white outline-none focus:border-sky-500/50 transition-colors resize-none custom-scrollbar"
-                    />
-                  </div>
-                  {scenarioQuestions.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium">Questions Added</p>
-                      {scenarioQuestions.map((q, i) => (
-                        <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
-                          <span className="text-[10px] font-black text-sky-400 uppercase shrink-0">Q{i + 1}</span>
-                          <p className="text-sm text-white/70 flex-1 truncate">{q.front}</p>
-                          <button type="button" onClick={() => setScenarioQuestions(prev => prev.filter((_, j) => j !== i))} className="text-brand-muted hover:text-red-400 transition-colors shrink-0">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setScenarioSubFormOpen(true)}
-                    className="w-full flex items-center justify-center gap-2 border border-dashed border-sky-500/30 hover:border-sky-500/60 text-sky-400/70 hover:text-sky-400 py-3 rounded-xl transition-all text-sm font-bold"
-                  >
-                    <Plus className="w-4 h-4" /> Add Question
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleScenarioSubmit}
-                    disabled={!scenarioPassage.trim() || scenarioQuestions.length === 0}
-                    className="btn-primary h-14 w-full disabled:opacity-50"
-                  >
-                    Save Scenario Group ({scenarioQuestions.length} question{scenarioQuestions.length !== 1 ? 's' : ''})
-                  </button>
-                </div>
-              )}
-
-              {/* Scenario sub-form header */}
-              {isScenarioMode && scenarioSubFormOpen && (
-                <div className="flex items-center justify-between px-4 py-3 bg-sky-500/10 rounded-xl border border-sky-500/20">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-sky-400" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-sky-400">
-                      Question {scenarioQuestions.length + 1} for Scenario
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => setScenarioSubFormOpen(false)} className="text-brand-muted hover:text-white">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Editing scenario card: passage field */}
-              {!isScenarioMode && editingCardIndex !== null && island.cards[editingCardIndex]?.scenarioId && (
-                <div>
-                  <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
-                    Scenario Passage <span className="text-sky-400/50 normal-case tracking-normal font-normal">(updates all questions in this group)</span>
-                  </label>
-                  <FormatToolbar taRef={scenarioPassageRef} setter={setScenarioPassage} />
-                  <textarea
-                    ref={scenarioPassageRef}
-                    value={scenarioPassage}
-                    onChange={e => setScenarioPassage(e.target.value)}
-                    rows={4}
-                    className="w-full bg-sky-500/5 border border-sky-500/20 rounded-2xl px-5 py-4 text-white outline-none focus:border-sky-500/50 transition-colors resize-none custom-scrollbar"
-                  />
-                </div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && (
-              <div>
-                <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
-                  {['matching', 'sequencing'].includes(cardType) ? 'Title / Instructions' : 'Front Side (Question)'}
-                </label>
-                <FormatToolbar taRef={frontRef} setter={setFront} />
-                <textarea
-                  ref={frontRef}
-                  value={front}
-                  onChange={(e) => setFront(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab' && !['matching', 'sequencing', 'mcq'].includes(cardType)) {
-                      e.preventDefault();
-                      backRef.current?.focus();
-                    }
-                  }}
-                  placeholder={['matching', 'sequencing'].includes(cardType) ? (cardType === 'matching' ? "Match the countries to their capitals" : "Put the following in the correct order") : "The concept to remember..."}
-                  rows={2}
-                  className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
-                />
-              </div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && !['matching', 'sequencing', 'mcq'].includes(cardType) && (
-                <div>
-                  <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
-                    Back Side (Answer)
-                  </label>
-                  <FormatToolbar taRef={backRef} setter={setBack} />
-                  <textarea
-                    ref={backRef}
-                    value={back}
-                    onChange={(e) => setBack(e.target.value)}
-                    placeholder="The detailed explanation..."
-                    rows={3}
-                    className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
-                  />
-                </div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && (cardType === 'flashcard' || cardType === 'mcq' || cardType === 'fill-in-the-blank') && (
-                <div className="space-y-4">
-                  <ImageUpload
-                    label={cardType === 'flashcard' ? 'Front Image (optional)' : 'Question Image (optional)'}
-                    value={imageUrl}
-                    onChange={setImageUrl}
-                  />
-                  {imageUrl && (
-                    <input
-                      type="text"
-                      value={imageCredit}
-                      onChange={(e) => setImageCredit(e.target.value)}
-                      placeholder="Image credit (optional)"
-                      className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-brand-primary/50 transition-colors placeholder:text-brand-muted/50"
-                    />
-                  )}
-                  {cardType === 'flashcard' && (
-                    <>
-                      <ImageUpload
-                        label="Back Image (optional)"
-                        value={backImageUrl}
-                        onChange={setBackImageUrl}
-                      />
-                      {backImageUrl && (
-                        <input
-                          type="text"
-                          value={backImageCredit}
-                          onChange={(e) => setBackImageCredit(e.target.value)}
-                          placeholder="Back image credit (optional)"
-                          className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-brand-primary/50 transition-colors placeholder:text-brand-muted/50"
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'matching' && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                  <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
-                    Pairs
-                  </label>
-                  <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
-                    Use commas in the "Matches" field to provide multiple correct answers for a term (One-to-Many).
-                  </p>
-                  <div className="space-y-3">
-                    {matchingPairs.map((pair, idx) => (
-                      <div key={pair.id} className="flex gap-2 items-center">
-                        <input
-                          value={pair.left}
-                          onChange={(e) => {
-                            const newPairs = [...matchingPairs];
-                            newPairs[idx].left = e.target.value;
-                            setMatchingPairs(newPairs);
-                          }}
-                          placeholder="Term"
-                          className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                        />
-                        <input
-                          value={pair.rights}
-                          onChange={(e) => {
-                            const newPairs = [...matchingPairs];
-                            newPairs[idx].rights = e.target.value;
-                            setMatchingPairs(newPairs);
-                          }}
-                          placeholder="Matches (comma separated)"
-                          className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                        />
-                        <button 
-                          type="button"
-                          disabled={matchingPairs.length <= 2}
-                          onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))}
-                          className={cn("w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors", matchingPairs.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button 
-                      type="button"
-                      onClick={() => setMatchingPairs([...matchingPairs, { id: Date.now().toString(), left: '', rights: '' }])}
-                      className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
-                    >
-                      <Plus className="w-4 h-4" /> Add Pair
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'mcq' && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                  <div className="flex items-center justify-between mb-1 mt-4">
-                    <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black">
-                      Options
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setMcqLockOrder(!mcqLockOrder)}
-                      className={cn("flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 rounded-lg transition-colors",
-                        mcqLockOrder ? "bg-amber-500/10 text-amber-400 border border-amber-500/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
-                    >
-                      {mcqLockOrder ? <Lock className="w-3 h-3" /> : <Shuffle className="w-3 h-3" />}
-                      {mcqLockOrder ? 'Order locked' : 'Shuffle on'}
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {mcqInlineOptions.map((opt, idx) => (
-                      <div key={opt.id}>
-                        <div className={cn("flex gap-2 items-center p-1", opt.isCorrect ? "bg-emerald-500/5 border border-emerald-500/20 rounded-xl" : "rounded-xl")}>
-                          {/* Toggle correct: single click marks/unmarks. Multiple can be correct (becomes "select all that apply"). */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMcqInlineOptions(mcqInlineOptions.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o));
-                              setTimeout(() => mcqOptionRefs.current[idx]?.focus(), 0);
-                            }}
-                            className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-colors",
-                              opt.isCorrect ? "border-emerald-500 bg-emerald-500/20" : "border-white/20 bg-white/5 hover:border-white/40")}
-                          >
-                            {opt.isCorrect && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                          </button>
-                          <input
-                            ref={(el) => { mcqOptionRefs.current[idx] = el; }}
-                            value={opt.text}
-                            onChange={(e) => {
-                              const updated = [...mcqInlineOptions];
-                              updated[idx] = { ...updated[idx], text: e.target.value };
-                              setMcqInlineOptions(updated);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Tab' && !e.shiftKey) {
-                                const next = mcqOptionRefs.current[idx + 1];
-                                if (next) { e.preventDefault(); next.focus(); }
-                              }
-                            }}
-                            placeholder={opt.isCorrect ? "Correct answer..." : `Distractor ${idx}...`}
-                            className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                          />
-                          <button
-                            type="button"
-                            title="Add explanation for this option (shown after answering)"
-                            onClick={() => {
-                              const newSet = new Set(expandedMcqExp);
-                              if (newSet.has(opt.id)) newSet.delete(opt.id); else newSet.add(opt.id);
-                              setExpandedMcqExp(newSet);
-                            }}
-                            className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
-                              expandedMcqExp.has(opt.id) || opt.explanation ? "bg-brand-primary/10 text-brand-primary border border-brand-primary/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
-                          >
-                            <Info className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={mcqInlineOptions.length <= 2}
-                            onClick={() => setMcqInlineOptions(mcqInlineOptions.filter((_, i) => i !== idx))}
-                            className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
-                              mcqInlineOptions.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                        {(expandedMcqExp.has(opt.id) || opt.explanation) && (
-                          <textarea
-                            value={opt.explanation}
-                            onChange={(e) => {
-                              const updated = [...mcqInlineOptions];
-                              updated[idx] = { ...updated[idx], explanation: e.target.value };
-                              setMcqInlineOptions(updated);
-                            }}
-                            placeholder="Explanation shown after answering..."
-                            rows={2}
-                            className="w-full mt-1 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50 resize-none"
-                          />
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setMcqInlineOptions([...mcqInlineOptions, { id: Date.now().toString(), text: '', isCorrect: false, explanation: '' }])}
-                      className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
-                    >
-                      <Plus className="w-4 h-4" /> Add Option
-                    </button>
-                  </div>
-                  <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
-                    Optional Hint
-                  </label>
-                  <FormatToolbar taRef={hintRef} setter={setHint} />
-                  <textarea
-                    ref={hintRef}
-                    value={hint}
-                    onChange={(e) => setHint(e.target.value)}
-                    placeholder="Provide a hint if the user gets stuck..."
-                    rows={2}
-                    className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
-                  />
-                </motion.div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'sequencing' && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                  <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
-                    Sequence Items
-                  </label>
-                  <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
-                    Add the items here in the EXACT correct order. They will be shuffled for the user.
-                  </p>
-                  <div className="space-y-3">
-                    {sequenceItems.map((item, idx) => (
-                      <div key={item.id} className="flex gap-2 items-center">
-                        <div className="w-8 h-8 rounded-full bg-white/5 text-brand-muted flex items-center justify-center text-xs font-black shadow-sm shrink-0">
-                          {idx + 1}
-                        </div>
-                        <input
-                          value={item.text}
-                          onChange={(e) => {
-                            const newItems = [...sequenceItems];
-                            newItems[idx].text = e.target.value;
-                            setSequenceItems(newItems);
-                          }}
-                          placeholder={`Item ${idx + 1}`}
-                          className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                        />
-                        <button 
-                          type="button"
-                          disabled={sequenceItems.length <= 2}
-                          onClick={() => setSequenceItems(sequenceItems.filter((_, i) => i !== idx))}
-                          className={cn("w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors", sequenceItems.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button 
-                      type="button"
-                      onClick={() => setSequenceItems([...sequenceItems, { id: Date.now().toString(), text: '' }])}
-                      className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
-                    >
-                      <Plus className="w-4 h-4" /> Add Item
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {(!isScenarioMode || scenarioSubFormOpen) && (
-              <div>
-                <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-6">
-                  Explanation <span className="text-brand-muted/40 normal-case tracking-normal">(shown after incorrect answers)</span>
-                </label>
-                <FormatToolbar taRef={explanationRef} setter={setExplanation} />
-                <textarea
-                  ref={explanationRef}
-                  value={explanation}
-                  onChange={(e) => setExplanation(e.target.value)}
-                  placeholder="Explain why the answer is correct..."
-                  rows={2}
-                  className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
-                />
-              </div>
-              )}
-
-              <div className="flex gap-3">
-                {isScenarioMode && scenarioSubFormOpen ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setScenarioSubFormOpen(false)}
-                      className="w-1/3 glass hover:bg-white/5 border border-white/10 h-14 rounded-[16px] transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddScenarioQuestion}
-                      disabled={!front.trim() ||
-                               (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
-                               (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim()).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
-                               (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
-                               (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)}
-                      className="btn-primary h-14 w-2/3 disabled:opacity-50"
-                    >
-                      Save Question to Group
-                    </button>
-                  </>
-                ) : !isScenarioMode && (
-                  <>
-                    {editingCardIndex !== null && (
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="w-1/3 glass hover:bg-white/5 border border-white/10 h-14 rounded-[16px] transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={!front.trim() ||
-                               (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
-                               (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim()).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
-                               (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
-                               (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)}
-                      className={cn(
-                        "btn-primary h-14 disabled:opacity-50",
-                        editingCardIndex !== null ? "w-2/3" : "w-full"
-                      )}
-                    >
-                      {editingCardIndex !== null ? 'Update Card' : 'Save Card'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </form>
-          </div>
-        </section>
-
-        {/* Card List */}
-        <section>
-          <h3 className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-6 flex items-center justify-between">
-            Knowledge Matrix ({island.cards.length} cards)
-          </h3>
-          
-          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-            {island.cards.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-brand-border p-8 flex flex-col items-center justify-center gap-4 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
-                  <CreditCard className="w-6 h-6 text-brand-muted/40" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-white/40 mb-1">No cards yet</p>
-                  <p className="text-xs text-brand-muted/40">Build your first card using the form, or</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 text-xs text-brand-muted hover:text-white px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                >
-                  <Upload className="w-3.5 h-3.5" />
                   Import CSV
                 </button>
               </div>
@@ -1841,62 +1251,56 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 return (
                 <React.Fragment key={`frag-${idx}`}>
                   {isGroupStart && (
-                    <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-sky-500/5 border border-sky-500/15">
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-sky-500/5 border border-sky-500/15">
                       <div className="flex items-center gap-2">
-                        <BookOpen className="w-3.5 h-3.5 text-sky-400" />
-                        <p className="text-[10px] text-white/50 line-clamp-1 max-w-[220px]">
-                          {card.scenarioText?.slice(0, 60)}{(card.scenarioText?.length ?? 0) > 60 ? '…' : ''}
+                        <BookOpen className="w-3 h-3 text-sky-400 shrink-0" />
+                        <p className="text-[9px] text-white/50 line-clamp-1">
+                          {card.scenarioText?.slice(0, 40)}{(card.scenarioText?.length ?? 0) > 40 ? '…' : ''}
                         </p>
                       </div>
-                      <span className="text-[9px] font-black uppercase tracking-widest text-sky-400/70 shrink-0 ml-2">{groupSize} Qs</span>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-sky-400/70 shrink-0 ml-1">{groupSize}Q</span>
                     </div>
                   )}
                 <motion.div
-                  initial={{ opacity: 0, x: 20 }}
+                  initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: displayIdx * 0.05 }}
+                  transition={{ delay: displayIdx * 0.03 }}
                   key={idx}
                   onClick={() => handleEditCard(idx)}
-                  style={{ marginLeft: card.tier && card.tier > 1 ? `${(card.tier - 1) * 24}px` : isGroupMember || isGroupStart ? '12px' : undefined }}
+                  style={{ marginLeft: card.tier && card.tier > 1 ? `${(card.tier - 1) * 16}px` : isGroupMember || isGroupStart ? '8px' : undefined }}
                   className={cn(
-                    "glass rounded-2xl p-6 border-white/5 group relative cursor-pointer hover:border-brand-primary/30 transition-colors",
+                    "glass rounded-xl p-3 border-white/5 group relative cursor-pointer hover:border-brand-primary/30 transition-colors",
                     editingCardIndex === idx && "border-brand-primary bg-brand-primary/5",
                     card.scenarioId && "border-l-2 border-l-sky-500/20"
                   )}
                 >
                   {card.tier && card.tier > 1 && (
-                    <div className="absolute -left-4 top-1/2 -mt-4 w-4 h-8 border-l-2 border-b-2 border-white/20 rounded-bl-lg pointer-events-none" />
+                    <div className="absolute -left-3 top-1/2 -mt-3 w-3 h-6 border-l-2 border-b-2 border-white/20 rounded-bl-lg pointer-events-none" />
                   )}
                   {card.scenarioId && (
-                    <div className="absolute top-2 left-2 text-[8px] font-black uppercase tracking-widest text-sky-400/50">
+                    <div className="absolute top-1.5 left-1.5 text-[7px] font-black uppercase tracking-widest text-sky-400/50">
                       Q{card.scenarioOrder}
                     </div>
                   )}
-                  <div className="flex gap-4">
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
+                  <div className="flex gap-2.5">
+                    <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0 mt-0.5">
                       {(card.type === 'mcq' || card.type === 'multi-select') ? (
-                        // multi-select is the legacy type name; unified under mcq display
-                        <div className={cn("text-[9px] uppercase font-black", card.needsWork ? "text-amber-400" : "text-brand-primary")}>MCQ</div>
+                        <div className={cn("text-[7px] uppercase font-black", card.needsWork ? "text-amber-400" : "text-brand-primary")}>MCQ</div>
                       ) : card.type === 'fill-in-the-blank' ? (
-                        <Type className={cn("w-4 h-4", card.needsWork ? "text-amber-400" : "text-purple-400")} />
+                        <Type className={cn("w-3 h-3", card.needsWork ? "text-amber-400" : "text-purple-400")} />
                       ) : card.type === 'sequencing' ? (
-                        <ListOrdered className={cn("w-4 h-4", card.needsWork ? "text-amber-400" : "text-cyan-400")} />
+                        <ListOrdered className={cn("w-3 h-3", card.needsWork ? "text-amber-400" : "text-cyan-400")} />
                       ) : (
-                        <CreditCard className={cn("w-4 h-4", card.needsWork ? "text-amber-400" : "text-brand-muted")} />
+                        <CreditCard className={cn("w-3 h-3", card.needsWork ? "text-amber-400" : "text-brand-muted")} />
                       )}
                     </div>
-                    {card.tier && card.tier > 1 && (
-                      <div className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-widest bg-white/10 px-1.5 py-0.5 rounded text-white/50">
-                        T{card.tier}
-                      </div>
-                    )}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <p className="font-bold text-sm mb-1 truncate">{card.front}</p>
-                        <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <p className="font-bold text-xs truncate leading-tight">{card.front}</p>
+                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                           {card.totalAnswers != null && card.totalAnswers > 0 && (
                             <span className={cn(
-                              "text-[9px] font-bold tabular-nums",
+                              "text-[8px] font-bold tabular-nums",
                               (card.totalCorrect ?? 0) / card.totalAnswers < 0.4 ? "text-red-400/70" :
                               (card.totalCorrect ?? 0) / card.totalAnswers < 0.7 ? "text-amber-400/70" :
                               "text-emerald-400/70"
@@ -1904,109 +1308,109 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                               {Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)}%
                             </span>
                           )}
-                          {progressTrackingMode !== 'srs' && card.needsWork && (
-                            <span className="text-[9px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20 tracking-wider font-bold">STRUGGLING</span>
-                          )}
-                          {onDeleteCard && (
-                            <div className="flex items-center">
-                              <AnimatePresence mode="wait">
-                                {deletingCardIndex === idx ? (
-                                  <motion.div
-                                    key="confirm"
-                                    initial={{ opacity: 0, x: 10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 10 }}
-                                    className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 rounded-xl px-2 py-1"
-                                  >
-                                    <span className="text-[9px] font-black text-red-500 uppercase tracking-tighter hidden sm:inline">Delete?</span>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDeleteCard(idx);
-                                        setDeletingCardIndex(null);
-                                        if (editingCardIndex === idx) handleCancelEdit();
-                                      }}
-                                      className="text-red-500 hover:text-red-400 p-0.5"
-                                      title="Confirm Delete"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeletingCardIndex(null);
-                                      }}
-                                      className="text-brand-muted hover:text-white p-0.5"
-                                      title="Cancel"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </motion.div>
-                                ) : (
-                                  <motion.button
-                                    key="delete"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeletingCardIndex(idx);
-                                    }}
-                                    className="text-brand-muted hover:text-red-400 transition-colors opacity-40 group-hover:opacity-100 p-1"
-                                    title="Delete Card"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </motion.button>
-                                )}
-                              </AnimatePresence>
-                              {onMoveCard && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMovingCardIndex(idx);
-                                  }}
-                                  className="text-brand-muted hover:text-white transition-colors opacity-40 group-hover:opacity-100 p-1"
-                                  title="Move Card to Another Island"
-                                >
-                                  <Move className="w-4 h-4" />
-                                </button>
-                              )}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddProgression(idx);
-                                }}
-                                className="text-brand-muted hover:text-brand-primary transition-colors opacity-40 group-hover:opacity-100 p-1"
-                                title="Add Progression Tier — create a harder version of this card"
-                              >
-                                <ArrowUp className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const src = island.cards[idx];
-                                  onAddCard({ ...src, id: Math.random().toString(36).substring(2, 11), status: undefined, consecutiveCorrect: 0, lastReviewed: undefined, needsWork: false });
-                                }}
-                                className="text-brand-muted hover:text-cyan-400 transition-colors opacity-40 group-hover:opacity-100 p-1"
-                                title="Duplicate Card"
-                              >
-                                <Copy className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => openCardPreview(e, idx)}
-                                className="text-brand-muted hover:text-white transition-colors opacity-40 group-hover:opacity-100 p-1"
-                                title="Preview Card"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            </div>
+                          {card.tier && card.tier > 1 && (
+                            <span className="text-[7px] font-black uppercase bg-white/10 px-1 py-0.5 rounded text-white/50">T{card.tier}</span>
                           )}
                         </div>
                       </div>
-                      <p className="text-brand-muted text-xs line-clamp-2">{card.back}</p>
-                      {card.type === 'mcq' && card.options && (
-                        <p className="text-[10px] text-brand-muted/50 mt-2 truncate">Options: {card.options.length}</p>
-                      )}
+                      <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {progressTrackingMode !== 'srs' && card.needsWork && (
+                          <span className="text-[7px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 tracking-wider font-bold">STRUGGLING</span>
+                        )}
+                        {onDeleteCard && (
+                          <div className="flex items-center gap-0.5">
+                            <AnimatePresence mode="wait">
+                              {deletingCardIndex === idx ? (
+                                <motion.div
+                                  key="confirm"
+                                  initial={{ opacity: 0, x: 5 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: 5 }}
+                                  className="flex items-center gap-1 bg-red-500/10 border border-red-500/20 rounded-lg px-1.5 py-0.5"
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteCard(idx);
+                                      setDeletingCardIndex(null);
+                                      if (editingCardIndex === idx) handleCancelEdit();
+                                    }}
+                                    className="text-red-500 hover:text-red-400"
+                                    title="Confirm Delete"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeletingCardIndex(null);
+                                    }}
+                                    className="text-brand-muted hover:text-white"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </motion.div>
+                              ) : (
+                                <motion.button
+                                  key="delete"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeletingCardIndex(idx);
+                                  }}
+                                  className="text-brand-muted hover:text-red-400 transition-colors p-0.5"
+                                  title="Delete Card"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </motion.button>
+                              )}
+                            </AnimatePresence>
+                            {onMoveCard && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMovingCardIndex(idx);
+                                }}
+                                className="text-brand-muted hover:text-white transition-colors p-0.5"
+                                title="Move Card to Another Island"
+                              >
+                                <Move className="w-3 h-3" />
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddProgression(idx);
+                              }}
+                              className="text-brand-muted hover:text-brand-primary transition-colors p-0.5"
+                              title="Add Progression Tier"
+                            >
+                              <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const src = island.cards[idx];
+                                onAddCard({ ...src, id: Math.random().toString(36).substring(2, 11), status: undefined, consecutiveCorrect: 0, lastReviewed: undefined, needsWork: false });
+                              }}
+                              className="text-brand-muted hover:text-cyan-400 transition-colors p-0.5"
+                              title="Duplicate Card"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => openCardPreview(e, idx)}
+                              className="text-brand-muted hover:text-white transition-colors p-0.5"
+                              title="Preview Card"
+                            >
+                              <Eye className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -2015,7 +1419,631 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               })
             )}
           </div>
-        </section>
+        </div>
+
+        {/* ── COLLAPSE TOGGLE ── */}
+        <div className="relative shrink-0 flex items-center">
+          <button
+            onClick={() => setLeftPaneOpen(!leftPaneOpen)}
+            className="absolute left-0 z-10 w-5 h-10 flex items-center justify-center bg-brand-card border border-brand-border rounded-r-xl text-brand-muted hover:text-white transition-colors"
+            title={leftPaneOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {leftPaneOpen ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+        </div>
+
+        {/* ── CENTER PANE: Live Canvas ── */}
+        <div ref={canvasPaneRef} className="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-[#080818] min-w-0">
+
+          {/* Canvas header bar */}
+          <div className="h-12 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
+            <span className="text-[10px] text-white/30 uppercase tracking-widest font-medium flex items-center gap-2">
+              {editingCardIndex !== null ? 'Editing Card' : parentCardForProgression ? `Progression — Tier ${(parentCardForProgression.tier || 1) + 1}` : 'New Card'}
+              {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
+            </span>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={handleExport}
+                  className="text-[10px] flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white px-2.5 py-1.5 rounded-lg border border-white/5 transition-all"
+                >
+                  <Download className="w-3 h-3" />
+                  Export
+                </button>
+                <AnimatePresence>
+                  {showExportModal && (
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
+                        onClick={() => setShowExportModal(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                        className="absolute top-full right-0 mt-3 w-56 glass p-4 rounded-[20px] border border-white/10 shadow-2xl z-[70]"
+                      >
+                        <p className="text-[10px] font-bold text-white mb-3 uppercase tracking-widest text-center">Export Options</p>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => { downloadFlashcards(); setShowExportModal(false); }}
+                            className="w-full text-left bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white text-[10px] uppercase tracking-widest font-bold py-2.5 px-3 rounded-xl transition-colors border border-white/5"
+                          >
+                            Download Flashcards
+                          </button>
+                          <button
+                            onClick={() => { downloadMcqs(); setShowExportModal(false); }}
+                            className="w-full text-left bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white text-[10px] uppercase tracking-widest font-bold py-2.5 px-3 rounded-xl transition-colors border border-white/5"
+                          >
+                            Download Multiple Choice
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+              <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="text-[10px] flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white px-2.5 py-1.5 rounded-lg border border-white/5 transition-all"
+              >
+                <Upload className="w-3 h-3" />
+                {isUploading ? 'Parsing…' : 'Import'}
+              </button>
+            </div>
+          </div>
+
+          {/* Canvas form body */}
+          <form
+            id="card-builder-form"
+            onSubmit={handleSubmit}
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLFormElement).requestSubmit(); } }}
+            className="flex-1 flex flex-col px-12 py-10 gap-6"
+          >
+            {parentCardForProgression && (
+              <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-xl p-4 flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-brand-primary mb-1">Building on:</p>
+                  <p className="text-sm text-white line-clamp-2">{parentCardForProgression.front}</p>
+                </div>
+                <button type="button" onClick={handleCancelProgression} className="text-brand-muted hover:text-white mt-1 shrink-0 ml-4">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Scenario creation mode */}
+            {isScenarioMode && !scenarioSubFormOpen && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider">
+                  <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioPassage.trim() ? "bg-sky-500/20 text-sky-400" : "bg-sky-500 text-white")}>1 · Passage</span>
+                  <span className="text-white/20">›</span>
+                  <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioQuestions.length > 0 ? "bg-sky-500/20 text-sky-400" : scenarioPassage.trim() ? "bg-sky-500 text-white" : "text-white/20")}>2 · Questions</span>
+                  <span className="text-white/20">›</span>
+                  <span className={cn("px-2.5 py-1 rounded-full transition-colors", scenarioQuestions.length > 0 ? "bg-sky-500 text-white" : "text-white/20")}>3 · Save</span>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
+                    Scenario / Passage
+                  </label>
+                  <FormatToolbar taRef={scenarioPassageRef} setter={setScenarioPassage} />
+                  <textarea
+                    ref={scenarioPassageRef}
+                    value={scenarioPassage}
+                    onChange={e => setScenarioPassage(e.target.value)}
+                    placeholder="Describe the clinical scenario, vignette, or passage the questions will reference..."
+                    rows={5}
+                    className="w-full bg-sky-500/5 border border-sky-500/20 rounded-2xl px-5 py-4 text-white outline-none focus:border-sky-500/50 transition-colors resize-none custom-scrollbar"
+                  />
+                </div>
+                {scenarioQuestions.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium">Questions Added</p>
+                    {scenarioQuestions.map((q, i) => (
+                      <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
+                        <span className="text-[10px] font-black text-sky-400 uppercase shrink-0">Q{i + 1}</span>
+                        <p className="text-sm text-white/70 flex-1 truncate">{q.front}</p>
+                        <button type="button" onClick={() => setScenarioQuestions(prev => prev.filter((_, j) => j !== i))} className="text-brand-muted hover:text-red-400 transition-colors shrink-0">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setScenarioSubFormOpen(true)}
+                  className="w-full flex items-center justify-center gap-2 border border-dashed border-sky-500/30 hover:border-sky-500/60 text-sky-400/70 hover:text-sky-400 py-3 rounded-xl transition-all text-sm font-bold"
+                >
+                  <Plus className="w-4 h-4" /> Add Question
+                </button>
+              </div>
+            )}
+
+            {/* Scenario sub-form header */}
+            {isScenarioMode && scenarioSubFormOpen && (
+              <div className="flex items-center justify-between px-4 py-3 bg-sky-500/10 rounded-xl border border-sky-500/20">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-sky-400" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-sky-400">
+                    Question {scenarioQuestions.length + 1} for Scenario
+                  </p>
+                </div>
+                <button type="button" onClick={() => setScenarioSubFormOpen(false)} className="text-brand-muted hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Editing scenario card: passage field */}
+            {!isScenarioMode && editingCardIndex !== null && island.cards[editingCardIndex]?.scenarioId && (
+              <div>
+                <label className="block text-[10px] text-sky-400 uppercase tracking-[0.2em] font-black mb-3">
+                  Scenario Passage <span className="text-sky-400/50 normal-case tracking-normal font-normal">(updates all questions in this group)</span>
+                </label>
+                <FormatToolbar taRef={scenarioPassageRef} setter={setScenarioPassage} />
+                <textarea
+                  ref={scenarioPassageRef}
+                  value={scenarioPassage}
+                  onChange={e => setScenarioPassage(e.target.value)}
+                  rows={4}
+                  className="w-full bg-sky-500/5 border border-sky-500/20 rounded-2xl px-5 py-4 text-white outline-none focus:border-sky-500/50 transition-colors resize-none custom-scrollbar"
+                />
+              </div>
+            )}
+
+            {/* FRONT — canvas style */}
+            {(!isScenarioMode || scenarioSubFormOpen) && (
+              <div className="flex flex-col gap-2">
+                <FormatToolbar taRef={frontRef} setter={setFront} />
+                <textarea
+                  ref={frontRef}
+                  value={front}
+                  onChange={(e) => setFront(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !['matching', 'sequencing', 'mcq'].includes(cardType)) {
+                      e.preventDefault();
+                      backRef.current?.focus();
+                    }
+                  }}
+                  placeholder={['matching', 'sequencing'].includes(cardType) ? (cardType === 'matching' ? "Match the countries to their capitals…" : "Put the following in the correct order…") : "The concept to remember…"}
+                  rows={3}
+                  className="bg-transparent border-none outline-none resize-none w-full text-center text-2xl font-bold text-white placeholder:text-white/15 focus:ring-0 leading-relaxed"
+                />
+              </div>
+            )}
+
+            {/* Front/Back divider */}
+            {(!isScenarioMode || scenarioSubFormOpen) && !['matching', 'sequencing', 'mcq'].includes(cardType) && (
+              <div className="flex items-center gap-4 px-8">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-[10px] text-white/20 uppercase tracking-widest">Answer</span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+            )}
+
+            {/* BACK — canvas style */}
+            {(!isScenarioMode || scenarioSubFormOpen) && !['matching', 'sequencing', 'mcq'].includes(cardType) && (
+              <div className="flex flex-col gap-2">
+                <FormatToolbar taRef={backRef} setter={setBack} />
+                <textarea
+                  ref={backRef}
+                  value={back}
+                  onChange={(e) => setBack(e.target.value)}
+                  placeholder="The detailed explanation…"
+                  rows={3}
+                  className="bg-transparent border-none outline-none resize-none w-full text-center text-xl text-white/80 placeholder:text-white/15 focus:ring-0 leading-relaxed"
+                />
+              </div>
+            )}
+
+            {/* Matching pairs */}
+            {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'matching' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
+                  Pairs
+                </label>
+                <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
+                  Use commas in the "Matches" field to provide multiple correct answers for a term (One-to-Many).
+                </p>
+                <div className="space-y-3">
+                  {matchingPairs.map((pair, idx) => (
+                    <div key={pair.id} className="flex gap-2 items-center">
+                      <input
+                        value={pair.left}
+                        onChange={(e) => {
+                          const newPairs = [...matchingPairs];
+                          newPairs[idx].left = e.target.value;
+                          setMatchingPairs(newPairs);
+                        }}
+                        placeholder="Term"
+                        className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
+                      />
+                      <input
+                        value={pair.rights}
+                        onChange={(e) => {
+                          const newPairs = [...matchingPairs];
+                          newPairs[idx].rights = e.target.value;
+                          setMatchingPairs(newPairs);
+                        }}
+                        placeholder="Matches (comma separated)"
+                        className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
+                      />
+                      <button
+                        type="button"
+                        disabled={matchingPairs.length <= 2}
+                        onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))}
+                        className={cn("w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors", matchingPairs.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setMatchingPairs([...matchingPairs, { id: Date.now().toString(), left: '', rights: '' }])}
+                    className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
+                  >
+                    <Plus className="w-4 h-4" /> Add Pair
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* MCQ options */}
+            {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'mcq' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                <div className="flex items-center justify-between mb-1 mt-4">
+                  <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black">
+                    Options
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setMcqLockOrder(!mcqLockOrder)}
+                    className={cn("flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 rounded-lg transition-colors",
+                      mcqLockOrder ? "bg-amber-500/10 text-amber-400 border border-amber-500/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
+                  >
+                    {mcqLockOrder ? <Lock className="w-3 h-3" /> : <Shuffle className="w-3 h-3" />}
+                    {mcqLockOrder ? 'Order locked' : 'Shuffle on'}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {mcqInlineOptions.map((opt, idx) => (
+                    <div key={opt.id}>
+                      <div className={cn("flex gap-2 items-center p-1", opt.isCorrect ? "bg-emerald-500/5 border border-emerald-500/20 rounded-xl" : "rounded-xl")}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMcqInlineOptions(mcqInlineOptions.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o));
+                            setTimeout(() => mcqOptionRefs.current[idx]?.focus(), 0);
+                          }}
+                          className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-colors",
+                            opt.isCorrect ? "border-emerald-500 bg-emerald-500/20" : "border-white/20 bg-white/5 hover:border-white/40")}
+                        >
+                          {opt.isCorrect && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                        </button>
+                        <input
+                          ref={(el) => { mcqOptionRefs.current[idx] = el; }}
+                          value={opt.text}
+                          onChange={(e) => {
+                            const updated = [...mcqInlineOptions];
+                            updated[idx] = { ...updated[idx], text: e.target.value };
+                            setMcqInlineOptions(updated);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Tab' && !e.shiftKey) {
+                              const next = mcqOptionRefs.current[idx + 1];
+                              if (next) { e.preventDefault(); next.focus(); }
+                            }
+                          }}
+                          placeholder={opt.isCorrect ? "Correct answer..." : `Distractor ${idx}...`}
+                          className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
+                        />
+                        <button
+                          type="button"
+                          title="Add explanation for this option (shown after answering)"
+                          onClick={() => {
+                            const newSet = new Set(expandedMcqExp);
+                            if (newSet.has(opt.id)) newSet.delete(opt.id); else newSet.add(opt.id);
+                            setExpandedMcqExp(newSet);
+                          }}
+                          className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
+                            expandedMcqExp.has(opt.id) || opt.explanation ? "bg-brand-primary/10 text-brand-primary border border-brand-primary/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={mcqInlineOptions.length <= 2}
+                          onClick={() => setMcqInlineOptions(mcqInlineOptions.filter((_, i) => i !== idx))}
+                          className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
+                            mcqInlineOptions.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {(expandedMcqExp.has(opt.id) || opt.explanation) && (
+                        <textarea
+                          value={opt.explanation}
+                          onChange={(e) => {
+                            const updated = [...mcqInlineOptions];
+                            updated[idx] = { ...updated[idx], explanation: e.target.value };
+                            setMcqInlineOptions(updated);
+                          }}
+                          placeholder="Explanation shown after answering..."
+                          rows={2}
+                          className="w-full mt-1 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50 resize-none"
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setMcqInlineOptions([...mcqInlineOptions, { id: Date.now().toString(), text: '', isCorrect: false, explanation: '' }])}
+                    className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
+                  >
+                    <Plus className="w-4 h-4" /> Add Option
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Sequencing items */}
+            {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'sequencing' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
+                  Sequence Items
+                </label>
+                <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
+                  Add the items here in the EXACT correct order. They will be shuffled for the user.
+                </p>
+                <div className="space-y-3">
+                  {sequenceItems.map((item, idx) => (
+                    <div key={item.id} className="flex gap-2 items-center">
+                      <div className="w-8 h-8 rounded-full bg-white/5 text-brand-muted flex items-center justify-center text-xs font-black shadow-sm shrink-0">
+                        {idx + 1}
+                      </div>
+                      <input
+                        value={item.text}
+                        onChange={(e) => {
+                          const newItems = [...sequenceItems];
+                          newItems[idx].text = e.target.value;
+                          setSequenceItems(newItems);
+                        }}
+                        placeholder={`Item ${idx + 1}`}
+                        className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
+                      />
+                      <button
+                        type="button"
+                        disabled={sequenceItems.length <= 2}
+                        onClick={() => setSequenceItems(sequenceItems.filter((_, i) => i !== idx))}
+                        className={cn("w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors", sequenceItems.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSequenceItems([...sequenceItems, { id: Date.now().toString(), text: '' }])}
+                    className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
+                  >
+                    <Plus className="w-4 h-4" /> Add Item
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Image upload — controlled by right-pane toggle */}
+            {showImageField && (!isScenarioMode || scenarioSubFormOpen) && (cardType === 'flashcard' || cardType === 'mcq' || cardType === 'fill-in-the-blank') && (
+              <div className="space-y-4">
+                <ImageUpload
+                  label={cardType === 'flashcard' ? 'Front Image (optional)' : 'Question Image (optional)'}
+                  value={imageUrl}
+                  onChange={setImageUrl}
+                />
+                {imageUrl && (
+                  <input
+                    type="text"
+                    value={imageCredit}
+                    onChange={(e) => setImageCredit(e.target.value)}
+                    placeholder="Image credit (optional)"
+                    className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-brand-primary/50 transition-colors placeholder:text-brand-muted/50"
+                  />
+                )}
+                {cardType === 'flashcard' && (
+                  <>
+                    <ImageUpload label="Back Image (optional)" value={backImageUrl} onChange={setBackImageUrl} />
+                    {backImageUrl && (
+                      <input
+                        type="text"
+                        value={backImageCredit}
+                        onChange={(e) => setBackImageCredit(e.target.value)}
+                        placeholder="Back image credit (optional)"
+                        className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-3 text-white text-sm outline-none focus:border-brand-primary/50 transition-colors placeholder:text-brand-muted/50"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Hint — controlled by right-pane toggle */}
+            {showHintField && (!isScenarioMode || scenarioSubFormOpen) && (
+              <div>
+                <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">Hint</label>
+                <FormatToolbar taRef={hintRef} setter={setHint} />
+                <textarea
+                  ref={hintRef}
+                  value={hint}
+                  onChange={(e) => setHint(e.target.value)}
+                  placeholder="Provide a hint if the user gets stuck…"
+                  rows={2}
+                  className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
+                />
+              </div>
+            )}
+
+            {/* Explanation — controlled by right-pane toggle */}
+            {showExplanationField && (!isScenarioMode || scenarioSubFormOpen) && (
+              <div>
+                <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
+                  Explanation <span className="text-brand-muted/40 normal-case tracking-normal">(shown after incorrect answers)</span>
+                </label>
+                <FormatToolbar taRef={explanationRef} setter={setExplanation} />
+                <textarea
+                  ref={explanationRef}
+                  value={explanation}
+                  onChange={(e) => setExplanation(e.target.value)}
+                  placeholder="Explain why the answer is correct…"
+                  rows={2}
+                  className="w-full bg-white/5 border border-brand-border rounded-2xl px-5 py-4 text-white outline-none focus:border-brand-primary/50 transition-colors resize-none custom-scrollbar"
+                />
+              </div>
+            )}
+
+            <div className="flex-1" />
+          </form>
+        </div>
+
+        {/* ── RIGHT PANE: Settings Inspector ── */}
+        <div className="w-[280px] shrink-0 flex flex-col border-l border-brand-border overflow-y-auto custom-scrollbar">
+
+          {/* Section 1 — Card Type */}
+          <div className="p-4 border-b border-brand-border">
+            <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">Card Type</p>
+            <div className="flex flex-col gap-1.5">
+              {([
+                { type: 'flashcard' as const, label: 'Flashcard', Icon: CreditCard },
+                { type: 'mcq' as const, label: 'Multiple Choice', Icon: CheckSquare },
+                { type: 'matching' as const, label: 'Match', Icon: Repeat2 },
+                { type: 'sequencing' as const, label: 'Order', Icon: ListOrdered },
+                { type: 'fill-in-the-blank' as const, label: 'Fill in the Blank', Icon: Type },
+              ] as const).map(({ type, label, Icon }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => switchCardType(type)}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left",
+                    !isScenarioMode && cardType === type ? "bg-brand-primary text-white" : "bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setIsScenarioMode(true)}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left",
+                  isScenarioMode ? "bg-sky-500 text-white" : "bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white"
+                )}
+              >
+                <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                Scenario / Vignette
+              </button>
+            </div>
+          </div>
+
+          {/* Section 2 — Card Features */}
+          <div className={cn("p-4 border-b border-brand-border transition-opacity", isScenarioMode && !scenarioSubFormOpen && "opacity-40 pointer-events-none")}>
+            <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">Card Features</p>
+            <div className="flex flex-col gap-3">
+              {([
+                { label: 'Hint', value: showHintField, setter: setShowHintField },
+                { label: 'Explanation', value: showExplanationField, setter: setShowExplanationField },
+                ...(['flashcard', 'mcq', 'fill-in-the-blank'].includes(cardType)
+                  ? [{ label: 'Image', value: showImageField, setter: setShowImageField }]
+                  : []),
+              ] as { label: string; value: boolean; setter: (v: boolean) => void }[]).map(({ label, value, setter }) => (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-xs text-white/70 font-medium">{label}</span>
+                  <button
+                    type="button"
+                    onClick={() => setter(!value)}
+                    aria-label={`Toggle ${label}`}
+                    className={cn("relative w-10 h-5 rounded-full transition-colors", value ? "bg-brand-primary" : "bg-white/20")}
+                  >
+                    <span className={cn(
+                      "absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                      value ? "translate-x-5" : "translate-x-0"
+                    )} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Section 3 — Sticky Save CTA */}
+          <div className="p-4 border-t border-brand-border shrink-0">
+            {isScenarioMode && !scenarioSubFormOpen && (
+              <button
+                type="button"
+                onClick={handleScenarioSubmit}
+                disabled={!scenarioPassage.trim() || scenarioQuestions.length === 0}
+                className="btn-primary w-full h-12 disabled:opacity-50 text-sm"
+              >
+                Save Scenario ({scenarioQuestions.length} Qs)
+              </button>
+            )}
+            {isScenarioMode && scenarioSubFormOpen && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScenarioSubFormOpen(false)}
+                  className="w-1/3 h-12 rounded-[14px] bg-white/5 border border-brand-border text-brand-muted hover:text-white text-sm transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddScenarioQuestion}
+                  disabled={!front.trim() || (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim())}
+                  className="btn-primary h-12 w-2/3 disabled:opacity-50 text-sm"
+                >
+                  Add to Group
+                </button>
+              </div>
+            )}
+            {!isScenarioMode && (
+              <div className="flex gap-2">
+                {editingCardIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="w-1/3 h-12 rounded-[14px] bg-white/5 border border-brand-border text-brand-muted hover:text-white text-sm transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  form="card-builder-form"
+                  type="submit"
+                  disabled={
+                    !front.trim() ||
+                    (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
+                    (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim()).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
+                    (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
+                    (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)
+                  }
+                  className={cn("btn-primary h-12 disabled:opacity-50 text-sm", editingCardIndex !== null ? "w-2/3" : "w-full")}
+                >
+                  {editingCardIndex !== null ? 'Update Card' : 'Save Card'}
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
 
       {/* Move Card Modal */}

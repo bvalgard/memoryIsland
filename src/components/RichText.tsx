@@ -1,10 +1,11 @@
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
 
 const REMARK_PLUGINS = [remarkMath];
-const REHYPE_PLUGINS = [rehypeKatex];
+const REHYPE_PLUGINS = [rehypeRaw, rehypeKatex];
 
 // Inline-only allowed elements — safe to render inside <button>/<span>
 const INLINE_ELEMENTS = ['strong', 'em', 'code', 'span', 'a', 'del', 'math', 'inlineMath'];
