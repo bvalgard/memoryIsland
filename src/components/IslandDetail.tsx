@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -181,6 +181,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const [leftPaneOpen, setLeftPaneOpen] = useState(() => window.innerWidth >= 1024);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [cardSearch, setCardSearch] = useState('');
   const [showHintField, setShowHintField] = useState(false);
   const [showExplanationField, setShowExplanationField] = useState(false);
   const [showImageField, setShowImageField] = useState(false);
@@ -1255,6 +1256,28 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               <X className="w-4 h-4" />
             </button>
           </div>
+          {island.cards.length > 0 && (
+            <div className="px-3 py-2 border-b border-brand-border shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-brand-muted pointer-events-none" />
+                <input
+                  type="text"
+                  value={cardSearch}
+                  onChange={e => setCardSearch(e.target.value)}
+                  placeholder="Search cards…"
+                  className="w-full bg-white/5 border border-white/5 rounded-lg pl-7 pr-3 py-1.5 text-[11px] text-white placeholder-brand-muted/50 focus:outline-none focus:border-brand-primary/40 transition-colors"
+                />
+                {cardSearch && (
+                  <button
+                    onClick={() => setCardSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-muted hover:text-white transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
             {island.cards.length === 0 ? (
               <div className="rounded-[20px] border border-dashed border-brand-border p-6 flex flex-col items-center justify-center gap-3 text-center">
@@ -1274,9 +1297,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   Import CSV
                 </button>
               </div>
-            ) : (
-              displayCards.map(({ card, originalIdx: idx }, displayIdx) => {
-                const prevSid = displayIdx > 0 ? displayCards[displayIdx - 1].card.scenarioId : undefined;
+            ) : (() => {
+              const filteredCards = cardSearch.trim()
+                ? displayCards.filter(({ card }) => {
+                    const q = cardSearch.toLowerCase();
+                    return (
+                      card.front?.toLowerCase().includes(q) ||
+                      card.back?.toLowerCase().includes(q) ||
+                      card.scenarioText?.toLowerCase().includes(q)
+                    );
+                  })
+                : displayCards;
+              if (filteredCards.length === 0) return (
+                <p className="text-[10px] text-brand-muted/50 text-center py-4">No cards match "{cardSearch}"</p>
+              );
+              return filteredCards.map(({ card, originalIdx: idx }, displayIdx) => {
+                const prevSid = displayIdx > 0 ? filteredCards[displayIdx - 1].card.scenarioId : undefined;
                 const isGroupStart = !!card.scenarioId && card.scenarioId !== prevSid;
                 const isGroupMember = !!card.scenarioId && card.scenarioId === prevSid;
                 const groupSize = card.scenarioId ? island.cards.filter(c => c.scenarioId === card.scenarioId).length : 0;
@@ -1448,8 +1484,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </motion.div>
                 </React.Fragment>
                 );
-              })
-            )}
+              });
+            })()}
           </div>
         </div>
 
