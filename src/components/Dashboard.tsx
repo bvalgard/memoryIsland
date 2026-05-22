@@ -8,7 +8,7 @@ import { collection, query, where, limit, onSnapshot } from 'firebase/firestore'
 import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
 import { useAchievements } from '../hooks/useAchievements';
 import { Achievement, SessionMeta } from '../achievements';
-import { cn, getActiveTierCards } from '../lib/utils';
+import { cn, getActiveTierCards, formatTimeUntil } from '../lib/utils';
 import AchievementToast from './AchievementToast';
 import TrophyRoom from './TrophyRoom';
 import NewIslandModal from './NewIslandModal';
@@ -139,8 +139,8 @@ export default function Dashboard() {
     }
   }, [progress?.settings]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<'alpha-asc' | 'alpha-desc' | 'creation'>(() => {
-    return (localStorage.getItem('islandSortOrder') as 'alpha-asc' | 'alpha-desc' | 'creation') || 'alpha-asc';
+  const [sortOrder, setSortOrder] = useState<'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-struggling'>(() => {
+    return (localStorage.getItem('islandSortOrder') as 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-struggling') || 'alpha-asc';
   });
 
   useEffect(() => {
@@ -472,6 +472,22 @@ export default function Dashboard() {
       if (sortOrder === 'alpha-asc') return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
       if (sortOrder === 'alpha-desc') return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' });
       if (sortOrder === 'creation') return (b.createdAt || 0) - (a.createdAt || 0);
+      if (sortOrder === 'next-due') {
+        const now = Date.now();
+        const getDueTime = (island: typeof a) => {
+          const active = getActiveTierCards(island.cards);
+          const due = active.filter(c => !c.srsNextReview || c.srsNextReview <= now);
+          if (due.length > 0) return 0;
+          const upcoming = active.map(c => c.srsNextReview ?? Infinity).filter(t => t > now);
+          return upcoming.length > 0 ? Math.min(...upcoming) : Infinity;
+        };
+        return getDueTime(a) - getDueTime(b);
+      }
+      if (sortOrder === 'most-struggling') {
+        const countStruggling = (island: typeof a) =>
+          island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
+        return countStruggling(b) - countStruggling(a);
+      }
       return 0;
     });
 
@@ -1463,12 +1479,14 @@ export default function Dashboard() {
                   </div>
                   <select
                     value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as 'alpha-asc' | 'alpha-desc' | 'creation')}
+                    onChange={(e) => setSortOrder(e.target.value as 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-struggling')}
                     className="bg-[#222] border border-white/10 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-brand-primary"
                   >
                     <option value="alpha-asc">A to Z</option>
                     <option value="alpha-desc">Z to A</option>
                     <option value="creation">Creation Date</option>
+                    <option value="next-due">Next Due</option>
+                    <option value="most-struggling">Most Struggling</option>
                   </select>
                 </div>
 
@@ -2859,9 +2877,13 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClic
 
   const getStatusDescription = () => {
     if (trackingMode === 'srs') {
+      const nextDueTs = (island.cards || []).reduce((min: number, c: any) => {
+        if (c.srsNextReview && c.srsNextReview > Date.now()) return Math.min(min, c.srsNextReview);
+        return min;
+      }, Infinity);
       switch (masteryLevel) {
         case 'struggling': return "Cards due — some are overdue for review.";
-        case 'learning': return "Coming up — cards due within the next 7 days.";
+        case 'learning': return isFinite(nextDueTs) ? `Coming up — next due ${formatTimeUntil(nextDueTs)}.` : "Coming up — cards due soon.";
         case 'mastered': return "All caught up — nothing due for over a week!";
         default: return "";
       }

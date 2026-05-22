@@ -6,6 +6,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function formatTimeUntil(ts: number): string {
+  const diff = ts - Date.now();
+  if (diff <= 0) return 'Now';
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours < 24) return mins > 0 ? `in ${hours}h ${mins}m` : `in ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Tomorrow';
+  return `in ${days} days`;
+}
+
 export function getActiveTierCards(allCards: Card[]): Card[] {
   const cardsById = new Map<string, Card>();
   allCards.forEach(c => {

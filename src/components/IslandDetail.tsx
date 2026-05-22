@@ -1,10 +1,10 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
-import { cn } from '../lib/utils';
+import { cn, formatTimeUntil } from '../lib/utils';
 import ShareModal from './ShareModal';
 import ImageUpload from './ImageUpload';
 import { UserProfile } from '../hooks/useSocial';
@@ -60,6 +60,22 @@ const FORMAT_BUTTONS = [
   { label: '∑∑', title: 'Block math ($$…$$)', before: '$$\n', after: '\n$$', cls: '' },
 ] as const;
 
+function formatRelativeTime(ts: number): string {
+  if (!ts) return 'Never';
+  const diff = Date.now() - ts;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
 function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaElement | null>; setter: (v: string) => void }) {
   return (
     <div className="flex gap-1 mb-1.5">
@@ -80,6 +96,7 @@ function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaE
 }
 
 export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator }: IslandDetailProps) {
+  const [view, setView] = useState<'home' | 'editor'>('home');
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
     if (progressTrackingMode === 'srs') {
@@ -89,6 +106,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     }
     return 'all';
   });
+  const [showStrugglingCards, setShowStrugglingCards] = useState(false);
+  const [previewCardIdx, setPreviewCardIdx] = useState<number | null>(null);
+  const [previewRevealed, setPreviewRevealed] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -698,10 +718,24 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       }
     }
   };
-  const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
+  const strugglingIndices = island.cards.reduce<number[]>((acc, c, i) => {
+    if (c.status === 'struggling' || c.needsWork) acc.push(i);
+    return acc;
+  }, []);
+  const strugglingCount = strugglingIndices.length;
   const learningCount = island.cards.filter(c => !c.status || c.status === 'learning').length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
   const dueCount = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
+  const totalCards = island.cards.length;
+  const progressPct = totalCards > 0 ? Math.round(masteredCount / totalCards * 100) : 0;
+  const islandTotalAnswers = island.cards.reduce((s, c) => s + (c.totalAnswers || 0), 0);
+  const islandTotalCorrect = island.cards.reduce((s, c) => s + (c.totalCorrect || 0), 0);
+  const accuracyStat = islandTotalAnswers > 0 ? Math.round(islandTotalCorrect / islandTotalAnswers * 100) : null;
+  const lastStudiedTs = totalCards > 0 ? Math.max(...island.cards.map(c => c.lastReviewed || 0)) : 0;
+  const nextDueTs = island.cards.reduce((min, c) => {
+    if (c.srsNextReview && c.srsNextReview > Date.now()) return Math.min(min, c.srsNextReview);
+    return min;
+  }, Infinity);
 
   let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
   if (strugglingCount > 0) {
@@ -1121,7 +1155,17 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 )}
               </div>
             </div>
-            <p className="text-brand-muted font-normal text-sm sm:text-base mb-2">Manage your knowledge cards here.</p>
+            {view === 'editor' ? (
+              <button
+                onClick={() => setView('home')}
+                className="flex items-center gap-1.5 text-sm font-semibold text-brand-muted hover:text-white transition-colors mb-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back to Island
+              </button>
+            ) : (
+              <p className="text-brand-muted font-normal text-sm sm:text-base mb-2">Your learning island.</p>
+            )}
             {onUpdateIsland && archipelagos && archipelagos.length > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-[10px] uppercase font-bold text-brand-muted tracking-widest mt-0.5">Archipelago:</span>
@@ -1220,8 +1264,108 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         </div>
       </header>
 
-      {/* Three-Pane Workspace */}
-      {/* Mobile drawer backdrop */}
+      {view === 'home' && (
+        <div className="mt-4 space-y-5">
+          {totalCards > 0 ? (
+            <>
+              {/* Mastery bar */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-brand-muted">Mastery Progress</span>
+                  <span className="text-[10px] font-bold text-brand-muted">{progressPct}% mastered</span>
+                </div>
+                <div className="h-3 rounded-full overflow-hidden flex bg-white/5">
+                  {strugglingCount > 0 && (
+                    <div className="bg-red-500/70 h-full transition-all duration-700" style={{ width: `${(strugglingCount / totalCards) * 100}%` }} />
+                  )}
+                  {learningCount > 0 && (
+                    <div className="bg-amber-500/70 h-full transition-all duration-700" style={{ width: `${(learningCount / totalCards) * 100}%` }} />
+                  )}
+                  {masteredCount > 0 && (
+                    <div className="bg-emerald-500/70 h-full transition-all duration-700" style={{ width: `${(masteredCount / totalCards) * 100}%` }} />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-4 mt-2">
+                  <span className="flex items-center gap-1.5 text-[11px] text-red-400/80">
+                    <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" />{strugglingCount} struggling
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-amber-400/80">
+                    <span className="w-2 h-2 rounded-full bg-amber-500/70 inline-block" />{learningCount} learning
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-emerald-400/80">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500/70 inline-block" />{masteredCount} mastered
+                  </span>
+                </div>
+              </div>
+
+              {/* Stat grid */}
+              <div className={cn("grid gap-3", progressTrackingMode !== 'status' ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3")}>
+                <div className="glass rounded-2xl p-4 border border-brand-border">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Progress</p>
+                  <p className={cn("text-2xl font-black", progressPct === 100 ? "text-emerald-400" : progressPct >= 50 ? "text-amber-400" : "text-white")}>{progressPct}%</p>
+                  <p className="text-[10px] text-brand-muted mt-0.5">{masteredCount} of {totalCards} mastered</p>
+                </div>
+                {accuracyStat !== null && (
+                  <div className="glass rounded-2xl p-4 border border-brand-border">
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Accuracy</p>
+                    <p className={cn("text-2xl font-black", accuracyStat >= 80 ? "text-emerald-400" : accuracyStat >= 60 ? "text-amber-400" : "text-red-400")}>{accuracyStat}%</p>
+                    <p className="text-[10px] text-brand-muted mt-0.5">{islandTotalCorrect}/{islandTotalAnswers} correct</p>
+                  </div>
+                )}
+                <div className="glass rounded-2xl p-4 border border-brand-border">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Last Studied</p>
+                  <p className="text-lg font-black text-white leading-tight">{lastStudiedTs > 0 ? formatRelativeTime(lastStudiedTs) : '—'}</p>
+                  <p className="text-[10px] text-brand-muted mt-0.5">{totalCards} cards total</p>
+                </div>
+                {progressTrackingMode !== 'status' && (
+                  <div className="glass rounded-2xl p-4 border border-brand-border">
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Due Now</p>
+                    <p className={cn("text-2xl font-black", dueCount > 0 ? "text-sky-400" : "text-white")}>{dueCount}</p>
+                    <p className="text-[10px] text-brand-muted mt-0.5">
+                      {dueCount === 0 && isFinite(nextDueTs) ? `Next ${formatTimeUntil(nextDueTs)}` : 'cards to review'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="glass rounded-2xl p-8 border border-brand-border text-center">
+              <p className="text-brand-muted text-sm">No cards yet — add your first card to get started.</p>
+            </div>
+          )}
+
+          {/* Struggling Cards trigger */}
+          {strugglingCount > 0 && (
+            <button
+              onClick={() => setShowStrugglingCards(true)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block shrink-0" />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-red-400">Struggling Cards</span>
+                <span className="text-[11px] text-red-400/60 font-bold">({strugglingCount})</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-red-400/60" />
+            </button>
+          )}
+
+          {/* Create Cards CTA */}
+          <div className="pt-1">
+            <button
+              onClick={() => setView('editor')}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 text-brand-muted hover:text-white transition-all text-sm font-bold"
+            >
+              <Plus className="w-4 h-4" />
+              {totalCards === 0 ? 'Create Cards' : 'Create & Edit Cards'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {view === 'editor' && (
+        <>
+        {/* Three-Pane Workspace */}
+        {/* Mobile drawer backdrop */}
       <AnimatePresence>
         {leftDrawerOpen && (
           <motion.div
@@ -2456,6 +2600,245 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             </>
           );
         })()}
+      </AnimatePresence>
+        </>
+      )}
+
+      {/* Struggling Cards Modal */}
+      <AnimatePresence>
+        {showStrugglingCards && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
+              onClick={() => { setShowStrugglingCards(false); setPreviewCardIdx(null); setPreviewRevealed(false); }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93, y: 16 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-2xl glass rounded-[32px] border border-red-500/20 shadow-[0_40px_100px_rgba(0,0,0,0.8)] z-[101] flex flex-col max-h-[80vh]"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-red-500/15 shrink-0">
+                <div className="flex items-center gap-3">
+                  {previewCardIdx !== null && (
+                    <button
+                      onClick={() => { setPreviewCardIdx(null); setPreviewRevealed(false); }}
+                      className="p-1.5 text-brand-muted hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                  )}
+                  <div className="w-8 h-8 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white tracking-tight">
+                      {previewCardIdx !== null
+                        ? `Card ${strugglingIndices.indexOf(previewCardIdx) + 1} of ${strugglingCount}`
+                        : 'Struggling Cards'}
+                    </h3>
+                    <p className="text-[11px] text-red-400/60 font-medium">
+                      {previewCardIdx !== null ? 'Practice preview' : `${strugglingCount} card${strugglingCount !== 1 ? 's' : ''} need attention`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowStrugglingCards(false); setPreviewCardIdx(null); setPreviewRevealed(false); }}
+                  className="p-2 text-brand-muted hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body — grid or preview */}
+              <div className="overflow-y-auto custom-scrollbar flex-1">
+                <AnimatePresence mode="wait" initial={false}>
+                  {previewCardIdx === null ? (
+                    /* ── Grid ── */
+                    <motion.div
+                      key="grid"
+                      initial={{ opacity: 0, x: -16 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -16 }}
+                      transition={{ duration: 0.15 }}
+                      className="p-5"
+                    >
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {strugglingIndices.map((idx) => {
+                          const card = island.cards[idx];
+                          const accuracy = card.totalAnswers && card.totalAnswers > 0
+                            ? Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)
+                            : null;
+                          const typeLabel =
+                            card.type === 'mcq' || card.type === 'multi-select' ? 'MCQ' :
+                            card.type === 'fill-in-the-blank' ? 'Fill-in' :
+                            card.type === 'sequencing' ? 'Sequence' :
+                            card.type === 'matching' ? 'Matching' : 'Flashcard';
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => { setPreviewCardIdx(idx); setPreviewRevealed(false); }}
+                              className="text-left glass rounded-2xl p-4 border border-red-500/20 hover:border-red-500/50 hover:bg-red-500/5 transition-all group flex flex-col gap-2.5"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-red-400/70 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/15">
+                                  {typeLabel}
+                                </span>
+                                {accuracy !== null && (
+                                  <span className="text-xs font-black text-red-400 tabular-nums">{accuracy}%</span>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-white/80 leading-snug line-clamp-3 group-hover:text-white transition-colors">
+                                {card.front}
+                              </p>
+                              {card.totalAnswers != null && card.totalAnswers > 0 && (
+                                <p className="text-[10px] text-red-400/50 mt-auto">
+                                  {card.totalAnswers - (card.totalCorrect ?? 0)} wrong of {card.totalAnswers} attempts
+                                </p>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  ) : (
+                    /* ── Card Preview ── */
+                    (() => {
+                      const card = island.cards[previewCardIdx];
+                      const posInList = strugglingIndices.indexOf(previewCardIdx);
+                      const prevIdx = posInList > 0 ? strugglingIndices[posInList - 1] : null;
+                      const nextIdx = posInList < strugglingIndices.length - 1 ? strugglingIndices[posInList + 1] : null;
+                      return (
+                        <motion.div
+                          key={`preview-${previewCardIdx}`}
+                          initial={{ opacity: 0, x: 16 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 16 }}
+                          transition={{ duration: 0.15 }}
+                          className="p-5 flex flex-col gap-4"
+                        >
+                          {/* Question */}
+                          <div className="glass rounded-2xl p-5 border border-white/5">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-3">Question</p>
+                            <p className="text-base font-semibold text-white leading-relaxed">{card.front}</p>
+                            {card.hint && !previewRevealed && (
+                              <p className="text-xs text-brand-muted/60 mt-3 italic">Hint: {card.hint}</p>
+                            )}
+                          </div>
+
+                          {/* MCQ options shown before reveal */}
+                          {(card.type === 'mcq' || card.type === 'multi-select') && card.options && (
+                            <div className="space-y-2">
+                              {card.options.map((opt, i) => {
+                                const isCorrect = card.correctOptions?.includes(opt);
+                                return (
+                                  <div
+                                    key={i}
+                                    className={cn(
+                                      "px-4 py-3 rounded-xl border text-sm font-medium transition-colors",
+                                      previewRevealed
+                                        ? isCorrect
+                                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                                          : "border-white/5 bg-white/3 text-white/40"
+                                        : "border-white/10 bg-white/5 text-white/70"
+                                    )}
+                                  >
+                                    {previewRevealed && isCorrect && <CheckCircle2 className="w-3.5 h-3.5 inline mr-2 text-emerald-400" />}
+                                    {opt}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Reveal / Answer */}
+                          {!previewRevealed ? (
+                            <button
+                              onClick={() => setPreviewRevealed(true)}
+                              className="w-full py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-bold text-white/70 hover:text-white transition-all"
+                            >
+                              Reveal Answer
+                            </button>
+                          ) : (
+                            <AnimatePresence>
+                              <motion.div
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="glass rounded-2xl p-5 border border-emerald-500/20 bg-emerald-500/5 flex flex-col gap-3"
+                              >
+                                <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-400/70">Answer</p>
+                                {card.type === 'matching' && card.pairs ? (
+                                  <div className="space-y-2">
+                                    {card.pairs.map((pair) => (
+                                      <div key={pair.id} className="flex items-start gap-2 text-sm">
+                                        <span className="font-bold text-white/80 shrink-0">{pair.left}</span>
+                                        <span className="text-white/40">→</span>
+                                        <span className="text-emerald-300/80">{pair.rights.join(', ')}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : card.type === 'sequencing' && card.options ? (
+                                  <ol className="space-y-1.5 list-none">
+                                    {card.options.map((step, i) => (
+                                      <li key={i} className="flex items-start gap-2 text-sm">
+                                        <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                                        <span className="text-white/80">{step}</span>
+                                      </li>
+                                    ))}
+                                  </ol>
+                                ) : (
+                                  <p className="text-sm text-white/80 leading-relaxed">{card.back}</p>
+                                )}
+                                {card.explanation && (
+                                  <p className="text-xs text-brand-muted/70 border-t border-white/5 pt-3 leading-relaxed italic">{card.explanation}</p>
+                                )}
+                              </motion.div>
+                            </AnimatePresence>
+                          )}
+
+                          {/* SRS note */}
+                          <p className="text-[10px] text-brand-muted/40 text-center leading-relaxed">
+                            Reviewing here won't reset your due date — use this to practice between sessions.
+                          </p>
+
+                          {/* Prev / Next nav */}
+                          <div className="flex items-center justify-between gap-3 pt-1">
+                            <button
+                              onClick={() => { if (prevIdx !== null) { setPreviewCardIdx(prevIdx); setPreviewRevealed(false); } }}
+                              disabled={prevIdx === null}
+                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-30 text-sm font-bold text-white/70 hover:text-white transition-all"
+                            >
+                              <ChevronLeft className="w-4 h-4" /> Prev
+                            </button>
+                            <button
+                              onClick={() => { if (nextIdx !== null) { setPreviewCardIdx(nextIdx); setPreviewRevealed(false); } }}
+                              disabled={nextIdx === null}
+                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-30 text-sm font-bold text-white/70 hover:text-white transition-all"
+                            >
+                              Next <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      );
+                    })()
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-white/5 shrink-0">
+                <p className="text-[10px] text-brand-muted/50 text-center">
+                  {previewCardIdx === null ? 'Tap a card to preview it' : 'Answers hidden until revealed'}
+                </p>
+              </div>
+            </motion.div>
+          </>
+        )}
       </AnimatePresence>
     </div>
   );
