@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -180,6 +180,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const isDirty = front.trim().length > 0 || back.trim().length > 0;
 
   const [leftPaneOpen, setLeftPaneOpen] = useState(() => window.innerWidth >= 1024);
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [showHintField, setShowHintField] = useState(false);
   const [showExplanationField, setShowExplanationField] = useState(false);
   const [showImageField, setShowImageField] = useState(false);
@@ -1219,17 +1220,40 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       </header>
 
       {/* Three-Pane Workspace */}
-      <div className="flex max-h-[calc(100vh-200px)] overflow-hidden rounded-[32px] border border-brand-border bg-brand-card">
+      {/* Mobile drawer backdrop */}
+      <AnimatePresence>
+        {leftDrawerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            onClick={() => setLeftDrawerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-col md:flex-row md:max-h-[calc(100vh-200px)] md:overflow-hidden rounded-[32px] border border-brand-border bg-brand-card">
 
         {/* ── LEFT PANE: Knowledge Matrix ── */}
+        {/* Mobile: fixed slide-out drawer; Desktop: inline collapsible sidebar */}
         <div className={cn(
-          "flex flex-col shrink-0 border-r border-brand-border overflow-hidden transition-all duration-300",
-          leftPaneOpen ? "w-64" : "w-0"
+          "fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-brand-card border-r border-brand-border overflow-hidden transition-transform duration-300",
+          leftDrawerOpen ? "translate-x-0" : "-translate-x-full",
+          "md:relative md:inset-auto md:z-auto md:translate-x-0 md:transition-all md:duration-300 md:shrink-0",
+          leftPaneOpen ? "md:w-64" : "md:w-0"
         )}>
-          <div className="h-12 flex items-center px-4 border-b border-brand-border shrink-0">
+          <div className="h-12 flex items-center justify-between px-4 border-b border-brand-border shrink-0">
             <span className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium truncate">
               Knowledge Matrix <span className="text-white/30">({island.cards.length})</span>
             </span>
+            <button
+              onClick={() => setLeftDrawerOpen(false)}
+              className="md:hidden text-brand-muted hover:text-white transition-colors shrink-0 ml-2"
+              aria-label="Close card list"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
             {island.cards.length === 0 ? (
@@ -1429,8 +1453,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           </div>
         </div>
 
-        {/* ── COLLAPSE TOGGLE ── */}
-        <div className="relative shrink-0 flex items-center">
+        {/* ── COLLAPSE TOGGLE (desktop only) ── */}
+        <div className="hidden md:flex relative shrink-0 items-center">
           <button
             onClick={() => setLeftPaneOpen(!leftPaneOpen)}
             className="absolute left-0 z-10 w-5 h-10 flex items-center justify-center bg-brand-card border border-brand-border rounded-r-xl text-brand-muted hover:text-white transition-colors"
@@ -1444,11 +1468,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         <div ref={canvasPaneRef} className="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-[#080818] min-w-0">
 
           {/* Canvas header bar */}
-          <div className="h-12 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
-            <span className="text-[10px] text-white/30 uppercase tracking-widest font-medium flex items-center gap-2">
-              {editingCardIndex !== null ? 'Editing Card' : parentCardForProgression ? `Progression — Tier ${(parentCardForProgression.tier || 1) + 1}` : 'New Card'}
-              {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
-            </span>
+          <div className="h-12 flex items-center justify-between px-4 sm:px-6 border-b border-white/5 shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLeftDrawerOpen(true)}
+                className="md:hidden flex items-center gap-1.5 text-[10px] bg-white/5 hover:bg-white/10 text-brand-muted hover:text-white px-2.5 py-1.5 rounded-lg border border-white/5 transition-all"
+                aria-label="View cards"
+              >
+                <Menu className="w-3 h-3" />
+                Cards
+              </button>
+              <span className="text-[10px] text-white/30 uppercase tracking-widest font-medium flex items-center gap-2">
+                {editingCardIndex !== null ? 'Editing Card' : parentCardForProgression ? `Progression — Tier ${(parentCardForProgression.tier || 1) + 1}` : 'New Card'}
+                {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <button
@@ -1511,7 +1546,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             id="card-builder-form"
             onSubmit={handleSubmit}
             onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLFormElement).requestSubmit(); } }}
-            className="flex-1 flex flex-col px-12 py-10 gap-6"
+            className="flex-1 flex flex-col px-4 sm:px-8 md:px-12 py-6 md:py-10 gap-6"
           >
             {parentCardForProgression && (
               <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-xl p-4 flex items-start justify-between">
@@ -1924,7 +1959,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         </div>
 
         {/* ── RIGHT PANE: Settings Inspector ── */}
-        <div className="w-[280px] shrink-0 flex flex-col border-l border-brand-border overflow-y-auto custom-scrollbar">
+        <div className="w-full md:w-[280px] shrink-0 flex flex-col border-t border-l-0 md:border-t-0 md:border-l border-brand-border overflow-visible md:overflow-y-auto custom-scrollbar">
 
           {/* Section 1 — Card Type */}
           <div className="p-4 border-b border-brand-border">
@@ -1996,7 +2031,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           <div className="flex-1" />
 
           {/* Section 3 — Sticky Save CTA */}
-          <div className="p-4 border-t border-brand-border shrink-0">
+          <div className="p-4 border-t border-brand-border shrink-0 sticky bottom-0 bg-brand-card md:static md:bg-transparent">
             {isScenarioMode && !scenarioSubFormOpen && (
               <button
                 type="button"
