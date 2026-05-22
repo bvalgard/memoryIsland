@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X, Flame } from 'lucide-react';
+import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown } from 'lucide-react';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn, getActiveTierCards } from '../lib/utils';
@@ -64,6 +64,10 @@ function computeSM2Easy(prevReps: number, prevInterval: number, prevEF: number) 
   result.interval = Math.max(result.interval, SRS_THRESHOLDS.mastered);
   result.nextReview = Date.now() + result.interval * 24 * 60 * 60 * 1000;
   return result;
+}
+
+function computeSM2Hard(prevReps: number, prevInterval: number, prevEF: number) {
+  return computeSM2(2, prevReps, prevInterval, prevEF);
 }
 
 // Extracts only the active card for each conceptual lineage
@@ -203,6 +207,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [matchedRightIds, setMatchedRightIds] = useState<Set<string>>(new Set());
   const [matchingErrors, setMatchingErrors] = useState<Set<string>>(new Set());
   const [matchingMistakesCount, setMatchingMistakesCount] = useState(0);
+  const [matchingComplete, setMatchingComplete] = useState(false);
 
   // Fill in the Blank State
   const [fibInput, setFibInput] = useState('');
@@ -417,6 +422,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setMatchedRightIds(new Set());
     setMatchingErrors(new Set());
     setMatchingMistakesCount(0);
+    setMatchingComplete(false);
 
     // Reset state for new card
     setSelectedOption(null);
@@ -692,12 +698,83 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     nextCard();
   };
 
+  const handleFlashcardHard = () => {
+    if (!currentCard) return;
+    if (window.navigator?.vibrate) window.navigator.vibrate(30);
+
+    if (pendingConfidence !== null) {
+      const predictedCorrect = pendingConfidence >= 3;
+      setSessionCalibration(prev => ({
+        correct: prev.correct + (predictedCorrect ? 1 : 0),
+        total: prev.total + 1,
+      }));
+      setPendingConfidence(null);
+    }
+
+    setScoreDelta(prev => prev + 1);
+    const newStreak = streak + 1;
+    setStreak(newStreak);
+    updateStreakWithRecord(newStreak);
+
+    const srs = computeSM2Hard(
+      currentCard.srsRepetitions ?? 0,
+      currentCard.srsInterval ?? 1,
+      currentCard.srsEaseFactor ?? 2.5
+    );
+    const status = intervalToStatus(srs.interval);
+
+    setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
+
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        status,
+        lastReviewed: Date.now(),
+        srsInterval: srs.interval,
+        srsEaseFactor: srs.easeFactor,
+        srsNextReview: srs.nextReview,
+        srsRepetitions: srs.repetitions,
+        sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+        sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
+      },
+    }));
+    setDirection(1);
+    nextCard();
+  };
+
   const handleEasyAfterCorrect = (e: React.MouseEvent) => {
     if (!currentCard) return;
     if (window.navigator?.vibrate) window.navigator.vibrate(50);
     triggerSparkle(e);
 
     const srs = computeSM2Easy(
+      currentCard.srsRepetitions ?? 0,
+      currentCard.srsInterval ?? 1,
+      currentCard.srsEaseFactor ?? 2.5
+    );
+    const status = intervalToStatus(srs.interval);
+
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        ...prev[currentCard.front],
+        status,
+        lastReviewed: Date.now(),
+        srsInterval: srs.interval,
+        srsEaseFactor: srs.easeFactor,
+        srsNextReview: srs.nextReview,
+        srsRepetitions: srs.repetitions,
+      },
+    }));
+    setDirection(1);
+    nextCard();
+  };
+
+  const handleHardAfterCorrect = () => {
+    if (!currentCard) return;
+    if (window.navigator?.vibrate) window.navigator.vibrate(30);
+
+    const srs = computeSM2Hard(
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
@@ -1137,9 +1214,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             }));
             setDirection(-1);
           }
-          setTimeout(() => {
-            nextCard();
-          }, 1000);
+          setMatchingComplete(true);
+          setLastAnswerCorrect(matchingMistakesCount === 0);
         }
       } else {
         // Mismatch
@@ -1504,17 +1580,15 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             <motion.button
                               key={left.id}
                               layout="position"
-                              disabled={isMatched}
                               onClick={(e) => handleMatchingSelect('left', left.id, e)}
                               className={cn(
                                 "text-left px-4 py-3 rounded-xl transition-all font-medium text-xs sm:text-sm",
-                                isMatched ? "bg-emerald-500/10 text-emerald-500/60 border border-emerald-500/20" :
-                                  isSelected ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]" :
-                                    isError ? "bg-red-500/20 text-red-500 border border-red-500/50" :
-                                      "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
+                                isSelected ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]" :
+                                  isError ? "bg-red-500/20 text-red-500 border border-red-500/50" :
+                                    "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                               )}
                             >
-                              <span className={cn(isMatched && "line-through decoration-emerald-500/30")}><RichTextInline>{left.text}</RichTextInline></span>
+                              <RichTextInline>{left.text}</RichTextInline>
                             </motion.button>
                           )
                         })}
@@ -2040,14 +2114,24 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             <Check className="w-4 h-4" />
                             <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
                           </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
-                            className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                            title="This is pretty easy; show me less frequently"
-                          >
-                            <Zap className="w-4 h-4" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
-                          </button>
+                          <div className="flex flex-col gap-1.5">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
+                              className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                              title="This is pretty easy; show me less frequently"
+                            >
+                              <Zap className="w-4 h-4" />
+                              <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleFlashcardHard(); }}
+                              className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-10 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                              title="This was tough — show me sooner"
+                            >
+                              <TrendingDown className="w-4 h-4" />
+                              <span className="text-[10px] font-bold uppercase tracking-widest">Hard</span>
+                            </button>
+                          </div>
                         </div>
                         {!questionJustAsked ? (
                           <motion.button
@@ -2087,17 +2171,30 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </motion.button>
                   {lastAnswerCorrect && (
-                    <motion.button
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 20 }}
-                      onClick={(e) => { e.stopPropagation(); handleEasyAfterCorrect(e); }}
-                      className="order-2 sm:order-1 h-10 sm:h-12 px-5 bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted rounded-xl flex items-center justify-center gap-2 transition-all w-full sm:w-auto"
-                      title="I already knew this — boost interval to mastered"
-                    >
-                      <Zap className="w-4 h-4" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
-                    </motion.button>
+                    <div className="order-2 sm:order-1 flex flex-col gap-1.5 w-full sm:w-auto">
+                      <motion.button
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        onClick={(e) => { e.stopPropagation(); handleEasyAfterCorrect(e); }}
+                        className="h-10 sm:h-12 px-5 bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted rounded-xl flex items-center justify-center gap-2 transition-all w-full"
+                        title="I already knew this — boost interval to mastered"
+                      >
+                        <Zap className="w-4 h-4" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
+                      </motion.button>
+                      <motion.button
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        onClick={(e) => { e.stopPropagation(); handleHardAfterCorrect(); }}
+                        className="h-10 px-5 bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted rounded-xl flex items-center justify-center gap-2 transition-all w-full"
+                        title="This was tough — show me sooner"
+                      >
+                        <TrendingDown className="w-4 h-4" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Hard</span>
+                      </motion.button>
+                    </div>
                   )}
                 </div>
               )}
@@ -2105,10 +2202,36 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </div>
         )}
         {currentCard?.type === 'matching' && (
-          <p className="mt-8 text-center text-brand-muted/80 text-xs sm:text-sm font-bold">
-            Score: <span className="text-white">{matchedRightIds.size} / {matchingRights.length}</span>
-            {matchingMistakesCount > 0 && <span className="ml-2 text-red-400">({matchingMistakesCount} errors)</span>}
-          </p>
+          <div className="w-full mt-8 sm:mt-12 flex flex-col items-center gap-4">
+            <p className="text-center text-brand-muted/80 text-xs sm:text-sm font-bold">
+              Score: <span className="text-white">{matchedRightIds.size} / {matchingRights.length}</span>
+              {matchingMistakesCount > 0 && <span className="ml-2 text-red-400">({matchingMistakesCount} errors)</span>}
+            </p>
+            <AnimatePresence>
+              {matchingComplete && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 16 }}
+                  className="w-full max-w-xl px-4 sm:px-0 flex flex-col gap-3"
+                >
+                  {currentCard.explanation && (
+                    <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                      <p className="text-xs font-bold uppercase tracking-widest text-brand-muted mb-2">Explanation</p>
+                      <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
+                    </div>
+                  )}
+                  <button
+                    onClick={nextCard}
+                    className="btn-primary h-14 sm:h-16 px-12 flex items-center justify-center gap-2 group text-sm sm:text-base shadow-[0_20px_40px_rgba(255,255,255,0.1)] relative overflow-hidden w-full"
+                  >
+                    <span>Continue</span>
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
 
         {/* Live Session Tracker */}
