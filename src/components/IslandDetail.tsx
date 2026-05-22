@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Info, Repeat2, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn } from '../lib/utils';
@@ -111,6 +111,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [mcqInlineOptions, setMcqInlineOptions] = useState<{ id: string; text: string; isCorrect: boolean; explanation: string }[]>([
     { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
     { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
+    { id: Date.now().toString() + '3', text: '', isCorrect: false, explanation: '' },
+    { id: Date.now().toString() + '4', text: '', isCorrect: false, explanation: '' },
   ]);
   const [mcqLockOrder, setMcqLockOrder] = useState(false);
   const [expandedMcqExp, setExpandedMcqExp] = useState<Set<string>>(new Set());
@@ -216,6 +218,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
       { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
+      { id: Date.now().toString() + '3', text: '', isCorrect: false, explanation: '' },
+      { id: Date.now().toString() + '4', text: '', isCorrect: false, explanation: '' },
     ]);
     setMcqLockOrder(false);
     setExpandedMcqExp(new Set());
@@ -286,6 +290,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
       { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
+      { id: Date.now().toString() + '3', text: '', isCorrect: false, explanation: '' },
+      { id: Date.now().toString() + '4', text: '', isCorrect: false, explanation: '' },
     ]);
     setMcqLockOrder(false);
     setExpandedMcqExp(new Set());
@@ -450,6 +456,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       setMcqInlineOptions([
         { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
         { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
+        { id: Date.now().toString() + '3', text: '', isCorrect: false, explanation: '' },
+        { id: Date.now().toString() + '4', text: '', isCorrect: false, explanation: '' },
       ]);
       setMcqLockOrder(false);
       setExpandedMcqExp(new Set());
@@ -1704,6 +1712,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   </label>
                   <button
                     type="button"
+                    title={mcqLockOrder ? "Options will appear in the order you set them" : "Options will be shuffled into a random order each time the card is studied"}
                     onClick={() => setMcqLockOrder(!mcqLockOrder)}
                     className={cn("flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 rounded-lg transition-colors",
                       mcqLockOrder ? "bg-amber-500/10 text-amber-400 border border-amber-500/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
@@ -1715,17 +1724,19 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 <div className="space-y-2">
                   {mcqInlineOptions.map((opt, idx) => (
                     <div key={opt.id}>
-                      <div className={cn("flex gap-2 items-center p-1", opt.isCorrect ? "bg-emerald-500/5 border border-emerald-500/20 rounded-xl" : "rounded-xl")}>
+                      <div className={cn("flex gap-2 items-center p-1 rounded-xl border", opt.isCorrect ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/15")}>
                         <button
                           type="button"
+                          title={opt.isCorrect ? "Correct answer — click to make distractor" : "Distractor (incorrect) — click to make correct"}
                           onClick={() => {
                             setMcqInlineOptions(mcqInlineOptions.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o));
                             setTimeout(() => mcqOptionRefs.current[idx]?.focus(), 0);
                           }}
-                          className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-colors",
-                            opt.isCorrect ? "border-emerald-500 bg-emerald-500/20" : "border-white/20 bg-white/5 hover:border-white/40")}
+                          className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-colors hover:scale-110"
                         >
-                          {opt.isCorrect && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                          {opt.isCorrect
+                            ? <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                            : <XCircle className="w-6 h-6 text-red-400/60 hover:text-red-400" />}
                         </button>
                         <input
                           ref={(el) => { mcqOptionRefs.current[idx] = el; }}
@@ -1755,16 +1766,17 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
                             expandedMcqExp.has(opt.id) || opt.explanation ? "bg-brand-primary/10 text-brand-primary border border-brand-primary/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
                         >
-                          <Info className="w-3.5 h-3.5" />
+                          <BookOpen className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
+                          title="Remove this option"
                           disabled={mcqInlineOptions.length <= 2}
                           onClick={() => setMcqInlineOptions(mcqInlineOptions.filter((_, i) => i !== idx))}
                           className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
                             mcqInlineOptions.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       {(expandedMcqExp.has(opt.id) || opt.explanation) && (
