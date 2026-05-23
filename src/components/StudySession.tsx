@@ -270,11 +270,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [shuffledCards, setShuffledCards] = useState(() => {
     const activeTierCards = getActiveTierCards(island.cards);
     const now = Date.now();
+    const graceMs = (settings?.graceWindowMinutes ?? 0) * 60_000;
     let targetCards = activeTierCards;
     if (mode === 'struggling') targetCards = activeTierCards.filter(c => c.status === 'struggling' || c.needsWork);
     else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
-    else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now);
+    else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs);
 
     const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     return shuffled;
@@ -287,11 +288,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   useEffect(() => {
     const activeTierCards = getActiveTierCards(island.cards);
     const now = Date.now();
+    const graceMs = (settings?.graceWindowMinutes ?? 0) * 60_000;
     let targetCards = activeTierCards;
     if (mode === 'struggling') targetCards = activeTierCards.filter(c => c.status === 'struggling' || c.needsWork);
     else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
-    else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now);
+    else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs);
 
     const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     setShuffledCards(shuffled);

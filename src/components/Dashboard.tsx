@@ -136,7 +136,8 @@ export default function Dashboard() {
     defaultStudyModeApplied.current = true;
     if (progress.settings.progressTrackingMode === 'srs') {
       const now = Date.now();
-      const due = (progress.islands || []).flatMap(i => getActiveTierCards(i.cards)).filter(c => !c.srsNextReview || c.srsNextReview <= now).length;
+      const effectGraceMs = (progress.settings.graceWindowMinutes ?? 0) * 60_000;
+      const due = (progress.islands || []).flatMap(i => getActiveTierCards(i.cards)).filter(c => !c.srsNextReview || c.srsNextReview <= now + effectGraceMs).length;
       setStudyMode(due > 0 ? 'due' : 'all');
     }
   }, [progress?.settings]);
@@ -479,11 +480,12 @@ export default function Dashboard() {
       if (sortOrder === 'creation') return (b.createdAt || 0) - (a.createdAt || 0);
       if (sortOrder === 'next-due') {
         const now = Date.now();
+        const sortGraceMs = (progress?.settings?.graceWindowMinutes ?? 0) * 60_000;
         const getDueTime = (island: typeof a) => {
           const active = getActiveTierCards(island.cards);
-          const due = active.filter(c => !c.srsNextReview || c.srsNextReview <= now);
+          const due = active.filter(c => !c.srsNextReview || c.srsNextReview <= now + sortGraceMs);
           if (due.length > 0) return 0;
-          const upcoming = active.map(c => c.srsNextReview ?? Infinity).filter(t => t > now);
+          const upcoming = active.map(c => c.srsNextReview ?? Infinity).filter(t => t > now + sortGraceMs);
           return upcoming.length > 0 ? Math.min(...upcoming) : Infinity;
         };
         return getDueTime(a) - getDueTime(b);
@@ -512,10 +514,11 @@ export default function Dashboard() {
   };
 
   // Adjusted counts for Archipelago
+  const graceMs = (progress?.settings?.graceWindowMinutes ?? 0) * 60_000;
   const globalStrugglingCount = allCards.filter(c => c.status === 'struggling' || c.needsWork).length;
   const globalLearningCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
-  const globalDueCount = getActiveTierCards(allCards).filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
+  const globalDueCount = getActiveTierCards(allCards).filter(c => !c.srsNextReview || c.srsNextReview <= Date.now() + graceMs).length;
 
   // Learning insights computations
   const weakSpotCards = [...allCards]
@@ -1579,6 +1582,29 @@ export default function Dashboard() {
                   </button>
                 </div>
 
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="mb-3">
+                    <p className="text-sm font-bold text-white mb-1">Study Grace Window</p>
+                    <p className="text-xs text-brand-muted">Cards due within this window will be included in your session.</p>
+                  </div>
+                  <div className="flex bg-black/30 rounded-xl p-1 border border-white/10 gap-1">
+                    {([0, 15, 30, 60, 120] as const).map((mins) => (
+                      <button
+                        key={mins}
+                        onClick={() => updateSettings({ graceWindowMinutes: mins })}
+                        className={cn(
+                          "flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors",
+                          (progress?.settings?.graceWindowMinutes ?? 0) === mins
+                            ? "bg-brand-primary text-white shadow-sm"
+                            : "text-brand-muted hover:text-white"
+                        )}
+                      >
+                        {mins === 0 ? 'Off' : mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                   <div>
                     <p className="text-sm font-bold text-white mb-1">Dark Mode</p>
@@ -2479,7 +2505,7 @@ export default function Dashboard() {
 
                         if (island.cards.length > 0) {
                           const activeTierCards = getActiveTierCards(island.cards);
-                          const hasDueOrOverdue = activeTierCards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now);
+                          const hasDueOrOverdue = activeTierCards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now + graceMs);
                           if (hasDueOrOverdue) {
                             masteryLevel = 'struggling';
                           } else if (activeTierCards.some((c: any) => c.srsNextReview <= sevenDaysMs)) {
@@ -2509,6 +2535,7 @@ export default function Dashboard() {
                           masteryLevel={masteryLevel}
                           islandImageSrc={imageSrc}
                           trackingMode={trackingMode}
+                          graceWindowMinutes={progress?.settings?.graceWindowMinutes ?? 0}
                           onClick={() => setSelectedIslandId(island.id)}
                           isPinned={isPinned(island.id)}
                           isOnline={isOnline}
@@ -2586,6 +2613,7 @@ export default function Dashboard() {
                     setIsStudying(true);
                   }}
                   progressTrackingMode={trackingMode}
+                  graceWindowMinutes={progress?.settings?.graceWindowMinutes ?? 0}
                   friends={friends}
                   fetchProfilesByUids={fetchProfilesByUids}
                   currentUserId={user?.uid ?? undefined}
@@ -2900,6 +2928,7 @@ interface IslandCardProps {
   masteryLevel: 'struggling' | 'learning' | 'mastered';
   islandImageSrc: string;
   trackingMode?: string;
+  graceWindowMinutes?: number;
   onClick: () => void;
   key?: string | number;
   isPinned?: boolean;
@@ -2907,7 +2936,7 @@ interface IslandCardProps {
   onPinToggle?: (e: { stopPropagation: () => void }) => void;
 }
 
-function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClick, isPinned = false, isOnline = true, onPinToggle }: IslandCardProps) {
+function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceWindowMinutes = 0, onClick, isPinned = false, isOnline = true, onPinToggle }: IslandCardProps) {
   const getMasteryStyles = () => {
     switch (masteryLevel) {
       case 'struggling':
@@ -2923,8 +2952,9 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, onClic
 
   const getStatusDescription = () => {
     if (trackingMode === 'srs') {
+      const cardGraceMs = graceWindowMinutes * 60_000;
       const nextDueTs = (island.cards || []).reduce((min: number, c: any) => {
-        if (c.srsNextReview && c.srsNextReview > Date.now()) return Math.min(min, c.srsNextReview);
+        if (c.srsNextReview && c.srsNextReview > Date.now() + cardGraceMs) return Math.min(min, c.srsNextReview);
         return min;
       }, Infinity);
       switch (masteryLevel) {

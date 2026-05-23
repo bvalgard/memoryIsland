@@ -145,6 +145,7 @@ export interface UserSettings {
   progressTrackingMode: 'srs' | 'status' | 'both';
   sessionDisplay: 'focused' | 'stats';
   writtenRecallMode: boolean;
+  graceWindowMinutes?: number;
 }
 
 export interface UserProgress {
@@ -265,6 +266,7 @@ const defaultSettings: UserSettings = {
   progressTrackingMode: 'srs',
   sessionDisplay: 'stats',
   writtenRecallMode: false,
+  graceWindowMinutes: 0,
 };
 
 function randomId() {

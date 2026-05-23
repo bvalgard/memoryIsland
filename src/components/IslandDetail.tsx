@@ -26,6 +26,7 @@ interface IslandDetailProps {
   onUnshare?: (island: Island) => void;
   onUpdateIsland?: (updates: Partial<Island>) => void;
   progressTrackingMode?: 'srs' | 'status' | 'both';
+  graceWindowMinutes?: number;
   friends?: string[];
   fetchProfilesByUids?: (uids: string[]) => Promise<UserProfile[]>;
   currentUserId?: string;
@@ -97,13 +98,14 @@ function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaE
   );
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland }: IslandDetailProps) {
   const [view, setView] = useState<'home' | 'editor'>('home');
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
     if (progressTrackingMode === 'srs') {
       const now = Date.now();
-      const due = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= now).length;
+      const graceMs = graceWindowMinutes * 60_000;
+      const due = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs).length;
       return due > 0 ? 'due' : 'all';
     }
     return 'all';
@@ -728,7 +730,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const strugglingCount = strugglingIndices.length;
   const learningCount = island.cards.filter(c => !c.status || c.status === 'learning').length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
-  const dueCount = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now()).length;
+  const graceMs = graceWindowMinutes * 60_000;
+  const dueCount = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now() + graceMs).length;
   const totalCards = island.cards.length;
   const progressPct = totalCards > 0 ? Math.round(masteredCount / totalCards * 100) : 0;
   const islandTotalAnswers = island.cards.reduce((s, c) => s + (c.totalAnswers || 0), 0);
@@ -736,7 +739,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const accuracyStat = islandTotalAnswers > 0 ? Math.round(islandTotalCorrect / islandTotalAnswers * 100) : null;
   const lastStudiedTs = totalCards > 0 ? Math.max(...island.cards.map(c => c.lastReviewed || 0)) : 0;
   const nextDueTs = island.cards.reduce((min, c) => {
-    if (c.srsNextReview && c.srsNextReview > Date.now()) return Math.min(min, c.srsNextReview);
+    if (c.srsNextReview && c.srsNextReview > Date.now() + graceMs) return Math.min(min, c.srsNextReview);
     return min;
   }, Infinity);
 
