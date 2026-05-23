@@ -95,10 +95,11 @@ function buildStudyDeck(cards: Card[], sortBy: 'lastReviewed' | 'srsNextReview')
     ...[...groupMap.values()],
   ];
 
+  const roundToHour = (t: number) => Math.round(t / 3_600_000) * 3_600_000;
   const shuffledUnits = shuffleArray(units);
   shuffledUnits.sort((a, b) => {
-    const aTime = Math.min(...a.map(c => c[sortBy] ?? 0));
-    const bTime = Math.min(...b.map(c => c[sortBy] ?? 0));
+    const aTime = roundToHour(Math.min(...a.map(c => c[sortBy] ?? 0)));
+    const bTime = roundToHour(Math.min(...b.map(c => c[sortBy] ?? 0)));
     return aTime - bTime;
   });
 
@@ -210,6 +211,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [matchingComplete, setMatchingComplete] = useState(false);
 
   // Fill in the Blank State
+  const [writtenRecallText, setWrittenRecallText] = useState('');
+
   const [fibInput, setFibInput] = useState('');
   const [lastFibSubmitted, setLastFibSubmitted] = useState<string | null>(null);
   const [isFibCorrect, setIsFibCorrect] = useState<boolean | null>(null);
@@ -429,6 +432,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setShowHint(false);
     setIsFlipped(false);
     setPendingConfidence(null);
+    setWrittenRecallText('');
 
     // Fill in the blank reset
     setFibInput('');
@@ -1533,8 +1537,36 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </>
                   )}
 
+                  {/* Written recall input — flashcard only, pre-flip, when setting is on */}
+                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && settings?.writtenRecallMode && (
+                    <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
+                      <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
+                        Write your answer from memory
+                      </p>
+                      <textarea
+                        value={writtenRecallText}
+                        onChange={e => setWrittenRecallText(e.target.value)}
+                        placeholder="Type your answer…"
+                        rows={3}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-white/20"
+                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
+                        disabled={writtenRecallText.trim().length === 0}
+                        className={cn(
+                          "mt-3 w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                          writtenRecallText.trim().length > 0
+                            ? "bg-brand-primary text-white"
+                            : "bg-white/5 text-brand-muted/30 cursor-not-allowed"
+                        )}
+                      >
+                        Reveal Answer
+                      </button>
+                    </div>
+                  )}
+
                   {/* Confidence rating — inside card front, flashcard only, pre-flip */}
-                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && (
+                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && !settings?.writtenRecallMode && (
                     <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
                       <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
                         Rate your confidence
@@ -2072,6 +2104,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       <h2 className="text-xl sm:text-2xl md:text-3xl font-normal leading-snug tracking-tight text-white">
                         <RichText>{currentCard?.back}</RichText>
                       </h2>
+                      {settings?.writtenRecallMode && (
+                        <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Your recall</span>
+                          {writtenRecallText.trim() ? (
+                            <p className="text-sm text-white/70 leading-relaxed italic whitespace-pre-wrap">{writtenRecallText.trim()}</p>
+                          ) : (
+                            <p className="text-sm text-brand-muted/40 leading-relaxed">Nothing written</p>
+                          )}
+                        </div>
+                      )}
                       {currentCard?.explanation && (
                         <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>

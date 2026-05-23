@@ -144,6 +144,7 @@ export interface UserSettings {
   showOnGlobalLeaderboard: boolean;
   progressTrackingMode: 'srs' | 'status' | 'both';
   sessionDisplay: 'focused' | 'stats';
+  writtenRecallMode: boolean;
 }
 
 export interface UserProgress {
@@ -263,6 +264,7 @@ const defaultSettings: UserSettings = {
   showOnGlobalLeaderboard: true,
   progressTrackingMode: 'srs',
   sessionDisplay: 'stats',
+  writtenRecallMode: false,
 };
 
 function randomId() {

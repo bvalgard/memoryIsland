@@ -1562,6 +1562,25 @@ export default function Dashboard() {
 
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                   <div>
+                    <p className="text-sm font-bold text-white mb-1">Written Recall</p>
+                    <p className="text-xs text-brand-muted">Type your answer before flipping flashcards.</p>
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ writtenRecallMode: !(progress?.settings?.writtenRecallMode ?? false) })}
+                    className={cn(
+                      "w-10 h-6 rounded-full relative transition-colors",
+                      (progress?.settings?.writtenRecallMode ?? false) ? "bg-brand-primary" : "bg-white/10"
+                    )}
+                  >
+                    <motion.div
+                      animate={{ x: (progress?.settings?.writtenRecallMode ?? false) ? 16 : 4 }}
+                      className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div>
                     <p className="text-sm font-bold text-white mb-1">Dark Mode</p>
                     <p className="text-xs text-brand-muted">The only acceptable mode.</p>
                   </div>
