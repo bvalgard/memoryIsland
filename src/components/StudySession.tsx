@@ -1787,9 +1787,15 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       </div>
                     )
                   ) : (currentCard?.type === 'multi-select' || (currentCard?.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1)) ? (
-                    <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
+                    <div className="w-full flex-1 flex flex-col justify-center items-center pb-4">
                       <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
+                        <div className={cn(
+                          shuffledOptionImages.some(Boolean)
+                            ? "grid grid-cols-2 gap-3"
+                            : "flex flex-col gap-3"
+                        )}>
                         {shuffledOptions.map((opt, idx) => {
+                          const hasImages = shuffledOptionImages.some(Boolean);
                           const isSelected = selectedMultiOptions.has(opt);
                           const optImage = shuffledOptionImages[idx] ?? null;
                           const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
@@ -1814,7 +1820,34 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             }
                           }
 
-                          return (
+                          return hasImages ? (
+                            <div
+                              key={idx}
+                              onClick={() => toggleMultiSelectOption(opt)}
+                              className={cn(
+                                "rounded-xl transition-all cursor-pointer overflow-hidden flex flex-col border",
+                                btnClass
+                              )}
+                            >
+                              <div className="w-full aspect-[4/3] overflow-hidden flex items-center justify-center">
+                                {optImage
+                                  ? <img src={optImage} alt="" className="w-full h-full object-contain" />
+                                  : <span className="font-medium text-sm leading-snug px-4 text-center"><RichTextInline>{displayText}</RichTextInline></span>
+                                }
+                              </div>
+                              {(optImage || icon) && (
+                                <div className="px-3 py-2 flex items-center justify-between gap-2 border-t border-white/5">
+                                  <span className="text-xs font-bold text-white/50 shrink-0">{String.fromCharCode(65 + idx)}.</span>
+                                  {optImage && displayText && <span className="text-xs leading-snug flex-1"><RichTextInline>{displayText}</RichTextInline></span>}
+                                  {icon && (
+                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+                                      {icon}
+                                    </motion.div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
                             <div
                               key={idx}
                               onClick={() => toggleMultiSelectOption(opt)}
@@ -1835,6 +1868,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             </div>
                           );
                         })}
+                        </div>
                         {!isFlipped && (
                           <button type="submit" disabled={selectedMultiOptions.size === 0} className="w-full mt-4 bg-brand-primary hover:bg-white text-black py-4 rounded-xl text-sm font-bold transition-colors disabled:opacity-50">
                             Submit Answer
@@ -1951,8 +1985,14 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         )}
                     </div>
                   ) : currentCard?.type === 'mcq' ? (
-                    <div className="w-full flex-1 flex flex-col justify-center gap-3 pb-4">
+                    <div className="w-full flex-1 flex flex-col justify-center pb-4">
+                      <div className={cn(
+                        shuffledOptionImages.some(Boolean)
+                          ? "grid grid-cols-2 gap-3"
+                          : "flex flex-col gap-3"
+                      )}>
                       {shuffledOptions.map((opt, idx) => {
+                        const hasImages = shuffledOptionImages.some(Boolean);
                         let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white";
                         let statusText = null;
 
@@ -1973,7 +2013,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
 
                         return (
-                          <div key={idx} className="flex flex-col w-full">
+                          <div key={idx} className="flex flex-col">
                             <motion.button
                               layout
                               whileHover={!selectedOption ? { scale: 1.02 } : {}}
@@ -1981,22 +2021,37 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               onClick={(e: any) => handleOptionSelect(opt, e)}
                               disabled={selectedOption !== null}
                               className={cn(
-                                "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-colors flex flex-col group",
+                                "w-full rounded-xl transition-colors flex flex-col overflow-hidden group",
+                                hasImages ? "border" : "text-left px-4 py-3 sm:px-5 sm:py-4",
                                 btnClass
                               )}
                             >
-                              {optImage && <img src={optImage} alt="" className="w-full max-h-28 object-contain rounded-lg mb-2" />}
-                              <div className="flex justify-between items-start gap-4">
-                                <div className="flex items-start gap-3 flex-1">
-                                  <span className="font-bold text-white/70 shrink-0">{letter}.</span>
-                                  {displayText && <span className={cn(
-                                    "font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1",
-                                    ""
-                                  )}>
-                                    <RichTextInline>{displayText}</RichTextInline>
-                                  </span>}
-                                </div>
-                              </div>
+                              {hasImages ? (
+                                <>
+                                  <div className="w-full aspect-[4/3] overflow-hidden flex items-center justify-center">
+                                    {optImage
+                                      ? <img src={optImage} alt="" className="w-full h-full object-contain" />
+                                      : <span className="font-medium text-sm leading-snug px-4 text-center"><RichTextInline>{displayText}</RichTextInline></span>
+                                    }
+                                  </div>
+                                  <div className={cn("px-3 py-2 flex items-center gap-2", optImage && displayText ? "border-t border-white/5" : optImage ? "" : "hidden")}>
+                                    <span className="text-xs font-bold text-white/50 shrink-0">{letter}.</span>
+                                    {optImage && displayText && <span className="text-xs leading-snug"><RichTextInline>{displayText}</RichTextInline></span>}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  {optImage && <img src={optImage} alt="" className="w-full max-h-28 object-contain rounded-lg mb-2" />}
+                                  <div className="flex justify-between items-start gap-4">
+                                    <div className="flex items-start gap-3 flex-1">
+                                      <span className="font-bold text-white/70 shrink-0">{letter}.</span>
+                                      {displayText && <span className="font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1">
+                                        <RichTextInline>{displayText}</RichTextInline>
+                                      </span>}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
 
                               <AnimatePresence>
                                 {selectedOption && (opt === currentCard?.back || opt === selectedOption) && (
@@ -2004,9 +2059,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className="mt-2 pl-8 sm:pl-9 overflow-hidden"
+                                    className={cn("overflow-hidden px-3", hasImages ? "mt-0" : "mt-2 pl-8 sm:pl-9")}
                                   >
-                                    <div className="flex items-center gap-2 mb-1.5 mt-1">
+                                    <div className="flex items-center gap-2 mb-1.5 mt-2">
                                       <div className={cn(
                                         "w-4 h-4 flex items-center justify-center rounded-full",
                                         opt === currentCard?.back ? "bg-emerald-500/20" : "bg-red-500/20"
@@ -2035,6 +2090,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </div>
                         );
                       })}
+                      </div>
                       {currentCard?.hint && (
                         <div className="w-full mt-2 flex flex-col items-center">
                           {!showHint ? (
