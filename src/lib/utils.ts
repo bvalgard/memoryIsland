@@ -41,14 +41,23 @@ export function getActiveTierCards(allCards: Card[]): Card[] {
   });
 
   const getActiveNodes = (node: Card): Card[] => {
-    if (node.status !== 'mastered') {
-      return [node];
-    }
     const children = childrenMap.get(node.id!) || [];
-    if (children.length === 0) {
+    const isMastered = node.status === 'mastered';
+    const childrenUnlocked = isMastered || node.nextTierUnlocked === true;
+
+    if (isMastered && children.length > 0) {
+      return children.flatMap(child => getActiveNodes(child));
+    }
+
+    if (!isMastered) {
+      if (childrenUnlocked && children.length > 0) {
+        return [node, ...children.flatMap(child => getActiveNodes(child))];
+      }
       return [node];
     }
-    return children.flatMap(child => getActiveNodes(child));
+
+    // mastered terminal (no children)
+    return [node];
   };
 
   return roots.flatMap(root => getActiveNodes(root));

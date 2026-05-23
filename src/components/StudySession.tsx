@@ -267,6 +267,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     };
   }, []);
 
+  // Per-card consecutive answer counts for tier progression logic
+  const sessionConsecutiveRef = useRef<Map<string, { correct: number; incorrect: number }>>(new Map());
+  const [tierUnlockNotif, setTierUnlockNotif] = useState<number | null>(null);
+  const [reactivationNotif, setReactivationNotif] = useState<number | null>(null);
+
   // Tracks the pending nav timer so it can be cancelled on unmount
   const pendingNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -534,6 +539,72 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setCluesUsed(prev => prev + 1);
   };
 
+  const applyAnswerResult = (card: Card, isCorrect: boolean): {
+    consecutiveCorrect: number;
+    consecutiveIncorrect: number;
+    extraCurrentCardFields: Partial<CardUpdateRecord[string]>;
+    parentReactivation?: { front: string; update: CardUpdateRecord[string] };
+  } => {
+    const id = card.id ?? card.front;
+    const prev = sessionConsecutiveRef.current.get(id) ?? {
+      correct: card.consecutiveCorrect ?? 0,
+      incorrect: card.consecutiveIncorrect ?? 0,
+    };
+
+    const newCorrect = isCorrect ? prev.correct + 1 : 0;
+    const newIncorrect = isCorrect ? 0 : prev.incorrect + 1;
+    let stored = { correct: newCorrect, incorrect: newIncorrect };
+
+    const extraCurrentCardFields: Partial<CardUpdateRecord[string]> = {};
+    let parentReactivation: { front: string; update: CardUpdateRecord[string] } | undefined;
+
+    if (isCorrect && newCorrect >= 2 && !card.nextTierUnlocked) {
+      const hasChildren = island.cards.some(c => c.prevTierCardId === card.id);
+      if (hasChildren) {
+        extraCurrentCardFields.nextTierUnlocked = true;
+        const unlockTier = card.tier ?? 1;
+        setTierUnlockNotif(unlockTier);
+        setTimeout(() => setTierUnlockNotif(null), 3000);
+      }
+    }
+
+    if (!isCorrect && newIncorrect >= 3 && card.prevTierCardId) {
+      const parent = island.cards.find(c => c.id === card.prevTierCardId);
+      if (parent) {
+        stored = { correct: 0, incorrect: 0 };
+        parentReactivation = {
+          front: parent.front,
+          update: {
+            status: 'struggling',
+            consecutiveCorrect: 0,
+            consecutiveIncorrect: 0,
+            srsInterval: 1,
+            srsEaseFactor: 2.5,
+            srsNextReview: Date.now(),
+            srsRepetitions: 0,
+            lastReviewed: Date.now(),
+          },
+        };
+        setShuffledCards(prevDeck => {
+          if (prevDeck.some(c => c.id === parent.id)) return prevDeck;
+          const insertAt = Math.min(currentIndex + 2, prevDeck.length);
+          return [...prevDeck.slice(0, insertAt), parent, ...prevDeck.slice(insertAt)];
+        });
+        const reactivateTier = parent.tier ?? 1;
+        setReactivationNotif(reactivateTier);
+        setTimeout(() => setReactivationNotif(null), 3500);
+      }
+    }
+
+    sessionConsecutiveRef.current.set(id, stored);
+    return {
+      consecutiveCorrect: stored.correct,
+      consecutiveIncorrect: stored.incorrect,
+      extraCurrentCardFields,
+      parentReactivation,
+    };
+  };
+
   const handleFibSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentCard) return;
@@ -571,6 +642,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
       setSessionStats(prev => ({ ...prev, [newStatus]: prev[newStatus as keyof typeof prev] + 1 }));
 
+      const { consecutiveCorrect: fibCC, consecutiveIncorrect: fibCI, extraCurrentCardFields: fibExtra, parentReactivation: fibParent } = applyAnswerResult(currentCard, true);
+
       setCardUpdates(prev => ({
         ...prev,
         [currentCard.front]: {
@@ -582,7 +655,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           srsRepetitions: srsFib.repetitions,
           sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
           sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
+          consecutiveCorrect: fibCC,
+          consecutiveIncorrect: fibCI,
+          ...fibExtra,
         },
+        ...(fibParent && { [fibParent.front]: fibParent.update }),
       }));
 
       if (window.navigator?.vibrate && newStatus === 'mastered') window.navigator.vibrate(50);
@@ -605,6 +682,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         status === 'struggling' &&
         (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+      const { consecutiveCorrect: fibCC2, consecutiveIncorrect: fibCI2, extraCurrentCardFields: fibExtra2, parentReactivation: fibParent2 } = applyAnswerResult(currentCard, false);
+
       setCardUpdates(prev => ({
         ...prev,
         [currentCard.front]: {
@@ -620,7 +699,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           srsRepetitions: srsFibWrong.repetitions,
           sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
           sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
+          consecutiveCorrect: fibCC2,
+          consecutiveIncorrect: fibCI2,
+          ...fibExtra2,
         },
+        ...(fibParent2 && { [fibParent2.front]: fibParent2.update }),
       }));
       setDirection(-1);
     }
@@ -666,6 +749,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       status === 'struggling' &&
       (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+    const { consecutiveCorrect: gradeCC, consecutiveIncorrect: gradeCI, extraCurrentCardFields: gradeExtra, parentReactivation: gradeParent } = applyAnswerResult(currentCard, isCorrect);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -681,7 +766,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srs.repetitions,
         sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
         sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
+        consecutiveCorrect: gradeCC,
+        consecutiveIncorrect: gradeCI,
+        ...gradeExtra,
       },
+      ...(gradeParent && { [gradeParent.front]: gradeParent.update }),
     }));
     setDirection(isCorrect ? 1 : -1);
     nextCard();
@@ -711,6 +800,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
     setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
 
+    const { consecutiveCorrect: easyCC, consecutiveIncorrect: easyCI, extraCurrentCardFields: easyExtra, parentReactivation: easyParent } = applyAnswerResult(currentCard, true);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -722,7 +813,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srs.repetitions,
         sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
         sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
+        consecutiveCorrect: easyCC,
+        consecutiveIncorrect: easyCI,
+        ...easyExtra,
       },
+      ...(easyParent && { [easyParent.front]: easyParent.update }),
     }));
     setDirection(1);
     nextCard();
@@ -755,6 +850,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
     setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
 
+    const { consecutiveCorrect: hardCC, consecutiveIncorrect: hardCI, extraCurrentCardFields: hardExtra, parentReactivation: hardParent } = applyAnswerResult(currentCard, true);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -766,7 +863,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srs.repetitions,
         sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
         sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
+        consecutiveCorrect: hardCC,
+        consecutiveIncorrect: hardCI,
+        ...hardExtra,
       },
+      ...(hardParent && { [hardParent.front]: hardParent.update }),
     }));
     setDirection(1);
     nextCard();
@@ -891,6 +992,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       status === 'struggling' &&
       (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+    const { consecutiveCorrect: msCC, consecutiveIncorrect: msCI, extraCurrentCardFields: msExtra, parentReactivation: msParent } = applyAnswerResult(currentCard, isCorrect);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -906,7 +1009,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srsMs.repetitions,
         sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
         sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
+        consecutiveCorrect: msCC,
+        consecutiveIncorrect: msCI,
+        ...msExtra,
       },
+      ...(msParent && { [msParent.front]: msParent.update }),
     }));
   };
 
@@ -940,6 +1047,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       status === 'struggling' &&
       (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+    const { consecutiveCorrect: seqCC, consecutiveIncorrect: seqCI, extraCurrentCardFields: seqExtra, parentReactivation: seqParent } = applyAnswerResult(currentCard, isCorrect);
+
     setCardUpdates(prev => ({
       ...prev,
       [currentCard.front]: {
@@ -955,7 +1064,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srsSeq.repetitions,
         sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
         sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
+        consecutiveCorrect: seqCC,
+        consecutiveIncorrect: seqCI,
+        ...seqExtra,
       },
+      ...(seqParent && { [seqParent.front]: seqParent.update }),
     }));
   };
 
@@ -985,6 +1098,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         [status]: prev[status as keyof typeof prev] + 1
       }));
 
+      const { consecutiveCorrect: mcqCC, consecutiveIncorrect: mcqCI, extraCurrentCardFields: mcqExtra, parentReactivation: mcqParent } = applyAnswerResult(currentCard, true);
+
       setCardUpdates(prev => ({
         ...prev,
         [currentCard.front]: {
@@ -996,7 +1111,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           srsRepetitions: srsMcqCorrect.repetitions,
           sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
           sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
+          consecutiveCorrect: mcqCC,
+          consecutiveIncorrect: mcqCI,
+          ...mcqExtra,
         },
+        ...(mcqParent && { [mcqParent.front]: mcqParent.update }),
       }));
     } else {
       setStreak(0);
@@ -1014,6 +1133,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         status === 'struggling' &&
         (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+      const { consecutiveCorrect: mcqWCC, consecutiveIncorrect: mcqWCI, extraCurrentCardFields: mcqWExtra, parentReactivation: mcqWParent } = applyAnswerResult(currentCard, false);
+
       setCardUpdates(prev => ({
         ...prev,
         [currentCard.front]: {
@@ -1029,7 +1150,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           srsRepetitions: srsMcqWrong.repetitions,
           sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
           sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
+          consecutiveCorrect: mcqWCC,
+          consecutiveIncorrect: mcqWCI,
+          ...mcqWExtra,
         },
+        ...(mcqWParent && { [mcqWParent.front]: mcqWParent.update }),
       }));
     }
   };
@@ -1196,6 +1321,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               [status]: prev[status as keyof typeof prev] + 1
             }));
 
+            const { consecutiveCorrect: matchCC, consecutiveIncorrect: matchCI, extraCurrentCardFields: matchExtra, parentReactivation: matchParent } = applyAnswerResult(currentCard, true);
+
             setCardUpdates(prev => ({
               ...prev,
               [currentCard.front]: {
@@ -1207,7 +1334,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 srsRepetitions: srsMatchCorrect.repetitions,
                 sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
                 sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + 1,
+                consecutiveCorrect: matchCC,
+                consecutiveIncorrect: matchCI,
+                ...matchExtra,
               },
+              ...(matchParent && { [matchParent.front]: matchParent.update }),
             }));
             setDirection(1);
           } else {
@@ -1225,6 +1356,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               status === 'struggling' &&
               (currentCard.status === 'learning' || currentCard.status === 'mastered');
 
+            const { consecutiveCorrect: matchWCC, consecutiveIncorrect: matchWCI, extraCurrentCardFields: matchWExtra, parentReactivation: matchWParent } = applyAnswerResult(currentCard, false);
+
             setCardUpdates(prev => ({
               ...prev,
               [currentCard.front]: {
@@ -1240,7 +1373,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 srsRepetitions: srsMatchWrong.repetitions,
                 sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
                 sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
+                consecutiveCorrect: matchWCC,
+                consecutiveIncorrect: matchWCI,
+                ...matchWExtra,
               },
+              ...(matchWParent && { [matchWParent.front]: matchWParent.update }),
             }));
             setDirection(-1);
           }
@@ -1375,6 +1512,32 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               <Sparkles className="w-6 h-6 fill-current" />
             </motion.div>
           ))}
+        </AnimatePresence>
+
+        {/* Tier progression notifications */}
+        <AnimatePresence>
+          {tierUnlockNotif !== null && (
+            <motion.div
+              key="tier-unlock"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-emerald-500/90 text-white text-sm font-semibold shadow-lg backdrop-blur-sm pointer-events-none"
+            >
+              Tier {tierUnlockNotif + 1} unlocked — new challenge added!
+            </motion.div>
+          )}
+          {reactivationNotif !== null && (
+            <motion.div
+              key="reactivation"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-amber-500/90 text-white text-sm font-semibold shadow-lg backdrop-blur-sm pointer-events-none"
+            >
+              Tier {reactivationNotif} returned for extra practice
+            </motion.div>
+          )}
         </AnimatePresence>
 
         <div className="w-full flex justify-between items-center mb-8 sm:mb-12">

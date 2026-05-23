@@ -28,6 +28,8 @@ export type CardStatus = 'learning' | 'struggling' | 'mastered';
 export type CardUpdateRecord = Record<string, {
   status: CardStatus;
   consecutiveCorrect?: number;
+  consecutiveIncorrect?: number;
+  nextTierUnlocked?: boolean;
   lastReviewed?: number;
   wasDemoted?: boolean;
   demotionCount?: number;
@@ -42,6 +44,7 @@ export type CardUpdateRecord = Record<string, {
 export interface UserCardProgress {
   status?: CardStatus;
   consecutiveCorrect?: number;
+  consecutiveIncorrect?: number;
   lastReviewed?: number;
   needsWork?: boolean;
   demotionCount?: number;
@@ -66,6 +69,8 @@ export interface Card {
   needsWork?: boolean;
   status?: CardStatus;
   consecutiveCorrect?: number;
+  consecutiveIncorrect?: number;
+  nextTierUnlocked?: boolean;
   lastReviewed?: number;
   prevTierCardId?: string;
   tier?: number;
@@ -798,6 +803,8 @@ export function useUserProgress() {
         needsWork: userProg?.needsWork ?? data.needsWork,
         status: userProg?.status ?? data.status,
         consecutiveCorrect: userProg?.consecutiveCorrect ?? data.consecutiveCorrect,
+        consecutiveIncorrect: userProg?.consecutiveIncorrect ?? data.consecutiveIncorrect,
+        nextTierUnlocked: data.nextTierUnlocked,
         lastReviewed: userProg?.lastReviewed ?? data.lastReviewed,
         demotionCount: userProg?.demotionCount ?? data.demotionCount,
         srsInterval: userProg?.srsInterval ?? data.srsInterval,
@@ -1361,6 +1368,9 @@ export function useUserProgress() {
       payload.srsNextReview = update.srsNextReview;
       payload.srsRepetitions = update.srsRepetitions;
     }
+    if (update.consecutiveCorrect !== undefined) payload.consecutiveCorrect = update.consecutiveCorrect;
+    if (update.consecutiveIncorrect !== undefined) payload.consecutiveIncorrect = update.consecutiveIncorrect;
+    if (update.nextTierUnlocked !== undefined) payload.nextTierUnlocked = update.nextTierUnlocked;
     return payload;
   };
 
@@ -1383,6 +1393,9 @@ export function useUserProgress() {
         payload[`${prefix}.srsNextReview`] = update.srsNextReview;
         payload[`${prefix}.srsRepetitions`] = update.srsRepetitions;
       }
+      if (update.consecutiveCorrect !== undefined) payload[`${prefix}.consecutiveCorrect`] = update.consecutiveCorrect;
+      if (update.consecutiveIncorrect !== undefined) payload[`${prefix}.consecutiveIncorrect`] = update.consecutiveIncorrect;
+      if (update.nextTierUnlocked !== undefined) payload.nextTierUnlocked = update.nextTierUnlocked;
       return payload;
     }
 
@@ -1402,6 +1415,9 @@ export function useUserProgress() {
       payload.srsNextReview = update.srsNextReview;
       payload.srsRepetitions = update.srsRepetitions;
     }
+    if (update.consecutiveCorrect !== undefined) payload.consecutiveCorrect = update.consecutiveCorrect;
+    if (update.consecutiveIncorrect !== undefined) payload.consecutiveIncorrect = update.consecutiveIncorrect;
+    if (update.nextTierUnlocked !== undefined) payload.nextTierUnlocked = update.nextTierUnlocked;
     return payload;
   };
 

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
-import { cn, formatTimeUntil } from '../lib/utils';
+import { cn, formatTimeUntil, getActiveTierCards } from '../lib/utils';
 import ShareModal from './ShareModal';
 import ConfirmDialog from './ConfirmDialog';
 import ImageUpload from './ImageUpload';
@@ -105,7 +105,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     if (progressTrackingMode === 'srs') {
       const now = Date.now();
       const graceMs = graceWindowMinutes * 60_000;
-      const due = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs).length;
+      const due = getActiveTierCards(island.cards).filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs).length;
       return due > 0 ? 'due' : 'all';
     }
     return 'all';
@@ -775,7 +775,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const learningCount = island.cards.filter(c => !c.status || c.status === 'learning').length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
   const graceMs = graceWindowMinutes * 60_000;
-  const dueCount = island.cards.filter(c => !c.srsNextReview || c.srsNextReview <= Date.now() + graceMs).length;
+  const dueCount = getActiveTierCards(island.cards).filter(c => !c.srsNextReview || c.srsNextReview <= Date.now() + graceMs).length;
   const totalCards = island.cards.length;
   const progressPct = totalCards > 0 ? Math.round(masteredCount / totalCards * 100) : 0;
   const islandTotalAnswers = island.cards.reduce((s, c) => s + (c.totalAnswers || 0), 0);
@@ -1554,8 +1554,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       Q{card.scenarioOrder}
                     </div>
                   )}
-                  <div className="flex gap-2.5">
-                    <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="relative flex items-center justify-center min-h-[24px]">
+                    <div className="absolute left-0 w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0">
                       {(card.type === 'mcq' || card.type === 'multi-select') ? (
                         <div className={cn("text-[7px] uppercase font-black", card.needsWork ? "text-amber-400" : "text-brand-primary")}>MCQ</div>
                       ) : card.type === 'fill-in-the-blank' ? (
@@ -1566,123 +1566,21 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                         <CreditCard className={cn("w-3 h-3", card.needsWork ? "text-amber-400" : "text-brand-muted")} />
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-1">
-                        <p className="font-bold text-xs truncate leading-tight">{card.front}</p>
-                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {card.totalAnswers != null && card.totalAnswers > 0 && (
-                            <span className={cn(
-                              "text-[8px] font-bold tabular-nums",
-                              (card.totalCorrect ?? 0) / card.totalAnswers < 0.4 ? "text-red-400/70" :
-                              (card.totalCorrect ?? 0) / card.totalAnswers < 0.7 ? "text-amber-400/70" :
-                              "text-emerald-400/70"
-                            )}>
-                              {Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)}%
-                            </span>
-                          )}
-                          {card.tier && card.tier > 1 && (
-                            <span className="text-[7px] font-black uppercase bg-white/10 px-1 py-0.5 rounded text-white/50">T{card.tier}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {progressTrackingMode !== 'srs' && card.needsWork && (
-                          <span className="text-[7px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 tracking-wider font-bold">STRUGGLING</span>
-                        )}
-                        {onDeleteCard && (
-                          <div className="flex items-center gap-0.5">
-                            <AnimatePresence mode="wait">
-                              {deletingCardIndex === idx ? (
-                                <motion.div
-                                  key="confirm"
-                                  initial={{ opacity: 0, x: 5 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  exit={{ opacity: 0, x: 5 }}
-                                  className="flex items-center gap-1 bg-red-500/10 border border-red-500/20 rounded-lg px-1.5 py-0.5"
-                                >
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onDeleteCard(idx);
-                                      setDeletingCardIndex(null);
-                                      if (editingCardIndex === idx) handleCancelEdit();
-                                    }}
-                                    className="text-red-500 hover:text-red-400"
-                                    title="Confirm Delete"
-                                  >
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeletingCardIndex(null);
-                                    }}
-                                    className="text-brand-muted hover:text-white"
-                                    title="Cancel"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </motion.div>
-                              ) : (
-                                <motion.button
-                                  key="delete"
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeletingCardIndex(idx);
-                                  }}
-                                  className="text-brand-muted hover:text-red-400 transition-colors p-0.5"
-                                  title="Delete Card"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </motion.button>
-                              )}
-                            </AnimatePresence>
-                            {onMoveCard && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMovingCardIndex(idx);
-                                }}
-                                className="text-brand-muted hover:text-white transition-colors p-0.5"
-                                title="Move Card to Another Island"
-                              >
-                                <Move className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddProgression(idx);
-                              }}
-                              className="text-brand-muted hover:text-brand-primary transition-colors p-0.5"
-                              title="Add Progression Tier"
-                            >
-                              <ArrowUp className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const src = island.cards[idx];
-                                onAddCard({ ...src, id: Math.random().toString(36).substring(2, 11), status: undefined, consecutiveCorrect: 0, lastReviewed: undefined, needsWork: false });
-                              }}
-                              className="text-brand-muted hover:text-cyan-400 transition-colors p-0.5"
-                              title="Duplicate Card"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={(e) => openCardPreview(e, idx)}
-                              className="text-brand-muted hover:text-white transition-colors p-0.5"
-                              title="Preview Card"
-                            >
-                              <Eye className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                    <p className="font-bold text-xs truncate leading-tight text-center w-full px-8">{card.front}</p>
+                    <div className="absolute right-0 flex items-center gap-1 shrink-0">
+                      {card.totalAnswers != null && card.totalAnswers > 0 && (
+                        <span className={cn(
+                          "text-[8px] font-bold tabular-nums",
+                          (card.totalCorrect ?? 0) / card.totalAnswers < 0.4 ? "text-red-400/70" :
+                          (card.totalCorrect ?? 0) / card.totalAnswers < 0.7 ? "text-amber-400/70" :
+                          "text-emerald-400/70"
+                        )}>
+                          {Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)}%
+                        </span>
+                      )}
+                      {card.tier && card.tier > 1 && (
+                        <span className="text-[7px] font-black uppercase bg-white/10 px-1 py-0.5 rounded text-white/50">T{card.tier}</span>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -2388,9 +2286,103 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             </div>
           </div>
 
+          {/* Section 3 — Card Actions */}
+          <div className={cn("p-4 border-b border-brand-border", editingCardIndex === null && "opacity-40 pointer-events-none")}>
+            <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">Card Actions</p>
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={(e) => editingCardIndex !== null && openCardPreview(e as React.MouseEvent, editingCardIndex)}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white"
+              >
+                <Eye className="w-3.5 h-3.5 shrink-0" />
+                View Card
+              </button>
+              <button
+                type="button"
+                onClick={() => editingCardIndex !== null && handleAddProgression(editingCardIndex)}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white"
+              >
+                <ArrowUp className="w-3.5 h-3.5 shrink-0" />
+                Add Progression Tier
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingCardIndex === null) return;
+                  const src = island.cards[editingCardIndex];
+                  onAddCard({ ...src, id: Math.random().toString(36).substring(2, 11), status: undefined, consecutiveCorrect: 0, lastReviewed: undefined, needsWork: false });
+                }}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white"
+              >
+                <Copy className="w-3.5 h-3.5 shrink-0" />
+                Duplicate Card
+              </button>
+              {onMoveCard && (
+                <button
+                  type="button"
+                  onClick={() => editingCardIndex !== null && setMovingCardIndex(editingCardIndex)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white"
+                >
+                  <Move className="w-3.5 h-3.5 shrink-0" />
+                  Move to Island
+                </button>
+              )}
+              {onDeleteCard && (
+                <AnimatePresence mode="wait">
+                  {deletingCardIndex !== null ? (
+                    <motion.div
+                      key="confirm"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20"
+                    >
+                      <span className="text-xs text-red-400 font-bold">Delete this card?</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeletingCardIndex(null)}
+                          className="text-brand-muted hover:text-white transition-colors text-xs"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editingCardIndex === null) return;
+                            onDeleteCard(editingCardIndex);
+                            setDeletingCardIndex(null);
+                            handleCancelEdit();
+                          }}
+                          className="text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.button
+                      key="delete"
+                      type="button"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => editingCardIndex !== null && setDeletingCardIndex(editingCardIndex)}
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors text-left bg-white/5 text-red-400/60 hover:bg-red-500/10 hover:text-red-400"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                      Delete Card
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1" />
 
-          {/* Section 3 — Sticky Save CTA */}
+          {/* Section 4 — Sticky Save CTA */}
           <div className="p-4 border-t border-brand-border shrink-0 sticky bottom-0 bg-brand-card md:static md:bg-transparent">
             {isScenarioMode && !scenarioSubFormOpen && (
               <button
