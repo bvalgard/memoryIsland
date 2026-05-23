@@ -75,6 +75,8 @@ export interface Card {
   backImageUrl?: string;
   imageCredit?: string;
   backImageCredit?: string;
+  optionImages?: (string | null)[];
+  pairImages?: { leftImage?: string; rightImages?: (string | null)[] }[];
   srsInterval?: number;
   srsEaseFactor?: number;
   srsNextReview?: number;
@@ -789,6 +791,9 @@ export function useUserProgress() {
         backImageUrl: data.backImageUrl,
         imageCredit: data.imageCredit,
         backImageCredit: data.backImageCredit,
+        optionImages: data.optionImages,
+        pairImages: data.pairImages,
+        lockOptionOrder: data.lockOptionOrder,
         // Per-user progress: read from userProgress map for collab cards, fall back to top-level
         needsWork: userProg?.needsWork ?? data.needsWork,
         status: userProg?.status ?? data.status,

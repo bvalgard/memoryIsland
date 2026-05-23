@@ -9,7 +9,8 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 interface ImageUploadProps {
   value?: string;
   onChange: (url: string | undefined) => void;
-  label: string;
+  label?: string;
+  compact?: boolean;
 }
 
 async function deleteFromR2(url: string) {
@@ -22,7 +23,7 @@ async function deleteFromR2(url: string) {
   });
 }
 
-export default function ImageUpload({ value, onChange, label }: ImageUploadProps) {
+export default function ImageUpload({ value, onChange, label, compact }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -89,13 +90,15 @@ export default function ImageUpload({ value, onChange, label }: ImageUploadProps
 
   return (
     <div className="w-full">
-      <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
-        {label}
-      </label>
+      {label && !compact && (
+        <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">
+          {label}
+        </label>
+      )}
 
       {value ? (
         <div className="relative rounded-xl overflow-hidden border border-white/10 bg-white/5">
-          <img src={value} alt="card image" className="w-full max-h-48 object-contain" />
+          <img src={value} alt="card image" className={cn("w-full object-contain", compact ? "max-h-24" : "max-h-48")} />
           <button
             type="button"
             onClick={handleRemove}
@@ -111,7 +114,8 @@ export default function ImageUpload({ value, onChange, label }: ImageUploadProps
           onDrop={onDrop}
           onClick={() => !uploading && inputRef.current?.click()}
           className={cn(
-            "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-6 cursor-pointer transition-colors",
+            "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer transition-colors",
+            compact ? "py-3" : "py-6",
             dragOver ? "border-brand-primary/70 bg-brand-primary/10" : "border-white/15 hover:border-white/30 bg-white/5"
           )}
         >
@@ -123,7 +127,7 @@ export default function ImageUpload({ value, onChange, label }: ImageUploadProps
                 <ImageIcon className="w-4 h-4" />
                 <Upload className="w-3 h-3" />
               </div>
-              <span className="text-xs text-brand-muted">Click or drag an image (max 5MB)</span>
+              {!compact && <span className="text-xs text-brand-muted">Click or drag an image (max 5MB)</span>}
             </>
           )}
         </div>

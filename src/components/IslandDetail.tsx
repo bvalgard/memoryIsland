@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn, formatTimeUntil } from '../lib/utils';
@@ -129,11 +129,18 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [back, setBack] = useState('');
   const [hint, setHint] = useState('');
   const [explanation, setExplanation] = useState('');
-  const [matchingPairs, setMatchingPairs] = useState<{ id: string; left: string; rights: string }[]>([{ id: Date.now().toString(), left: '', rights: '' }]);
+  const [matchingPairs, setMatchingPairs] = useState<{
+    id: string;
+    left: string;
+    leftImage?: string;
+    rights: { id: string; text: string; image?: string }[];
+  }[]>([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
   // Unified MCQ options — one correct marker per option handles both single-answer (radio-like)
   // and multi-answer (checkbox-like) in one builder. The number of marked-correct options at
   // save time determines which study-session interaction the card gets.
-  const [mcqInlineOptions, setMcqInlineOptions] = useState<{ id: string; text: string; isCorrect: boolean; explanation: string }[]>([
+  const [mcqInlineOptions, setMcqInlineOptions] = useState<{
+    id: string; text: string; isCorrect: boolean; explanation: string; imageUrl?: string;
+  }[]>([
     { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
     { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
     { id: Date.now().toString() + '3', text: '', isCorrect: false, explanation: '' },
@@ -141,6 +148,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   ]);
   const [mcqLockOrder, setMcqLockOrder] = useState(false);
   const [expandedMcqExp, setExpandedMcqExp] = useState<Set<string>>(new Set());
+  const [expandedMcqImg, setExpandedMcqImg] = useState<Set<string>>(new Set());
   const [sequenceItems, setSequenceItems] = useState<{ id: string; text: string }[]>([
     { id: Date.now().toString() + '1', text: '' },
     { id: Date.now().toString() + '2', text: '' }
@@ -241,7 +249,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setBackImageUrl(undefined);
     setImageCredit('');
     setBackImageCredit('');
-    setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
+    setMatchingPairs([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
       { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
@@ -250,6 +258,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     ]);
     setMcqLockOrder(false);
     setExpandedMcqExp(new Set());
+    setExpandedMcqImg(new Set());
     setSequenceItems([
       { id: Date.now().toString() + '1', text: '' },
       { id: Date.now().toString() + '2', text: '' }
@@ -280,25 +289,40 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     if (backImageUrl) q.backImageUrl = backImageUrl;
 
     if (cardType === 'mcq') {
-      const valid = mcqInlineOptions.filter(o => o.text.trim());
+      const valid = mcqInlineOptions.filter(o => o.text.trim() || o.imageUrl);
       if (valid.length < 2) { alert('MCQ needs at least 2 options.'); return; }
       const correctOpts = valid.filter(o => o.isCorrect);
       if (correctOpts.length === 0) { alert('MCQ requires at least one correct answer.'); return; }
-      // Always write correctOptions so StudySession can distinguish single vs multi-answer.
-      // Also write back = first correct answer for legacy compat.
-      q.correctOptions = correctOpts.map(o => o.text.trim());
-      q.back = correctOpts[0].text.trim();
-      q.options = valid.map(o => o.text.trim());
+      const optTexts = valid.map(o => o.text.trim() || `__img_${o.id}__`);
+      q.correctOptions = correctOpts.map(o => o.text.trim() || `__img_${o.id}__`);
+      q.back = q.correctOptions[0];
+      q.options = optTexts;
       if (mcqLockOrder) q.lockOptionOrder = true;
       const exps: Record<string, string> = {};
-      valid.forEach(o => { if (o.explanation.trim()) exps[o.text.trim()] = o.explanation.trim(); });
+      valid.forEach((o, i) => { if (o.explanation.trim()) exps[optTexts[i]] = o.explanation.trim(); });
       if (Object.keys(exps).length) q.explanations = exps;
+      const imgs = valid.map(o => o.imageUrl || null);
+      if (imgs.some(Boolean)) q.optionImages = imgs;
     } else if (cardType === 'matching') {
-      const validPairs = matchingPairs.filter(p => p.left.trim() && p.rights.trim())
-        .map(p => ({ id: p.id, left: p.left.trim(), rights: p.rights.split(',').map(r => r.trim()).filter(r => r) }));
+      const validPairs = matchingPairs
+        .filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image))
+        .map(p => ({
+          id: p.id,
+          left: p.left.trim() || `__img_${p.id}__`,
+          rights: p.rights
+            .filter(r => r.text.trim() || r.image)
+            .map(r => r.text.trim() || `__img_${r.id}__`),
+        }));
       if (validPairs.length < 2) { alert('Matching requires at least 2 pairs.'); return; }
       q.pairs = validPairs;
       q.back = 'Matching Exercise';
+      const pairImgsArr = matchingPairs
+        .filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image))
+        .map(p => ({
+          leftImage: p.leftImage || undefined,
+          rightImages: p.rights.filter(r => r.text.trim() || r.image).map(r => r.image || null),
+        }));
+      if (pairImgsArr.some(pi => pi.leftImage || pi.rightImages.some(Boolean))) q.pairImages = pairImgsArr;
     } else if (cardType === 'sequencing') {
       const valid = sequenceItems.filter(i => i.text.trim());
       if (valid.length < 2) { alert('Sequencing needs at least 2 items.'); return; }
@@ -313,7 +337,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setExplanation('');
     setImageUrl(undefined);
     setBackImageUrl(undefined);
-    setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
+    setMatchingPairs([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
       { id: Date.now().toString() + '2', text: '', isCorrect: false, explanation: '' },
@@ -322,6 +346,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     ]);
     setMcqLockOrder(false);
     setExpandedMcqExp(new Set());
+    setExpandedMcqImg(new Set());
     setSequenceItems([
       { id: Date.now().toString() + '1', text: '' },
       { id: Date.now().toString() + '2', text: '' }
@@ -383,26 +408,29 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       if (backImageCredit.trim()) newCard.backImageCredit = backImageCredit.trim();
 
       if (cardType === 'mcq') {
-        const valid = mcqInlineOptions.filter(o => o.text.trim());
+        const valid = mcqInlineOptions.filter(o => o.text.trim() || o.imageUrl);
         if (valid.length < 2) { alert('MCQ needs at least 2 options.'); return; }
         const correctOpts = valid.filter(o => o.isCorrect);
         if (correctOpts.length === 0) { alert('MCQ requires at least one correct answer.'); return; }
-        // Always write correctOptions so StudySession can distinguish single vs multi-answer.
-        // Also write back = first correct answer for legacy compat with old single-answer rendering.
-        newCard.correctOptions = correctOpts.map(o => o.text.trim());
-        newCard.back = correctOpts[0].text.trim();
-        newCard.options = valid.map(o => o.text.trim());
+        const optTexts = valid.map(o => o.text.trim() || `__img_${o.id}__`);
+        newCard.correctOptions = correctOpts.map(o => o.text.trim() || `__img_${o.id}__`);
+        newCard.back = newCard.correctOptions[0];
+        newCard.options = optTexts;
         if (mcqLockOrder) newCard.lockOptionOrder = true;
         const exps: Record<string, string> = {};
-        valid.forEach(o => { if (o.explanation.trim()) exps[o.text.trim()] = o.explanation.trim(); });
+        valid.forEach((o, i) => { if (o.explanation.trim()) exps[optTexts[i]] = o.explanation.trim(); });
         if (Object.keys(exps).length) newCard.explanations = exps;
+        const imgs = valid.map(o => o.imageUrl || null);
+        if (imgs.some(Boolean)) newCard.optionImages = imgs;
       } else if (cardType === 'matching') {
         const validPairs = matchingPairs
-          .filter(p => p.left.trim() && p.rights.trim())
+          .filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image))
           .map(p => ({
             id: p.id,
-            left: p.left.trim(),
-            rights: p.rights.split(',').map(r => r.trim()).filter(r => r)
+            left: p.left.trim() || `__img_${p.id}__`,
+            rights: p.rights
+              .filter(r => r.text.trim() || r.image)
+              .map(r => r.text.trim() || `__img_${r.id}__`),
           }));
         if (validPairs.length < 2) {
           alert('Matching cards require at least two pairs.');
@@ -410,6 +438,13 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         }
         newCard.pairs = validPairs;
         newCard.back = 'Matching Exercise';
+        const pairImgsArr = matchingPairs
+          .filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image))
+          .map(p => ({
+            leftImage: p.leftImage || undefined,
+            rightImages: p.rights.filter(r => r.text.trim() || r.image).map(r => r.image || null),
+          }));
+        if (pairImgsArr.some(pi => pi.leftImage || pi.rightImages.some(Boolean))) newCard.pairImages = pairImgsArr;
       } else if (cardType === 'sequencing') {
         const validItems = sequenceItems.filter(i => i.text.trim());
         if (validItems.length < 2) {
@@ -466,19 +501,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setShowExplanationField(!!(card.explanation));
     setShowImageField(!!(card.imageUrl || card.backImageUrl));
     if ((card.type === 'mcq' || card.type === 'multi-select') && card.options) {
-      const opts = card.options.map(opt => ({
-        id: Date.now().toString() + Math.random(),
-        text: opt,
-        // Legacy MCQ: back holds the single correct answer (no correctOptions).
-        // New MCQ and multi-select: use correctOptions array.
-        isCorrect: card.correctOptions?.length
-          ? card.correctOptions.includes(opt)
-          : opt === card.back,
-        explanation: card.explanations?.[opt] || '',
-      }));
+      const opts = card.options.map((opt, i) => {
+        const isImgPlaceholder = opt.startsWith('__img_') && opt.endsWith('__');
+        return {
+          id: Date.now().toString() + Math.random(),
+          text: isImgPlaceholder ? '' : opt,
+          isCorrect: card.correctOptions?.length
+            ? card.correctOptions.includes(opt)
+            : opt === card.back,
+          explanation: card.explanations?.[opt] || '',
+          imageUrl: card.optionImages?.[i] || undefined,
+        };
+      });
       setMcqInlineOptions(opts);
       setMcqLockOrder(card.lockOptionOrder || false);
       setExpandedMcqExp(new Set(opts.filter(o => o.explanation).map(o => o.id)));
+      setExpandedMcqImg(new Set(opts.filter(o => o.imageUrl).map(o => o.id)));
     } else {
       setMcqInlineOptions([
         { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
@@ -488,15 +526,21 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       ]);
       setMcqLockOrder(false);
       setExpandedMcqExp(new Set());
+      setExpandedMcqImg(new Set());
     }
     if (card.type === 'matching' && card.pairs) {
-      setMatchingPairs(card.pairs.map(p => ({
+      setMatchingPairs(card.pairs.map((p, pi) => ({
         id: p.id,
-        left: p.left,
-        rights: p.rights.join(', ')
+        left: p.left.startsWith('__img_') && p.left.endsWith('__') ? '' : p.left,
+        leftImage: card.pairImages?.[pi]?.leftImage || undefined,
+        rights: p.rights.map((r, ri) => ({
+          id: `${p.id}-r-${ri}`,
+          text: r.startsWith('__img_') && r.endsWith('__') ? '' : r,
+          image: card.pairImages?.[pi]?.rightImages?.[ri] || undefined,
+        })),
       })));
     } else {
-      setMatchingPairs([{ id: Date.now().toString(), left: '', rights: '' }]);
+      setMatchingPairs([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
     }
     if (card.type === 'sequencing' && card.options) {
       setSequenceItems(card.options.map((o, idx) => ({
@@ -538,8 +582,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setIsScenarioMode(false);
     if (type === 'matching' && matchingPairs.length < 2) {
       setMatchingPairs([
-        { id: Date.now().toString() + '1', left: '', rights: '' },
-        { id: Date.now().toString() + '2', left: '', rights: '' },
+        { id: Date.now().toString() + '1', left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r1', text: '', image: undefined }] },
+        { id: Date.now().toString() + '2', left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r2', text: '', image: undefined }] },
       ]);
     }
   };
@@ -1887,45 +1931,139 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
                   Pairs
                 </label>
-                <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
-                  Use commas in the "Matches" field to provide multiple correct answers for a term (One-to-Many).
-                </p>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {matchingPairs.map((pair, idx) => (
-                    <div key={pair.id} className="flex gap-2 items-center">
-                      <input
-                        value={pair.left}
-                        onChange={(e) => {
-                          const newPairs = [...matchingPairs];
-                          newPairs[idx].left = e.target.value;
-                          setMatchingPairs(newPairs);
-                        }}
-                        placeholder="Term"
-                        className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                      />
-                      <input
-                        value={pair.rights}
-                        onChange={(e) => {
-                          const newPairs = [...matchingPairs];
-                          newPairs[idx].rights = e.target.value;
-                          setMatchingPairs(newPairs);
-                        }}
-                        placeholder="Matches (comma separated)"
-                        className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
-                      />
-                      <button
-                        type="button"
-                        disabled={matchingPairs.length <= 2}
-                        onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))}
-                        className={cn("w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors", matchingPairs.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                    <div key={pair.id} className="rounded-xl border border-brand-border bg-white/3 p-3 space-y-2">
+                      <div className="flex gap-2 items-start">
+                        <div className="flex-1 space-y-1">
+                          <span className="text-[9px] uppercase tracking-widest text-brand-muted font-bold">Term</span>
+                          <input
+                            value={pair.left}
+                            onChange={(e) => {
+                              const newPairs = [...matchingPairs];
+                              newPairs[idx] = { ...newPairs[idx], left: e.target.value };
+                              setMatchingPairs(newPairs);
+                            }}
+                            placeholder={pair.leftImage ? "Caption (optional)" : "Term text..."}
+                            className="w-full bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
+                          />
+                          {pair.leftImage !== undefined && (
+                            <ImageUpload
+                              compact
+                              value={pair.leftImage}
+                              onChange={(url) => {
+                                const newPairs = [...matchingPairs];
+                                newPairs[idx] = { ...newPairs[idx], leftImage: url };
+                                setMatchingPairs(newPairs);
+                              }}
+                            />
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1 pt-5">
+                          <button
+                            type="button"
+                            title="Add image to term"
+                            onClick={() => {
+                              const newPairs = [...matchingPairs];
+                              newPairs[idx] = { ...newPairs[idx], leftImage: newPairs[idx].leftImage !== undefined ? undefined : '' };
+                              setMatchingPairs(newPairs);
+                            }}
+                            className={cn("w-8 h-8 flex items-center justify-center rounded-lg transition-colors",
+                              pair.leftImage !== undefined ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/30" : "bg-white/5 text-brand-muted hover:text-white")}
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={matchingPairs.length <= 2}
+                            onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))}
+                            className={cn("w-8 h-8 flex items-center justify-center rounded-lg transition-colors", matchingPairs.length <= 2 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 pl-2 border-l-2 border-brand-primary/20">
+                        <span className="text-[9px] uppercase tracking-widest text-brand-muted font-bold">Matches</span>
+                        {pair.rights.map((right, rIdx) => (
+                          <div key={right.id} className="space-y-1">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                value={right.text}
+                                onChange={(e) => {
+                                  const newPairs = [...matchingPairs];
+                                  const newRights = [...newPairs[idx].rights];
+                                  newRights[rIdx] = { ...newRights[rIdx], text: e.target.value };
+                                  newPairs[idx] = { ...newPairs[idx], rights: newRights };
+                                  setMatchingPairs(newPairs);
+                                }}
+                                placeholder={right.image ? "Caption (optional)" : "Match text..."}
+                                className="flex-1 bg-white/5 border border-brand-border rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-brand-primary/50"
+                              />
+                              <button
+                                type="button"
+                                title="Add image to this match"
+                                onClick={() => {
+                                  const newPairs = [...matchingPairs];
+                                  const newRights = [...newPairs[idx].rights];
+                                  newRights[rIdx] = { ...newRights[rIdx], image: newRights[rIdx].image !== undefined ? undefined : '' };
+                                  newPairs[idx] = { ...newPairs[idx], rights: newRights };
+                                  setMatchingPairs(newPairs);
+                                }}
+                                className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors",
+                                  right.image !== undefined ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/30" : "bg-white/5 text-brand-muted hover:text-white")}
+                              >
+                                <ImageIcon className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={pair.rights.length <= 1}
+                                onClick={() => {
+                                  const newPairs = [...matchingPairs];
+                                  newPairs[idx] = { ...newPairs[idx], rights: newPairs[idx].rights.filter((_, i) => i !== rIdx) };
+                                  setMatchingPairs(newPairs);
+                                }}
+                                className={cn("w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors",
+                                  pair.rights.length <= 1 ? "opacity-30 cursor-not-allowed text-brand-muted" : "bg-white/5 text-brand-muted hover:bg-red-500/20 hover:text-red-400")}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {right.image !== undefined && (
+                              <ImageUpload
+                                compact
+                                value={right.image || undefined}
+                                onChange={(url) => {
+                                  const newPairs = [...matchingPairs];
+                                  const newRights = [...newPairs[idx].rights];
+                                  newRights[rIdx] = { ...newRights[rIdx], image: url };
+                                  newPairs[idx] = { ...newPairs[idx], rights: newRights };
+                                  setMatchingPairs(newPairs);
+                                }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newPairs = [...matchingPairs];
+                            newPairs[idx] = {
+                              ...newPairs[idx],
+                              rights: [...newPairs[idx].rights, { id: Date.now().toString(), text: '', image: undefined }],
+                            };
+                            setMatchingPairs(newPairs);
+                          }}
+                          className="text-xs flex items-center gap-1.5 text-brand-muted hover:text-brand-primary transition-colors py-1"
+                        >
+                          <Plus className="w-3 h-3" /> Add match
+                        </button>
+                      </div>
                     </div>
                   ))}
                   <button
                     type="button"
-                    onClick={() => setMatchingPairs([...matchingPairs, { id: Date.now().toString(), left: '', rights: '' }])}
+                    onClick={() => setMatchingPairs([...matchingPairs, { id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }])}
                     className="text-xs mt-2 flex items-center justify-center border border-dashed border-white/20 hover:border-brand-primary/50 gap-2 text-brand-muted hover:text-brand-primary w-full py-3 rounded-xl transition-all"
                   >
                     <Plus className="w-4 h-4" /> Add Pair
@@ -1983,9 +2121,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                               if (next) { e.preventDefault(); next.focus(); }
                             }
                           }}
-                          placeholder={opt.isCorrect ? "Correct answer..." : `Distractor ${idx}...`}
+                          placeholder={opt.imageUrl ? "Caption (optional)" : opt.isCorrect ? "Correct answer..." : `Distractor ${idx}...`}
                           className="flex-1 min-w-0 bg-white/5 border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-brand-primary/50"
                         />
+                        <button
+                          type="button"
+                          title="Add image to this option"
+                          onClick={() => {
+                            const newSet = new Set(expandedMcqImg);
+                            if (newSet.has(opt.id)) newSet.delete(opt.id); else newSet.add(opt.id);
+                            setExpandedMcqImg(newSet);
+                          }}
+                          className={cn("w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-colors",
+                            expandedMcqImg.has(opt.id) || opt.imageUrl ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/30" : "bg-white/5 text-brand-muted hover:text-white border border-transparent")}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           type="button"
                           title="Add explanation for this option (shown after answering)"
@@ -2010,6 +2161,19 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                      {(expandedMcqImg.has(opt.id) || opt.imageUrl) && (
+                        <div className="mt-1 px-1">
+                          <ImageUpload
+                            compact
+                            value={opt.imageUrl}
+                            onChange={(url) => {
+                              const updated = [...mcqInlineOptions];
+                              updated[idx] = { ...updated[idx], imageUrl: url };
+                              setMcqInlineOptions(updated);
+                            }}
+                          />
+                        </div>
+                      )}
                       {(expandedMcqExp.has(opt.id) || opt.explanation) && (
                         <textarea
                           value={opt.explanation}
@@ -2274,8 +2438,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   disabled={
                     !front.trim() ||
                     (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
-                    (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim()).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
-                    (cardType === 'matching' && matchingPairs.filter(p => p.left.trim() && p.rights.trim()).length < 2) ||
+                    (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim() || o.imageUrl).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
+                    (cardType === 'matching' && matchingPairs.filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image)).length < 2) ||
                     (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)
                   }
                   className={cn("btn-primary h-12 disabled:opacity-50 text-sm", editingCardIndex !== null ? "w-2/3" : "w-full")}

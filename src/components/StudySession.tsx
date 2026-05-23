@@ -168,6 +168,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [scoreDelta, setScoreDelta] = useState(0);
   const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
+  const [shuffledOptionImages, setShuffledOptionImages] = useState<(string | null)[]>([]);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [cardUpdates, setCardUpdates] = useState<CardUpdateRecord>({});
@@ -200,8 +201,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [sessionCalibration, setSessionCalibration] = useState({ correct: 0, total: 0 });
 
   // Matching Game State
-  const [matchingLefts, setMatchingLefts] = useState<{ id: string, text: string }[]>([]);
-  const [matchingRights, setMatchingRights] = useState<{ id: string, text: string, matchId: string }[]>([]);
+  const [matchingLefts, setMatchingLefts] = useState<{ id: string; text: string; image?: string | null }[]>([]);
+  const [matchingRights, setMatchingRights] = useState<{ id: string; text: string; matchId: string; image?: string | null }[]>([]);
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [selectedRight, setSelectedRight] = useState<string | null>(null);
   const [matchedLeftIds, setMatchedLeftIds] = useState<Set<string>>(new Set());
@@ -393,10 +394,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   useEffect(() => {
     if ((currentCard?.type === 'mcq' || currentCard?.type === 'multi-select') && currentCard.options) {
-      const shuffled = currentCard.lockOptionOrder ? [...currentCard.options] : shuffleArray(currentCard.options);
-      setShuffledOptions(shuffled);
+      const paired = currentCard.options.map((opt, i) => ({
+        text: opt,
+        image: currentCard.optionImages?.[i] ?? null,
+      }));
+      const shuffledPaired = currentCard.lockOptionOrder ? paired : shuffleArray(paired);
+      setShuffledOptions(shuffledPaired.map(p => p.text));
+      setShuffledOptionImages(shuffledPaired.map(p => p.image));
     } else {
       setShuffledOptions([]);
+      setShuffledOptionImages([]);
     }
 
     if (currentCard?.type === 'sequencing' && currentCard.options) {
@@ -407,11 +414,20 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }
 
     if (currentCard?.type === 'matching' && currentCard.pairs) {
-      const lefts = currentCard.pairs.map(p => ({ id: p.id, text: p.left }));
-      const rights: { id: string, text: string, matchId: string }[] = [];
-      currentCard.pairs.forEach(p => {
+      const lefts = currentCard.pairs.map((p, pi) => ({
+        id: p.id,
+        text: p.left.startsWith('__img_') && p.left.endsWith('__') ? '' : p.left,
+        image: currentCard.pairImages?.[pi]?.leftImage ?? null,
+      }));
+      const rights: { id: string; text: string; matchId: string; image?: string | null }[] = [];
+      currentCard.pairs.forEach((p, pi) => {
         p.rights.forEach((rightText, rIdx) => {
-          rights.push({ id: `${p.id}-r-${rIdx}`, text: rightText, matchId: p.id });
+          rights.push({
+            id: `${p.id}-r-${rIdx}`,
+            text: rightText.startsWith('__img_') && rightText.endsWith('__') ? '' : rightText,
+            matchId: p.id,
+            image: currentCard.pairImages?.[pi]?.rightImages?.[rIdx] ?? null,
+          });
         });
       });
       setMatchingLefts(shuffleArray(lefts));
@@ -1622,7 +1638,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                     "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                               )}
                             >
-                              <RichTextInline>{left.text}</RichTextInline>
+                              {left.image && <img src={left.image} alt="" className="w-full max-h-20 object-contain rounded-lg mb-1.5" />}
+                              {left.text && <RichTextInline>{left.text}</RichTextInline>}
                             </motion.button>
                           )
                         })}
@@ -1647,7 +1664,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                       "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
                               )}
                             >
-                              <span className={cn(isMatched && "line-through decoration-emerald-500/30")}><RichTextInline>{right.text}</RichTextInline></span>
+                              {right.image && <img src={right.image} alt="" className={cn("w-full max-h-20 object-contain rounded-lg mb-1.5", isMatched && "opacity-40")} />}
+                              {right.text && <span className={cn(isMatched && "line-through decoration-emerald-500/30")}><RichTextInline>{right.text}</RichTextInline></span>}
                             </motion.button>
                           )
                         })}
@@ -1773,6 +1791,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
                         {shuffledOptions.map((opt, idx) => {
                           const isSelected = selectedMultiOptions.has(opt);
+                          const optImage = shuffledOptionImages[idx] ?? null;
+                          const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
                           let btnClass = "bg-white/5 border border-white/10 text-white/70";
                           let icon = null;
 
@@ -1799,16 +1819,19 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               key={idx}
                               onClick={() => toggleMultiSelectOption(opt)}
                               className={cn(
-                                "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed shrink-0 flex justify-between items-center cursor-pointer",
+                                "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed shrink-0 flex flex-col cursor-pointer",
                                 btnClass
                               )}
                             >
-                              <span><RichTextInline>{opt}</RichTextInline></span>
-                              {icon && (
-                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                  {icon}
-                                </motion.div>
-                              )}
+                              {optImage && <img src={optImage} alt="" className="w-full max-h-28 object-contain rounded-lg mb-2" />}
+                              <div className="flex justify-between items-center">
+                                {displayText && <span><RichTextInline>{displayText}</RichTextInline></span>}
+                                {icon && (
+                                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+                                    {icon}
+                                  </motion.div>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -1946,6 +1969,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         }
 
                         const letter = String.fromCharCode(65 + idx);
+                        const optImage = shuffledOptionImages[idx] ?? null;
+                        const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
 
                         return (
                           <div key={idx} className="flex flex-col w-full">
@@ -1960,15 +1985,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                 btnClass
                               )}
                             >
+                              {optImage && <img src={optImage} alt="" className="w-full max-h-28 object-contain rounded-lg mb-2" />}
                               <div className="flex justify-between items-start gap-4">
                                 <div className="flex items-start gap-3 flex-1">
                                   <span className="font-bold text-white/70 shrink-0">{letter}.</span>
-                                  <span className={cn(
+                                  {displayText && <span className={cn(
                                     "font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1",
                                     ""
                                   )}>
-                                    <RichTextInline>{opt}</RichTextInline>
-                                  </span>
+                                    <RichTextInline>{displayText}</RichTextInline>
+                                  </span>}
                                 </div>
                               </div>
 
