@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown } from 'lucide-react';
+import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn } from 'lucide-react';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn, getActiveTierCards } from '../lib/utils';
@@ -169,6 +170,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
   const [shuffledOptionImages, setShuffledOptionImages] = useState<(string | null)[]>([]);
+  const [mcqZoomSrc, setMcqZoomSrc] = useState<string | null>(null);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [cardUpdates, setCardUpdates] = useState<CardUpdateRecord>({});
@@ -253,6 +255,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   // Tracks the active question across renders for unmount cleanup
   const cardQuestionRef = useRef<Question | null>(null);
   useEffect(() => { cardQuestionRef.current = cardQuestion; }, [cardQuestion]);
+  useEffect(() => {
+    if (!mcqZoomSrc) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMcqZoomSrc(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mcqZoomSrc]);
   useEffect(() => {
     return () => {
       if (cardQuestionRef.current) unsubscribeAnswers(cardQuestionRef.current.id);
@@ -1788,6 +1796,36 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     )
                   ) : (currentCard?.type === 'multi-select' || (currentCard?.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1)) ? (
                     <div className="w-full flex-1 flex flex-col justify-center items-center pb-4">
+                      {createPortal(
+                        <AnimatePresence>
+                          {mcqZoomSrc && (
+                            <motion.div
+                              key="mcq-zoom-ms"
+                              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18 }}
+                              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-lg p-6"
+                              onClick={() => setMcqZoomSrc(null)}
+                            >
+                              <motion.img
+                                src={mcqZoomSrc} alt=""
+                                initial={{ scale: 0.82, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.82, opacity: 0 }}
+                                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <motion.button
+                                initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 28, delay: 0.05 }}
+                                onClick={() => setMcqZoomSrc(null)}
+                                className="absolute top-5 right-5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full p-2.5 transition-colors"
+                              >
+                                <X className="w-5 h-5" />
+                              </motion.button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>,
+                        document.body
+                      )}
                       <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
                         <div className={cn(
                           shuffledOptionImages.some(Boolean)
@@ -1825,7 +1863,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               key={idx}
                               onClick={() => toggleMultiSelectOption(opt)}
                               className={cn(
-                                "rounded-xl transition-all cursor-pointer overflow-hidden flex flex-col border",
+                                "relative rounded-xl transition-all cursor-pointer overflow-hidden flex flex-col border group/msopt",
                                 btnClass
                               )}
                             >
@@ -1845,6 +1883,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                     </motion.div>
                                   )}
                                 </div>
+                              )}
+                              {optImage && (
+                                <button
+                                  type="button"
+                                  aria-label="Zoom image"
+                                  onClick={(e) => { e.stopPropagation(); setMcqZoomSrc(optImage); }}
+                                  className="absolute top-2 right-2 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-1.5 transition-all opacity-40 group-hover/msopt:opacity-100 focus:opacity-100"
+                                >
+                                  <ZoomIn className="w-3 h-3" />
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -1986,6 +2034,36 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </div>
                   ) : currentCard?.type === 'mcq' ? (
                     <div className="w-full flex-1 flex flex-col justify-center pb-4">
+                      {createPortal(
+                        <AnimatePresence>
+                          {mcqZoomSrc && (
+                            <motion.div
+                              key="mcq-zoom"
+                              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                              transition={{ duration: 0.18 }}
+                              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-lg p-6"
+                              onClick={() => setMcqZoomSrc(null)}
+                            >
+                              <motion.img
+                                src={mcqZoomSrc} alt=""
+                                initial={{ scale: 0.82, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.82, opacity: 0 }}
+                                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <motion.button
+                                initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 28, delay: 0.05 }}
+                                onClick={() => setMcqZoomSrc(null)}
+                                className="absolute top-5 right-5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full p-2.5 transition-colors"
+                              >
+                                <X className="w-5 h-5" />
+                              </motion.button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>,
+                        document.body
+                      )}
                       <div className={cn(
                         shuffledOptionImages.some(Boolean)
                           ? "grid grid-cols-2 gap-3"
@@ -2013,7 +2091,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
 
                         return (
-                          <div key={idx} className="flex flex-col">
+                          <div key={idx} className="relative flex flex-col group/opt">
                             <motion.button
                               layout
                               whileHover={!selectedOption ? { scale: 1.02 } : {}}
@@ -2021,7 +2099,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               onClick={(e: any) => handleOptionSelect(opt, e)}
                               disabled={selectedOption !== null}
                               className={cn(
-                                "w-full rounded-xl transition-colors flex flex-col overflow-hidden group",
+                                "w-full rounded-xl transition-colors flex flex-col overflow-hidden",
                                 hasImages ? "border" : "text-left px-4 py-3 sm:px-5 sm:py-4",
                                 btnClass
                               )}
@@ -2087,6 +2165,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                 )}
                               </AnimatePresence>
                             </motion.button>
+                            {hasImages && optImage && (
+                              <button
+                                type="button"
+                                aria-label="Zoom image"
+                                onClick={(e) => { e.stopPropagation(); setMcqZoomSrc(optImage); }}
+                                className="absolute top-2 right-2 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-1.5 transition-all opacity-40 group-hover/opt:opacity-100 focus:opacity-100"
+                              >
+                                <ZoomIn className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         );
                       })}
