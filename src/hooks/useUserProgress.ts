@@ -2031,6 +2031,120 @@ export function useUserProgress() {
     }
   };
 
+  const resetIslandProgress = async (islandId: string) => {
+    if (!user || !progress) return;
+    const island = progress.islands.find((i) => i.id === islandId);
+    if (!island) return;
+
+    const batch = writeBatch(db);
+    island.cards.forEach((card) => {
+      if (!card.id) return;
+      const cardRef = doc(db, 'cards', card.id);
+      if (island.isCollaborative) {
+        const prefix = `userProgress.${user.uid}`;
+        batch.update(cardRef, {
+          [`${prefix}.status`]: 'learning',
+          [`${prefix}.needsWork`]: false,
+          [`${prefix}.consecutiveCorrect`]: deleteField(),
+          [`${prefix}.lastReviewed`]: deleteField(),
+          [`${prefix}.demotionCount`]: deleteField(),
+          [`${prefix}.srsInterval`]: deleteField(),
+          [`${prefix}.srsEaseFactor`]: deleteField(),
+          [`${prefix}.srsNextReview`]: deleteField(),
+          [`${prefix}.srsRepetitions`]: deleteField(),
+          [`${prefix}.totalAnswers`]: 0,
+          [`${prefix}.totalCorrect`]: 0,
+        });
+      } else {
+        batch.update(cardRef, {
+          status: 'learning',
+          needsWork: false,
+          consecutiveCorrect: deleteField(),
+          lastReviewed: deleteField(),
+          demotionCount: deleteField(),
+          srsInterval: deleteField(),
+          srsEaseFactor: deleteField(),
+          srsNextReview: deleteField(),
+          srsRepetitions: deleteField(),
+          totalAnswers: 0,
+          totalCorrect: 0,
+        });
+      }
+    });
+    batch.update(doc(db, 'islands', islandId), { color_score: 50 });
+
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
+    }
+  };
+
+  const resetArchipelagoProgress = async (archipelagoId: string) => {
+    if (!user || !progress) return;
+    const islandsInArch = progress.islands.filter((i) => i.archipelagoId === archipelagoId);
+
+    const CHUNK_SIZE = 499;
+    const batches: ReturnType<typeof writeBatch>[] = [];
+    let current = writeBatch(db);
+    let opCount = 0;
+
+    const flush = () => {
+      batches.push(current);
+      current = writeBatch(db);
+      opCount = 0;
+    };
+
+    for (const island of islandsInArch) {
+      for (const card of island.cards) {
+        if (!card.id) continue;
+        if (opCount >= CHUNK_SIZE) flush();
+        const cardRef = doc(db, 'cards', card.id);
+        if (island.isCollaborative) {
+          const prefix = `userProgress.${user.uid}`;
+          current.update(cardRef, {
+            [`${prefix}.status`]: 'learning',
+            [`${prefix}.needsWork`]: false,
+            [`${prefix}.consecutiveCorrect`]: deleteField(),
+            [`${prefix}.lastReviewed`]: deleteField(),
+            [`${prefix}.demotionCount`]: deleteField(),
+            [`${prefix}.srsInterval`]: deleteField(),
+            [`${prefix}.srsEaseFactor`]: deleteField(),
+            [`${prefix}.srsNextReview`]: deleteField(),
+            [`${prefix}.srsRepetitions`]: deleteField(),
+            [`${prefix}.totalAnswers`]: 0,
+            [`${prefix}.totalCorrect`]: 0,
+          });
+        } else {
+          current.update(cardRef, {
+            status: 'learning',
+            needsWork: false,
+            consecutiveCorrect: deleteField(),
+            lastReviewed: deleteField(),
+            demotionCount: deleteField(),
+            srsInterval: deleteField(),
+            srsEaseFactor: deleteField(),
+            srsNextReview: deleteField(),
+            srsRepetitions: deleteField(),
+            totalAnswers: 0,
+            totalCorrect: 0,
+          });
+        }
+        opCount++;
+      }
+      if (opCount >= CHUNK_SIZE) flush();
+      current.update(doc(db, 'islands', island.id), { color_score: 50 });
+      opCount++;
+    }
+    if (opCount > 0) batches.push(current);
+
+    try {
+      await Promise.all(batches.map((b) => b.commit()));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
+    }
+  };
+
   return {
     progress,
     loading,
@@ -2069,6 +2183,8 @@ export function useUserProgress() {
     createCollaborativeArchipelago,
     addArchipelagoCollaborator,
     removeArchipelagoCollaborator,
+    resetIslandProgress,
+    resetArchipelagoProgress,
   };
 }
 

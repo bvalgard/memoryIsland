@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -61,6 +61,8 @@ export default function Dashboard() {
     createCollaborativeArchipelago,
     addArchipelagoCollaborator,
     removeArchipelagoCollaborator,
+    resetIslandProgress,
+    resetArchipelagoProgress,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -210,6 +212,7 @@ export default function Dashboard() {
   const [showShareArchipelagoConfirm, setShowShareArchipelagoConfirm] = useState(false);
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
+  const [showResetArchipelagoConfirm, setShowResetArchipelagoConfirm] = useState(false);
   const [deletedCollabMessage, setDeletedCollabMessage] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -334,7 +337,9 @@ export default function Dashboard() {
     if (activeModal === 'users') {
       loadFriends();
     }
-  }, [activeModal, friends, fetchProfilesByUids]);
+  // friends.join(',') prevents re-runs when snapshot fires with the same UIDs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModal, friends.join(',')]);
 
   useEffect(() => {
     const collabIslandOwnerUids = (progress?.islands || [])
@@ -2350,6 +2355,14 @@ export default function Dashboard() {
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span className="text-[10px] font-bold uppercase tracking-tight">Delete</span>
                               </button>
+                              <button
+                                onClick={() => setShowResetArchipelagoConfirm(true)}
+                                className="p-1.5 rounded-lg bg-amber-500/5 border border-amber-500/10 text-amber-400/60 hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
+                                title="Reset progress for this Archipelago"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-bold uppercase tracking-tight">Reset</span>
+                              </button>
                             </div>
                           )}
                           <p className="text-brand-muted text-xs sm:text-sm hidden sm:block max-w-sm">Review your entire knowledge base across all anchored islands.</p>
@@ -2559,6 +2572,7 @@ export default function Dashboard() {
                   currentUserId={user?.uid ?? undefined}
                   onAddCollaborator={async (uid) => addCollaborator(selectedIsland.id, uid)}
                   onRemoveCollaborator={async (uid) => removeCollaborator(selectedIsland.id, uid)}
+                  onResetIsland={resetIslandProgress}
                 />
               </motion.div>
             )}
@@ -2835,6 +2849,19 @@ export default function Dashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={showResetArchipelagoConfirm}
+        title="Reset archipelago progress?"
+        message={`All mastery data across every island in "${selectedArchipelago?.name ?? 'this archipelago'}" will be cleared. Your cards and content are kept.`}
+        confirmLabel="Reset"
+        danger={true}
+        onConfirm={async () => {
+          setShowResetArchipelagoConfirm(false);
+          if (selectedArchipelago) await resetArchipelagoProgress(selectedArchipelago.id);
+        }}
+        onCancel={() => setShowResetArchipelagoConfirm(false)}
+      />
 
       <ConfirmDialog
         open={confirmDialog.open}

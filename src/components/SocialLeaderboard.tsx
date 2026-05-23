@@ -38,7 +38,7 @@ export default function SocialLeaderboard({
 }: SocialLeaderboardProps) {
   const [tab, setTab] = useState<'leaderboard' | 'friends'>('leaderboard');
   const [friendsData, setFriendsData] = useState<UserProfile[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [pendingUid, setPendingUid] = useState<string | null>(null);
 
   const currentUser = auth.currentUser;
@@ -141,7 +141,7 @@ export default function SocialLeaderboard({
               <p className="font-medium">Social data couldn't load.</p>
               <p className="mt-1 text-red-100/80">{error}</p>
             </div>
-          ) : (loading || loadingData) ? (
+          ) : (tab === 'leaderboard' ? loading : loadingData) ? (
             <div className="text-center text-brand-muted py-8">Loading profiles...</div>
           ) : tab === 'leaderboard' ? (
             <>

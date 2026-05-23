@@ -1,11 +1,12 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { cn, formatTimeUntil } from '../lib/utils';
 import ShareModal from './ShareModal';
+import ConfirmDialog from './ConfirmDialog';
 import ImageUpload from './ImageUpload';
 import { UserProfile } from '../hooks/useSocial';
 
@@ -30,6 +31,7 @@ interface IslandDetailProps {
   currentUserId?: string;
   onAddCollaborator?: (uid: string) => Promise<void>;
   onRemoveCollaborator?: (uid: string) => Promise<void>;
+  onResetIsland?: (islandId: string) => Promise<void>;
 }
 
 function wrapSelection(
@@ -95,7 +97,7 @@ function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaE
   );
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland }: IslandDetailProps) {
   const [view, setView] = useState<'home' | 'editor'>('home');
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
@@ -112,6 +114,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showCollaboratorPanel, setShowCollaboratorPanel] = useState(false);
   const [collaboratorProfiles, setCollaboratorProfiles] = useState<UserProfile[]>([]);
   const [friendProfilesForInvite, setFriendProfilesForInvite] = useState<UserProfile[]>([]);
@@ -1094,6 +1097,16 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       )}
                     </AnimatePresence>
                   </div>
+                )}
+
+                {onResetIsland && (
+                  <button
+                    onClick={() => setShowResetConfirm(true)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                    title="Reset Progress"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
                 )}
 
                 {onDeleteIsland && !isCollabMember && (
@@ -2840,6 +2853,19 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           </>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="Reset island progress?"
+        message="All mastery data for this island will be cleared. Your cards and content are kept."
+        confirmLabel="Reset"
+        danger={true}
+        onConfirm={async () => {
+          setShowResetConfirm(false);
+          if (onResetIsland) await onResetIsland(island.id);
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }
