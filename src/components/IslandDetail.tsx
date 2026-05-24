@@ -210,7 +210,40 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [editingCardIndex]);
 
-  const isDirty = front.trim().length > 0 || back.trim().length > 0;
+  const isDirty = editingCardIndex !== null
+    ? (() => {
+        const orig = island.cards[editingCardIndex];
+        return (
+          front !== orig.front ||
+          back !== (orig.back || '') ||
+          hint !== (orig.hint || '') ||
+          explanation !== (orig.explanation || '') ||
+          ((orig.type === 'mcq' || orig.type === 'multi-select') &&
+            mcqInlineOptions.length !== (orig.options?.length ?? 4))
+        );
+      })()
+    : (
+        front.trim().length > 0 ||
+        back.trim().length > 0 ||
+        hint.trim().length > 0 ||
+        explanation.trim().length > 0 ||
+        mcqInlineOptions.length !== 4 ||
+        mcqInlineOptions.some(o => o.text.trim().length > 0) ||
+        matchingPairs.some(p => p.left.trim().length > 0 || p.rights.some(r => r.text.trim().length > 0)) ||
+        sequenceItems.some(s => s.text.trim().length > 0)
+      );
+
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const pendingNavRef = useRef<(() => void) | null>(null);
+
+  function guardedNav(action: () => void) {
+    if (view === 'editor' && isDirty) {
+      pendingNavRef.current = action;
+      setShowUnsavedWarning(true);
+    } else {
+      action();
+    }
+  }
 
   const [leftPaneOpen, setLeftPaneOpen] = useState(() => window.innerWidth >= 1024);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
@@ -853,8 +886,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
       <header className="mb-12 flex flex-col 2xl:flex-row 2xl:items-start justify-between gap-6 flex-wrap">
         <div className="flex items-start gap-4 sm:gap-6 min-w-0">
-          <button 
-            onClick={onBack}
+          <button
+            onClick={() => guardedNav(onBack)}
             className="w-10 h-10 sm:w-12 sm:h-12 mt-1 rounded-2xl glass flex items-center justify-center text-brand-muted hover:text-white transition-all shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -1217,7 +1250,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             </div>
             {view === 'editor' ? (
               <button
-                onClick={() => setView('home')}
+                onClick={() => guardedNav(() => setView('home'))}
                 className="flex items-center gap-1.5 text-sm font-semibold text-brand-muted hover:text-white transition-colors mb-2"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -1312,8 +1345,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 )}
               </div>
 
-              <button 
-                onClick={() => onStartStudy(studyMode)}
+              <button
+                onClick={() => guardedNav(() => onStartStudy(studyMode))}
                 className="btn-primary h-12 px-8 flex items-center justify-center gap-3 text-sm font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(66,133,244,0.3)] animate-pulse hover:animate-none group"
               >
                 <Play className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
@@ -3012,6 +3045,24 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           </>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={showUnsavedWarning}
+        title="Unsaved changes"
+        message="You have unsaved content in the card editor. Leaving will discard it."
+        confirmLabel="Discard & Leave"
+        cancelLabel="Stay"
+        danger={true}
+        onConfirm={() => {
+          setShowUnsavedWarning(false);
+          pendingNavRef.current?.();
+          pendingNavRef.current = null;
+        }}
+        onCancel={() => {
+          setShowUnsavedWarning(false);
+          pendingNavRef.current = null;
+        }}
+      />
 
       <ConfirmDialog
         open={showResetConfirm}
