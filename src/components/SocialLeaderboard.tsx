@@ -2,7 +2,9 @@ import { useState, useEffect, FC } from 'react';
 import { motion } from 'motion/react';
 import { Trophy, Users, UserPlus, UserCheck, X, Check, Clock } from 'lucide-react';
 import { UserProfile } from '../hooks/useSocial';
+import { UserStats } from '../hooks/useUserProgress';
 import { cn } from '../lib/utils';
+import ActivityHeatmap from './ActivityHeatmap';
 import { auth } from '../firebase';
 
 interface SocialLeaderboardProps {
@@ -19,6 +21,7 @@ interface SocialLeaderboardProps {
   acceptFriendRequest: (uid: string) => Promise<void>;
   removeFriend: (uid: string) => Promise<void>;
   myReputation?: { totalAnswers: number; totalAccepted: number; totalVotesReceived: number } | null;
+  userStats?: UserStats | null;
 }
 
 export default function SocialLeaderboard({
@@ -35,6 +38,7 @@ export default function SocialLeaderboard({
   acceptFriendRequest,
   removeFriend,
   myReputation,
+  userStats,
 }: SocialLeaderboardProps) {
   const [tab, setTab] = useState<'leaderboard' | 'friends'>('leaderboard');
   const [friendsData, setFriendsData] = useState<UserProfile[]>([]);
@@ -113,6 +117,17 @@ export default function SocialLeaderboard({
             <p className="text-sm text-brand-muted">See how you rank and manage friends.</p>
           </div>
         </div>
+
+        {userStats && (
+          <div className="mb-4 shrink-0">
+            <ActivityHeatmap
+              dailyActivityMap={userStats.dailyActivityMap ?? {}}
+              dailyStreak={userStats.dailyStreak}
+              longestDailyStreak={userStats.longestDailyStreak}
+              lastStudyDate={userStats.lastStudyDate}
+            />
+          </div>
+        )}
 
         <div className="flex space-x-2 border-b border-white/5 pb-4 mb-4 shrink-0">
           <button

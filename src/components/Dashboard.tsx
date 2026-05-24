@@ -1644,6 +1644,7 @@ export default function Dashboard() {
             acceptFriendRequest={acceptFriendRequest}
             removeFriend={removeFriend}
             myReputation={myReputation}
+            userStats={progress?.stats}
           />
         )}
       </AnimatePresence>

@@ -145,6 +145,7 @@ export interface UserStats {
   calibrationCorrect?: number;
   calibrationTotal?: number;
   studyHourStats?: Record<string, { sessions: number; correct: number; total: number }>;
+  dailyActivityMap?: Record<string, number>;
 }
 
 export interface UserSettings {
@@ -1328,6 +1329,13 @@ export function useUserProgress() {
       };
     }
 
+    const todayKey = new Date().toISOString().split('T')[0];
+    const prevActivityMap = progress.stats.dailyActivityMap ?? {};
+    const updatedActivityMap = {
+      ...prevActivityMap,
+      [todayKey]: (prevActivityMap[todayKey] ?? 0) + reviewedCount,
+    };
+
     await updateStats({
       dailyReviewed: newDailyReviewed,
       dailyMastered: newDailyMastered,
@@ -1342,6 +1350,7 @@ export function useUserProgress() {
         calibrationTotal: (progress.stats.calibrationTotal || 0) + sessionMeta.calibrationTotal,
       } : {}),
       studyHourStats: hourlyUpdate,
+      dailyActivityMap: updatedActivityMap,
     });
   };
 
