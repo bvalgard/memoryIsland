@@ -202,13 +202,35 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     return () => clearTimeout(t);
   }, [cardType, editingCardIndex]);
 
+  // Keyboard shortcuts — ref keeps handler fresh without stale closures
+  const islandKeyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  islandKeyHandlerRef.current = (e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName;
+    const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
+
+    if (e.key === 'Escape' && editingCardIndex !== null) { handleCancelEdit(); return; }
+
+    // Cmd/Ctrl+S — save or update card
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      e.preventDefault();
+      if (!isScenarioMode && front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing', 'mcq'].includes(cardType))) {
+        handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+      }
+      return;
+    }
+
+    // N — start a new card (only when not typing and not already editing)
+    if ((e.key === 'n' || e.key === 'N') && !isTyping && !e.metaKey && !e.ctrlKey && editingCardIndex === null) {
+      e.preventDefault();
+      resetCardForm();
+      setTimeout(() => frontRef.current?.focus(), 50);
+    }
+  };
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && editingCardIndex !== null) handleCancelEdit();
-    };
+    const onKeyDown = (e: KeyboardEvent) => islandKeyHandlerRef.current(e);
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editingCardIndex]);
+  }, []);
 
   const isDirty = editingCardIndex !== null
     ? (() => {

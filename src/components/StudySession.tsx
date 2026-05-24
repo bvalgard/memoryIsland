@@ -261,6 +261,77 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [mcqZoomSrc]);
+
+  // Keyboard shortcuts for study session — ref keeps handler always fresh
+  const studyKeyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  studyKeyHandlerRef.current = (e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+    if (!currentCard || sessionComplete) return;
+
+    const isFlashcard = !currentCard.type || currentCard.type === 'flashcard';
+    const isFib = currentCard.type === 'fill-in-the-blank';
+    const isMcq = currentCard.type === 'mcq';
+    const isSingleMcq = isMcq && getMcqCorrectOpts(currentCard).length <= 1;
+
+    const continueBtnVisible =
+      selectedOption !== null ||
+      (isFlipped && (
+        currentCard.type === 'multi-select' ||
+        (isMcq && getMcqCorrectOpts(currentCard).length > 1) ||
+        currentCard.type === 'sequencing' ||
+        isFib
+      ));
+
+    // Space — flip flashcard or click Continue
+    if (e.key === ' ') {
+      if (isFlashcard && !isFlipped) {
+        e.preventDefault();
+        setIsFlipped(true);
+        return;
+      }
+      if (continueBtnVisible) {
+        e.preventDefault();
+        isSingleMcq ? handleNextMCQ() : handleNextComplex();
+        return;
+      }
+      if (currentCard.type === 'matching' && matchingComplete) {
+        e.preventDefault();
+        nextCard();
+        return;
+      }
+    }
+
+    // Enter — same as Space for Continue (FIB form handles its own Enter via the input)
+    if (e.key === 'Enter' && !isFib) {
+      if (continueBtnVisible) {
+        e.preventDefault();
+        isSingleMcq ? handleNextMCQ() : handleNextComplex();
+        return;
+      }
+      if (currentCard.type === 'matching' && matchingComplete) {
+        e.preventDefault();
+        nextCard();
+        return;
+      }
+    }
+
+    // → / G — mark correct; ← / B — mark wrong (flashcard after flip)
+    if (isFlashcard && isFlipped) {
+      if (e.key === 'ArrowRight' || e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        handleFlashcardGrade(true, { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 } as React.MouseEvent);
+      } else if (e.key === 'ArrowLeft' || e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        handleFlashcardGrade(false, { clientX: 0, clientY: 0 } as React.MouseEvent);
+      }
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => studyKeyHandlerRef.current(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   useEffect(() => {
     return () => {
       if (cardQuestionRef.current) unsubscribeAnswers(cardQuestionRef.current.id);
