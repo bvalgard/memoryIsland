@@ -2017,6 +2017,61 @@ export default function Dashboard() {
                         <div className="text-[10px] text-brand-muted mt-1">Slow &amp; Incorrect</div>
                       </div>
                     </div>
+                    {/* SCATTER PLOT — kept for future use, disabled for now
+                    {(() => {
+                      const dots = [
+                        ...blindSpotData.quadrants.fastCorrect.map(c => ({ card: c, color: '#10b981' as const })),
+                        ...blindSpotData.quadrants.slowCorrect.map(c => ({ card: c, color: '#f59e0b' as const })),
+                        ...blindSpotData.quadrants.fastIncorrect.map(c => ({ card: c, color: '#ef4444' as const })),
+                        ...blindSpotData.quadrants.slowIncorrect.map(c => ({ card: c, color: '#f97316' as const })),
+                      ].filter(d => (d.card.avgNormalizedResponseMs ?? 0) > 0);
+                      if (dots.length < 2) return null;
+                      const times = dots.map(d => d.card.avgNormalizedResponseMs!);
+                      const minT = Math.min(...times), maxT = Math.max(...times);
+                      const pad = (maxT - minT) * 0.08 || 1;
+                      const xMin = minT - pad, xMax = maxT + pad;
+                      const W = 560, H = 230;
+                      const ml = 34, mr = 10, mt = 14, mb = 26;
+                      const pw = W - ml - mr, ph = H - mt - mb;
+                      const sorted = [...times].sort((a, b) => a - b);
+                      const speedMedian = sorted[Math.floor(sorted.length / 2)];
+                      const xP = (t: number) => ml + (1 - (t - xMin) / (xMax - xMin)) * pw;
+                      const yP = (acc: number) => mt + (1 - acc) * ph;
+                      const xLine = xP(speedMedian);
+                      const yLine = yP(0.8);
+                      return (
+                        <div className="mb-6 rounded-2xl overflow-hidden border border-white/5 bg-white/[0.02]">
+                          <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+                            <rect x={xLine} y={mt} width={ml + pw - xLine} height={yLine - mt} fill="rgba(16,185,129,0.05)" />
+                            <rect x={ml} y={mt} width={xLine - ml} height={yLine - mt} fill="rgba(245,158,11,0.04)" />
+                            <rect x={xLine} y={yLine} width={ml + pw - xLine} height={mt + ph - yLine} fill="rgba(239,68,68,0.08)" />
+                            <rect x={ml} y={yLine} width={xLine - ml} height={mt + ph - yLine} fill="rgba(249,115,22,0.04)" />
+                            <line x1={ml} y1={mt + ph} x2={ml + pw} y2={mt + ph} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                            <line x1={ml} y1={mt} x2={ml} y2={mt + ph} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                            <line x1={xLine} y1={mt} x2={xLine} y2={mt + ph} stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="4 3" />
+                            <line x1={ml} y1={yLine} x2={ml + pw} y2={yLine} stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="4 3" />
+                            <text x={ml - 5} y={mt} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.3)" dominantBaseline="hanging">100%</text>
+                            <text x={ml - 5} y={yLine} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.3)" dominantBaseline="middle">80%</text>
+                            <text x={ml - 5} y={mt + ph} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.3)">0%</text>
+                            <text x={ml} y={mt + ph + 5} fontSize="9" fill="rgba(255,255,255,0.3)" dominantBaseline="hanging">Slow</text>
+                            <text x={ml + pw} y={mt + ph + 5} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.3)" dominantBaseline="hanging">Fast</text>
+                            <text x={ml + pw - 4} y={mt + 4} textAnchor="end" fontSize="8" fill="rgba(16,185,129,0.5)" dominantBaseline="hanging">Fluency</text>
+                            <text x={ml + 4} y={mt + 4} fontSize="8" fill="rgba(245,158,11,0.5)" dominantBaseline="hanging">Consolidating</text>
+                            <text x={ml + pw - 4} y={mt + ph - 5} textAnchor="end" fontSize="8" fill="rgba(239,68,68,0.5)">Blind Spot</text>
+                            <text x={ml + 4} y={mt + ph - 5} fontSize="8" fill="rgba(249,115,22,0.5)">Gap</text>
+                            {dots.map(({ card, color }, i) => {
+                              const acc = (card.totalCorrect ?? 0) / (card.totalAnswers ?? 1);
+                              return (
+                                <circle key={card.id ?? i} cx={xP(card.avgNormalizedResponseMs!)} cy={yP(acc)} r={4.5} fill={color} fillOpacity={0.75}>
+                                  <title>{`${card.front?.slice(0, 60)}  |  ${Math.round(acc * 100)}% accuracy`}</title>
+                                </circle>
+                              );
+                            })}
+                          </svg>
+                        </div>
+                      );
+                    })()}
+                    */}
                     {blindSpotData.quadrants.fastIncorrect.length > 0 && (
                       <div>
                         <button

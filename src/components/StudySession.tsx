@@ -1517,6 +1517,26 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }
   };
 
+  const startWrongAnswerDrill = () => {
+    const wrongCards = shuffledCards.filter(card =>
+      cardUpdates[card.front] !== undefined &&
+      (cardUpdates[card.front]?.sessionCorrect ?? 0) === 0
+    );
+    if (wrongCards.length === 0) return;
+    setShuffledCards(shuffleArray(wrongCards));
+    setCurrentIndex(0);
+    setSessionComplete(false);
+    setCardUpdates({});
+    setStreak(0);
+    setLiveCorrect(0);
+    setLiveIncorrect(0);
+    setSessionMaxStreak(0);
+    setSessionStats({ mastered: 0, learning: 0, struggling: 0 });
+    sessionConsecutiveRef.current = new Map();
+    firstAttemptRecorded.current = new Set();
+    sessionStartTime.current = Date.now();
+  };
+
   if (sessionComplete) {
     const cardsReviewed = Object.keys(cardUpdates).length;
     const correctAnswers = Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length;
@@ -1588,6 +1608,15 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               )}
             </div>
           </div>
+        )}
+
+        {incorrectAnswers > 0 && (
+          <button
+            onClick={startWrongAnswerDrill}
+            className="w-full h-12 text-base mb-3 rounded-2xl font-semibold border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+          >
+            Reel in {incorrectAnswers} missed card{incorrectAnswers !== 1 ? 's' : ''}
+          </button>
         )}
 
         <button
