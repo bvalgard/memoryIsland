@@ -214,6 +214,8 @@ export default function Dashboard() {
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
   const [showResetArchipelagoConfirm, setShowResetArchipelagoConfirm] = useState(false);
+  const [blindSpotOpen, setBlindSpotOpen] = useState(false);
+  const [knowledgeGapOpen, setKnowledgeGapOpen] = useState(false);
   const [deletedCollabMessage, setDeletedCollabMessage] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -544,6 +546,46 @@ export default function Dashboard() {
   })();
 
   const trackingMode = progress?.settings?.progressTrackingMode ?? 'srs';
+
+  // Blind Spot Matrix computation
+  const blindSpotData = (() => {
+    const classified = allCards.filter(c => (c.responseTimeSamples ?? 0) >= 1 && (c.totalAnswers ?? 0) > 0);
+    if (classified.length === 0) return null;
+
+    const byType: Record<string, number[]> = {};
+    classified.forEach(c => {
+      const t = c.type ?? 'flashcard';
+      if (!byType[t]) byType[t] = [];
+      if (c.avgNormalizedResponseMs) byType[t].push(c.avgNormalizedResponseMs);
+    });
+    const getMedian = (arr: number[]) => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+    const typeMedians: Record<string, number> = {};
+    Object.entries(byType).forEach(([t, times]) => { typeMedians[t] = getMedian(times); });
+
+    const ACCURACY_THRESHOLD = 0.8;
+    const quadrants = {
+      fastCorrect: [] as typeof classified,
+      slowCorrect: [] as typeof classified,
+      fastIncorrect: [] as typeof classified,
+      slowIncorrect: [] as typeof classified,
+    };
+    classified.forEach(c => {
+      const median = typeMedians[c.type ?? 'flashcard'] ?? 0;
+      const isFast = (c.avgNormalizedResponseMs ?? Infinity) <= median;
+      const accuracy = (c.totalCorrect ?? 0) / (c.totalAnswers ?? 1);
+      if (isFast && accuracy >= ACCURACY_THRESHOLD) quadrants.fastCorrect.push(c);
+      else if (!isFast && accuracy >= ACCURACY_THRESHOLD) quadrants.slowCorrect.push(c);
+      else if (isFast && accuracy < ACCURACY_THRESHOLD) quadrants.fastIncorrect.push(c);
+      else quadrants.slowIncorrect.push(c);
+    });
+
+    const pendingCount = allCards.filter(c => (c.responseTimeSamples ?? 0) === 0).length;
+    return { quadrants, classifiedCount: classified.length, pendingCount };
+  })();
 
   const formatStudyHour = (h: number) => {
     if (h >= 5 && h < 12) return `${h === 5 ? '5' : h}am`;
@@ -1930,6 +1972,112 @@ export default function Dashboard() {
                           })}
                         </div>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Blind Spot Matrix */}
+                {blindSpotData && (
+                  <div className="mb-12">
+                    <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-red-400" />
+                      Blind Spot Matrix
+                    </h3>
+                    <p className="text-xs text-brand-muted mb-5">Speed vs. accuracy across {blindSpotData.classifiedCount} cards with enough data</p>
+                    <div className="grid grid-cols-2 gap-3 mb-5">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
+                        <div className="text-2xl font-black text-emerald-400">{blindSpotData.quadrants.fastCorrect.length}</div>
+                        <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-400/80 mt-0.5">Fluency</div>
+                        <div className="text-[10px] text-brand-muted mt-1">Fast &amp; Correct</div>
+                      </div>
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
+                        <div className="text-2xl font-black text-amber-400">{blindSpotData.quadrants.slowCorrect.length}</div>
+                        <div className="text-[10px] font-bold tracking-widest uppercase text-amber-400/80 mt-0.5">Consolidating</div>
+                        <div className="text-[10px] text-brand-muted mt-1">Slow &amp; Correct</div>
+                      </div>
+                      <div className={cn(
+                        "border rounded-2xl p-4",
+                        blindSpotData.quadrants.fastIncorrect.length > 0
+                          ? "bg-red-500/10 border-red-500/30"
+                          : "bg-white/5 border-white/10"
+                      )}>
+                        <div className={cn(
+                          "text-2xl font-black",
+                          blindSpotData.quadrants.fastIncorrect.length > 0 ? "text-red-400" : "text-white/40"
+                        )}>{blindSpotData.quadrants.fastIncorrect.length}</div>
+                        <div className={cn(
+                          "text-[10px] font-bold tracking-widest uppercase mt-0.5",
+                          blindSpotData.quadrants.fastIncorrect.length > 0 ? "text-red-400/80" : "text-brand-muted"
+                        )}>Blind Spot ⚠</div>
+                        <div className="text-[10px] text-brand-muted mt-1">Fast &amp; Incorrect</div>
+                      </div>
+                      <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
+                        <div className="text-2xl font-black text-orange-400">{blindSpotData.quadrants.slowIncorrect.length}</div>
+                        <div className="text-[10px] font-bold tracking-widest uppercase text-orange-400/80 mt-0.5">Knowledge Gap</div>
+                        <div className="text-[10px] text-brand-muted mt-1">Slow &amp; Incorrect</div>
+                      </div>
+                    </div>
+                    {blindSpotData.quadrants.fastIncorrect.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => setBlindSpotOpen(o => !o)}
+                          className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-red-400 mb-3 hover:text-red-300 transition-colors"
+                        >
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          {blindSpotData.quadrants.fastIncorrect.length} blind spot card{blindSpotData.quadrants.fastIncorrect.length !== 1 ? 's' : ''} — answered quickly but incorrectly
+                        </button>
+                        {blindSpotOpen && (
+                          <div className="space-y-2 mb-4">
+                            {blindSpotData.quadrants.fastIncorrect.map(card => {
+                              const accuracy = Math.round((card.totalCorrect ?? 0) / (card.totalAnswers ?? 1) * 100);
+                              const times = card.lastThreeNormalizedTimes ?? [];
+                              const trend = times.length >= 2
+                                ? times[times.length - 1] < times[0] * 0.9 ? '↑' : times[times.length - 1] > times[0] * 1.1 ? '↓' : ''
+                                : '';
+                              return (
+                                <div key={card.id} className="flex items-center justify-between bg-red-500/5 border border-red-500/10 rounded-xl px-4 py-3 gap-4">
+                                  <p className="text-sm text-white/80 truncate flex-1">{card.front}</p>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {trend && (
+                                      <span className={cn("text-xs font-bold", trend === '↑' ? 'text-emerald-400' : 'text-red-400')}>{trend}</span>
+                                    )}
+                                    <span className="text-[10px] font-bold text-red-400">{accuracy}%</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {blindSpotData.quadrants.slowIncorrect.length > 0 && (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => setKnowledgeGapOpen(o => !o)}
+                          className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-orange-400 mb-3 hover:text-orange-300 transition-colors"
+                        >
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          {blindSpotData.quadrants.slowIncorrect.length} knowledge gap card{blindSpotData.quadrants.slowIncorrect.length !== 1 ? 's' : ''} — slow and incorrect
+                        </button>
+                        {knowledgeGapOpen && (
+                          <div className="space-y-2 mb-4">
+                            {blindSpotData.quadrants.slowIncorrect.map(card => {
+                              const accuracy = Math.round((card.totalCorrect ?? 0) / (card.totalAnswers ?? 1) * 100);
+                              return (
+                                <div key={card.id} className="flex items-center justify-between bg-orange-500/5 border border-orange-500/10 rounded-xl px-4 py-3 gap-4">
+                                  <p className="text-sm text-white/80 truncate flex-1">{card.front}</p>
+                                  <span className="text-[10px] font-bold text-orange-400 shrink-0">{accuracy}%</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {blindSpotData.pendingCount > 0 && (
+                      <p className="text-[10px] text-brand-muted/60">
+                        {blindSpotData.pendingCount} card{blindSpotData.pendingCount !== 1 ? 's' : ''} not yet studied with timing data
+                      </p>
                     )}
                   </div>
                 )}

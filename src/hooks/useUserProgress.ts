@@ -39,6 +39,8 @@ export type CardUpdateRecord = Record<string, {
   srsRepetitions?: number;
   sessionAnswers?: number;
   sessionCorrect?: number;
+  responseTimeMs?: number;
+  responseTimeIsCorrect?: boolean;
 }>;
 
 export interface UserCardProgress {
@@ -94,6 +96,11 @@ export interface Card {
   scenarioText?: string;
   scenarioOrder?: number;
   lockOptionOrder?: boolean;
+  wordCount?: number;
+  avgResponseTimeMs?: number;
+  avgNormalizedResponseMs?: number;
+  responseTimeSamples?: number;
+  lastThreeNormalizedTimes?: number[];
 }
 
 export interface Archipelago {
@@ -818,6 +825,11 @@ export function useUserProgress() {
         scenarioId: data.scenarioId,
         scenarioText: data.scenarioText,
         scenarioOrder: data.scenarioOrder,
+        wordCount: data.wordCount,
+        avgResponseTimeMs: data.avgResponseTimeMs,
+        avgNormalizedResponseMs: data.avgNormalizedResponseMs,
+        responseTimeSamples: data.responseTimeSamples,
+        lastThreeNormalizedTimes: data.lastThreeNormalizedTimes,
       };
     };
 
@@ -1383,6 +1395,17 @@ export function useUserProgress() {
     return payload;
   };
 
+  const computeWordCount = (card: Card): number => {
+    const parts = [
+      card.front,
+      card.back,
+      card.scenarioText ?? '',
+      ...(card.options ?? []),
+      ...(card.pairs?.flatMap(p => [p.left, ...p.rights]) ?? []),
+    ];
+    return parts.join(' ').split(/\s+/).filter(Boolean).length;
+  };
+
   const buildCardPayload = (card: Card, update: CardUpdateRecord[string], isCollab: boolean, uid: string): Record<string, unknown> => {
     if (isCollab) {
       const prefix = `userProgress.${uid}`;
@@ -1427,6 +1450,18 @@ export function useUserProgress() {
     if (update.consecutiveCorrect !== undefined) payload.consecutiveCorrect = update.consecutiveCorrect;
     if (update.consecutiveIncorrect !== undefined) payload.consecutiveIncorrect = update.consecutiveIncorrect;
     if (update.nextTierUnlocked !== undefined) payload.nextTierUnlocked = update.nextTierUnlocked;
+    if (update.responseTimeMs !== undefined) {
+      const wc = card.wordCount ?? computeWordCount(card);
+      const normalizedMs = update.responseTimeMs / Math.max(wc, 1);
+      const n = (card.responseTimeSamples ?? 0) + 1;
+      const prevAvgRaw = card.avgResponseTimeMs ?? update.responseTimeMs;
+      const prevAvgNorm = card.avgNormalizedResponseMs ?? normalizedMs;
+      payload.wordCount = wc;
+      payload.avgResponseTimeMs = (prevAvgRaw * (n - 1) + update.responseTimeMs) / n;
+      payload.avgNormalizedResponseMs = (prevAvgNorm * (n - 1) + normalizedMs) / n;
+      payload.responseTimeSamples = n;
+      payload.lastThreeNormalizedTimes = [...(card.lastThreeNormalizedTimes ?? []), normalizedMs].slice(-3);
+    }
     return payload;
   };
 

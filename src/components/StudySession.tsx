@@ -162,6 +162,8 @@ interface StudySessionProps {
 
 export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', isOnline = true, onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
+  const cardStartTime = useRef<number>(Date.now());
+  const firstAttemptRecorded = useRef<Set<string>>(new Set());
   const cardIslandRef = useRef<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -398,6 +400,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   } : null;
 
   useEffect(() => {
+    cardStartTime.current = Date.now();
+  }, [currentIndex]);
+
+  useEffect(() => {
     if (currentCard?.front && currentCard.islandName) {
       cardIslandRef.current[currentCard.front] = currentCard.islandName;
     }
@@ -408,6 +414,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       onProgressUpdate?.(cardUpdates, scoreDelta, sessionMaxStreak);
     }
   }, [cardUpdates, scoreDelta, sessionMaxStreak]);
+
+  const captureResponseTime = (cardFront: string): number | undefined => {
+    if (firstAttemptRecorded.current.has(cardFront)) return undefined;
+    firstAttemptRecorded.current.add(cardFront);
+    return Date.now() - cardStartTime.current;
+  };
 
   const buildMeta = (): SessionMeta => ({
     sessionDurationMs: Date.now() - sessionStartTime.current,
@@ -689,6 +701,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setLastFibSubmitted(fibInput);
     const correct = input === answer;
     setIsFibCorrect(correct);
+    const fibResponseTimeMs = captureResponseTime(currentCard.front);
 
     if (correct) {
       setIsFlipped(true); // show the correct answer
@@ -732,6 +745,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           consecutiveCorrect: fibCC,
           consecutiveIncorrect: fibCI,
           ...fibExtra,
+          ...(fibResponseTimeMs !== undefined && { responseTimeMs: fibResponseTimeMs, responseTimeIsCorrect: true }),
         },
         ...(fibParent && { [fibParent.front]: fibParent.update }),
       }));
@@ -777,6 +791,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           consecutiveCorrect: fibCC2,
           consecutiveIncorrect: fibCI2,
           ...fibExtra2,
+          ...(fibResponseTimeMs !== undefined && { responseTimeMs: fibResponseTimeMs, responseTimeIsCorrect: false }),
         },
         ...(fibParent2 && { [fibParent2.front]: fibParent2.update }),
       }));
@@ -786,6 +801,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const handleFlashcardGrade = (isCorrect: boolean, e: React.MouseEvent) => {
     if (!currentCard) return;
+    const gradeResponseTimeMs = captureResponseTime(currentCard.front);
     if (isCorrect && window.navigator?.vibrate) window.navigator.vibrate(50);
     if (isCorrect) triggerSparkle(e);
 
@@ -846,6 +862,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         consecutiveCorrect: gradeCC,
         consecutiveIncorrect: gradeCI,
         ...gradeExtra,
+        ...(gradeResponseTimeMs !== undefined && { responseTimeMs: gradeResponseTimeMs, responseTimeIsCorrect: isCorrect }),
       },
       ...(gradeParent && { [gradeParent.front]: gradeParent.update }),
     }));
@@ -855,6 +872,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const handleFlashcardEasy = (e: React.MouseEvent) => {
     if (!currentCard) return;
+    const easyResponseTimeMs = captureResponseTime(currentCard.front);
     if (window.navigator?.vibrate) window.navigator.vibrate(50);
     triggerSparkle(e);
 
@@ -894,6 +912,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         consecutiveCorrect: easyCC,
         consecutiveIncorrect: easyCI,
         ...easyExtra,
+        ...(easyResponseTimeMs !== undefined && { responseTimeMs: easyResponseTimeMs, responseTimeIsCorrect: true }),
       },
       ...(easyParent && { [easyParent.front]: easyParent.update }),
     }));
@@ -903,6 +922,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const handleFlashcardHard = () => {
     if (!currentCard) return;
+    const hardResponseTimeMs = captureResponseTime(currentCard.front);
     if (window.navigator?.vibrate) window.navigator.vibrate(30);
 
     if (pendingConfidence !== null) {
@@ -945,6 +965,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         consecutiveCorrect: hardCC,
         consecutiveIncorrect: hardCI,
         ...hardExtra,
+        ...(hardResponseTimeMs !== undefined && { responseTimeMs: hardResponseTimeMs, responseTimeIsCorrect: true }),
       },
       ...(hardParent && { [hardParent.front]: hardParent.update }),
     }));
@@ -1030,6 +1051,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const handleMultiSelectSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentCard) return;
+    const msResponseTimeMs = captureResponseTime(currentCard.front);
 
     setIsFlipped(true);
     // Use getMcqCorrectOpts so this handler works for both legacy multi-select and multi-answer MCQ cards
@@ -1093,6 +1115,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         consecutiveCorrect: msCC,
         consecutiveIncorrect: msCI,
         ...msExtra,
+        ...(msResponseTimeMs !== undefined && { responseTimeMs: msResponseTimeMs, responseTimeIsCorrect: isCorrect }),
       },
       ...(msParent && { [msParent.front]: msParent.update }),
     }));
@@ -1101,6 +1124,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const handleSequenceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentCard || !currentCard.options) return;
+    const seqResponseTimeMs = captureResponseTime(currentCard.front);
 
     setIsFlipped(true);
     const isCorrect = shuffledSequence.every((item, idx) => item.text === currentCard.options![idx]);
@@ -1150,6 +1174,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         consecutiveCorrect: seqCC,
         consecutiveIncorrect: seqCI,
         ...seqExtra,
+        ...(seqResponseTimeMs !== undefined && { responseTimeMs: seqResponseTimeMs, responseTimeIsCorrect: isCorrect }),
       },
       ...(seqParent && { [seqParent.front]: seqParent.update }),
     }));
@@ -1158,7 +1183,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const handleOptionSelect = (option: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!currentCard || selectedOption !== null) return; // Prevent multiple clicks
-
+    const mcqResponseTimeMs = captureResponseTime(currentCard.front);
     setSelectedOption(option);
 
     const isCorrect = option === currentCard?.back;
@@ -1198,6 +1223,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           consecutiveCorrect: mcqCC,
           consecutiveIncorrect: mcqCI,
           ...mcqExtra,
+          ...(mcqResponseTimeMs !== undefined && { responseTimeMs: mcqResponseTimeMs, responseTimeIsCorrect: true }),
         },
         ...(mcqParent && { [mcqParent.front]: mcqParent.update }),
       }));
@@ -1238,6 +1264,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           consecutiveCorrect: mcqWCC,
           consecutiveIncorrect: mcqWCI,
           ...mcqWExtra,
+          ...(mcqResponseTimeMs !== undefined && { responseTimeMs: mcqResponseTimeMs, responseTimeIsCorrect: false }),
         },
         ...(mcqWParent && { [mcqWParent.front]: mcqWParent.update }),
       }));
@@ -1391,6 +1418,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
         // Check if completely done
         if (nextMatchedRights.size === matchingRights.length) {
+          const matchResponseTimeMs = captureResponseTime(currentCard.front);
           // Finished card
           if (matchingMistakesCount === 0) {
             const newStreak = streak + 1;
@@ -1423,6 +1451,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 consecutiveCorrect: matchCC,
                 consecutiveIncorrect: matchCI,
                 ...matchExtra,
+                ...(matchResponseTimeMs !== undefined && { responseTimeMs: matchResponseTimeMs, responseTimeIsCorrect: true }),
               },
               ...(matchParent && { [matchParent.front]: matchParent.update }),
             }));
@@ -1463,6 +1492,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 consecutiveCorrect: matchWCC,
                 consecutiveIncorrect: matchWCI,
                 ...matchWExtra,
+                ...(matchResponseTimeMs !== undefined && { responseTimeMs: matchResponseTimeMs, responseTimeIsCorrect: false }),
               },
               ...(matchWParent && { [matchWParent.front]: matchWParent.update }),
             }));
