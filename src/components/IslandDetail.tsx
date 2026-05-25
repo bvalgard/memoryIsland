@@ -123,6 +123,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [loadingCollaborators, setLoadingCollaborators] = useState(false);
   const [showCollabInvite, setShowCollabInvite] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showIslandImageModal, setShowIslandImageModal] = useState(false);
   const [movingCardIndex, setMovingCardIndex] = useState<number | null>(null);
   const [cardType, setCardType] = useState<Card['type']>('flashcard');
   const [front, setFront] = useState('');
@@ -920,10 +921,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             <ArrowLeft className="w-5 h-5" />
           </button>
           
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] relative bg-black/40 flex items-center justify-center shrink-0 border-brand-border mt-1">
-            <img 
-              src={imageSrc} 
-              alt={`${masteryLevel} island`} 
+          <button
+            onClick={() => setShowIslandImageModal(true)}
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] relative bg-black/40 flex items-center justify-center shrink-0 border-brand-border mt-1 cursor-pointer hover:border-white/30 hover:scale-105 transition-all"
+            title="View full image"
+          >
+            <img
+              src={imageSrc}
+              alt={`${masteryLevel} island`}
               className="w-[130%] h-[130%] object-cover"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
@@ -932,7 +937,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 else target.src = 'https://images.unsplash.com/photo-1523363065056-11f8b449174b?auto=format&fit=crop&q=80&w=200&h=200';
               }}
             />
-          </div>
+          </button>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-1 flex-wrap">
@@ -3103,6 +3108,36 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         }}
         onCancel={() => setShowResetConfirm(false)}
       />
+
+      {showIslandImageModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowIslandImageModal(false)}
+        >
+          <div
+            className="relative max-w-2xl w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={imageSrc}
+              alt={`${masteryLevel} island`}
+              className="w-full h-auto rounded-2xl shadow-2xl"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (masteryLevel === 'struggling') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=800';
+                else if (masteryLevel === 'learning') target.src = 'https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?auto=format&fit=crop&q=80&w=800';
+                else target.src = 'https://images.unsplash.com/photo-1523363065056-11f8b449174b?auto=format&fit=crop&q=80&w=800';
+              }}
+            />
+            <button
+              onClick={() => setShowIslandImageModal(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
