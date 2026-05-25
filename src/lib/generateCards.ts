@@ -1,8 +1,7 @@
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { Card } from '../hooks/useUserProgress';
 
-const GEMINI_MODEL = 'gemini-3.5-flash';
 const DAILY_LIMIT = 20;
 
 async function getRateLimitData(userId: string): Promise<{ date: string; count: number }> {
@@ -48,31 +47,38 @@ function friendlyApiError(err: unknown): string {
   return 'Generation failed. Please try again.';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RawCard = Record<string, any>;
+const ALL_TYPES = ['mcq', 'multi-select', 'sequencing', 'fill-in-the-blank', 'flashcard'] as const;
 
-export async function generateCardsFromNotes(
-  notes: string,
-  cardCount: number,
-  userId: string
-): Promise<Card[]> {
-  const remaining = await getRemainingGenerations(userId);
-  if (remaining === 0) throw new Error('Daily generation limit reached. Try again tomorrow.');
+function buildTypeInstructions(selected: string[]): string {
+  const active = ALL_TYPES.filter(t => selected.includes(t));
+  const hasMcq = active.includes('mcq');
+  const shares: Partial<Record<string, number>> = {};
 
-  const apiKey = (process.env as Record<string, string>).GEMINI_API_KEY;
-  if (!apiKey) throw new Error('AI generation is not configured.');
+  if (hasMcq) {
+    shares['mcq'] = 50;
+    const rest = active.filter(t => t !== 'mcq');
+    const each = rest.length > 0 ? Math.floor(50 / rest.length) : 0;
+    rest.forEach(t => { shares[t] = each; });
+  } else {
+    const each = Math.floor(100 / active.length);
+    active.forEach(t => { shares[t] = each; });
+  }
 
-  const { GoogleGenAI } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey });
+  const lines: string[] = ['Choose card types that best fit each piece of knowledge:'];
+  if (shares['mcq'])               lines.push(`- mcq: ~${shares['mcq']}% — factual recall with plausible distractors`);
+  if (shares['multi-select'])      lines.push(`- multi-select: ~${shares['multi-select']}% — when multiple answers are simultaneously correct`);
+  if (shares['sequencing'])        lines.push(`- sequencing: ~${shares['sequencing']}% — when order matters (steps, stages, progression)`);
+  if (shares['fill-in-the-blank']) lines.push(`- fill-in-the-blank: ~${shares['fill-in-the-blank']}% — key terms or values worth memorizing verbatim`);
+  if (shares['flashcard'])         lines.push(`- flashcard: ~${shares['flashcard']}% — simple definitions that don't fit other formats`);
+  lines.push(`\nOnly use these types: ${active.join(', ')}. Do NOT generate any other types.`);
+  return lines.join('\n');
+}
 
-  const prompt = `You are a medical/academic flashcard generator. Create exactly ${cardCount} study cards from the notes below.
+function buildPrompt(notes: string, cardCount: number, selectedTypes: string[], instructions?: string): string {
+  return `You are a medical/academic flashcard generator. Create exactly ${cardCount} study cards from the notes below.
+${instructions ? `\nAdditional instructions: ${instructions}\n` : ''}
 
-Choose card types that best fit each piece of knowledge:
-- mcq: ~50% — factual recall with plausible distractors
-- multi-select: ~15% — when multiple answers are simultaneously correct (e.g. "select all signs of X")
-- sequencing: ~10% — when order matters (steps, stages, progression)
-- fill-in-the-blank: ~10% — key terms or values worth memorizing verbatim
-- flashcard: ~15% — simple definitions that don't fit other formats
+${buildTypeInstructions(selectedTypes)}
 
 Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 
@@ -142,16 +148,52 @@ Rules:
 
 Notes:
 ${notes}`;
+}
 
-  let result: Awaited<ReturnType<typeof ai.models.generateContent>>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RawCard = Record<string, any>;
+
+export async function generateCardsFromNotes(
+  notes: string,
+  cardCount: number,
+  userId: string,
+  selectedTypes: string[] = [...ALL_TYPES],
+  instructions?: string
+): Promise<Card[]> {
+  const remaining = await getRemainingGenerations(userId);
+  if (remaining === 0) throw new Error('Daily generation limit reached. Try again tomorrow.');
+
+  const workerBase = ((import.meta as unknown as Record<string, Record<string, string>>).env.VITE_UPLOAD_WORKER_URL ?? '').replace(/\/+$/, '');
+  if (!workerBase) throw new Error('AI generation is not configured.');
+
+  const user = auth.currentUser;
+  if (!user) throw new Error('You must be signed in to generate cards.');
+  const token = await user.getIdToken();
+
+  const prompt = buildPrompt(notes, cardCount, selectedTypes, instructions);
+
+  let res: Response;
   try {
-    result = await ai.models.generateContent({ model: GEMINI_MODEL, contents: prompt });
+    res = await fetch(`${workerBase}/generate-cards`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ prompt }),
+    });
   } catch (err) {
     throw new Error(friendlyApiError(err));
   }
 
-  const text = result.text?.trim() ?? '';
-  const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const errMsg = errBody?.error ? JSON.stringify({ error: errBody.error }) : String(res.status);
+    throw new Error(friendlyApiError(new Error(errMsg)));
+  }
+
+  const { text } = await res.json() as { text: string };
+  const cleaned = (text ?? '').trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
   console.log('[generateCards] raw response:', cleaned.slice(0, 500));
 
   let parsed: RawCard[];
@@ -175,26 +217,19 @@ ${notes}`;
 
       if ((c.type === 'mcq' || c.type === 'multi-select') && Array.isArray(c.options) && c.options.length > 0) {
         return {
-          front,
-          back,
-          type: c.type,
+          front, back, type: c.type,
           options: c.options,
-          correctOptions: Array.isArray(c.correctOptions) && c.correctOptions.length > 0
-            ? c.correctOptions
-            : [back],
+          correctOptions: Array.isArray(c.correctOptions) && c.correctOptions.length > 0 ? c.correctOptions : [back],
           explanation: c.explanation ?? '',
           explanations: c.explanations ?? {},
         };
       }
-
       if (c.type === 'sequencing' && Array.isArray(c.options) && c.options.length > 0) {
         return { front, back, type: 'sequencing', options: c.options };
       }
-
       if (c.type === 'fill-in-the-blank') {
         return { front, back, type: 'fill-in-the-blank' };
       }
-
       return { front, back, type: 'flashcard' };
     });
 }

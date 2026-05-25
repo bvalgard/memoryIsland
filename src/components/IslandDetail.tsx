@@ -164,6 +164,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiNotes, setAiNotes] = useState('');
   const [aiCardCount, setAiCardCount] = useState(10);
+  const [aiSelectedTypes, setAiSelectedTypes] = useState<string[]>(['mcq', 'multi-select', 'sequencing', 'fill-in-the-blank', 'flashcard']);
+  const [aiInstructions, setAiInstructions] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiPreviewCards, setAiPreviewCards] = useState<Card[]>([]);
@@ -809,6 +811,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const openAiModal = async () => {
     setAiNotes('');
+    setAiInstructions('');
     setAiError(null);
     setAiPreviewCards([]);
     setAiModalOpen(true);
@@ -823,7 +826,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setAiLoading(true);
     setAiError(null);
     try {
-      const cards = await generateCardsFromNotes(aiNotes.trim(), aiCardCount, currentUserId);
+      const cards = await generateCardsFromNotes(aiNotes.trim(), aiCardCount, currentUserId, aiSelectedTypes, aiInstructions.trim() || undefined);
       setAiPreviewCards(cards);
       setAiRemaining(prev => (prev !== null ? Math.max(0, prev - 1) : null));
     } catch (err) {
@@ -3252,6 +3255,41 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                       className="w-full h-48 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-brand-primary/40 custom-scrollbar"
                       disabled={aiLoading}
                     />
+                    <textarea
+                      value={aiInstructions}
+                      onChange={e => setAiInstructions(e.target.value)}
+                      placeholder="Special instructions (optional) — e.g. use NCLEX-style phrasing, focus on clinical application, keep answers under one sentence…"
+                      className="w-full h-16 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-brand-primary/40"
+                      disabled={aiLoading}
+                    />
+
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] text-brand-muted uppercase tracking-widest">Card types</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {([
+                          { value: 'mcq', label: 'Multiple Choice' },
+                          { value: 'multi-select', label: 'Multi-Select' },
+                          { value: 'sequencing', label: 'Ordering' },
+                          { value: 'fill-in-the-blank', label: 'Fill in the Blank' },
+                          { value: 'flashcard', label: 'Flashcard' },
+                        ] as const).map(({ value, label }) => {
+                          const on = aiSelectedTypes.includes(value);
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setAiSelectedTypes(prev =>
+                                on && prev.length > 1 ? prev.filter(t => t !== value) : on ? prev : [...prev, value]
+                              )}
+                              className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${on ? 'bg-brand-primary/15 border-brand-primary/30 text-brand-primary' : 'bg-white/5 border-white/5 text-brand-muted/50'}`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-brand-muted uppercase tracking-widest">Cards</span>
