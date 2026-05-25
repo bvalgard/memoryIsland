@@ -884,19 +884,25 @@ export default function Dashboard() {
             >
               Cancel
             </button>
-            <button
-              disabled={studySelection.size === 0}
-              onClick={() => {
-                setFrozenStudySelection(studySelection);
-                setSelectedIslandId('multi-select');
-                setStudyMode('all');
-                setIsStudying(true);
-                setStudySelection(null);
-              }}
-              className="btn-primary text-sm px-4 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Study {studySelection.size > 0 ? studySelection.size : ''} {studySelection.size === 1 ? 'Island' : 'Islands'}
-            </button>
+            {(['all', 'due'] as const).map(mode => (
+              <button
+                key={mode}
+                disabled={studySelection.size === 0}
+                onClick={() => {
+                  setFrozenStudySelection(studySelection);
+                  setSelectedIslandId('multi-select');
+                  setStudyMode(mode);
+                  setIsStudying(true);
+                  setStudySelection(null);
+                }}
+                className={mode === 'all'
+                  ? "btn-primary !h-auto text-sm px-4 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  : "text-sm px-4 py-1.5 rounded-xl border border-sky-500/40 text-sky-400 hover:bg-sky-500/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                }
+              >
+                {mode === 'all' ? 'Study All' : 'Due Only'}
+              </button>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>
