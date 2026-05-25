@@ -461,7 +461,7 @@ export function useQuestions() {
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `You are a memory coach. Write a short, vivid memory hook (1-2 sentences) to help someone remember:\n\nConcept: ${question.frontText}\nAnswer: ${question.backText}\n\nRespond with only the memory hook.`;
       const result = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.5-flash',
         contents: prompt,
       });
       const hint = result.text?.trim();

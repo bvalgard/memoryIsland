@@ -1,9 +1,10 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
+import { generateCardsFromNotes, getRemainingGenerations } from '../lib/generateCards';
 import { cn, formatTimeUntil, getActiveTierCards } from '../lib/utils';
 import ShareModal from './ShareModal';
 import ConfirmDialog from './ConfirmDialog';
@@ -160,6 +161,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [backImageCredit, setBackImageCredit] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiNotes, setAiNotes] = useState('');
+  const [aiCardCount, setAiCardCount] = useState(10);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPreviewCards, setAiPreviewCards] = useState<Card[]>([]);
+  const [aiRemaining, setAiRemaining] = useState<number | null>(null);
+  const [aiSaving, setAiSaving] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
@@ -796,6 +805,43 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     const file = e.target.files?.[0];
     if (!file) return;
     parseCSV(file);
+  };
+
+  const openAiModal = async () => {
+    setAiNotes('');
+    setAiError(null);
+    setAiPreviewCards([]);
+    setAiModalOpen(true);
+    if (currentUserId) {
+      const remaining = await getRemainingGenerations(currentUserId).catch(() => null);
+      setAiRemaining(remaining);
+    }
+  };
+
+  const handleAiGenerate = async () => {
+    if (!currentUserId || !aiNotes.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const cards = await generateCardsFromNotes(aiNotes.trim(), aiCardCount, currentUserId);
+      setAiPreviewCards(cards);
+      setAiRemaining(prev => (prev !== null ? Math.max(0, prev - 1) : null));
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Generation failed. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAiSave = () => {
+    if (aiSaving) return;
+    setAiSaving(true);
+    const cards = aiPreviewCards.filter(c => c.front.trim() && c.back.trim());
+    if (cards.length > 0) onAddCards(cards);
+    setAiModalOpen(false);
+    setAiPreviewCards([]);
+    setAiNotes('');
+    setAiSaving(false);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -1557,14 +1603,26 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   <p className="text-xs font-bold text-white/40 mb-1">No cards yet</p>
                   <p className="text-[10px] text-brand-muted/40">Build your first card on the canvas</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 text-[10px] text-brand-muted hover:text-white px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
-                >
-                  <Upload className="w-3 h-3" />
-                  Import CSV
-                </button>
+                <div className="flex gap-2">
+                  {currentUserId && (
+                    <button
+                      type="button"
+                      onClick={openAiModal}
+                      className="flex items-center gap-1.5 text-[10px] text-brand-primary px-3 py-1.5 rounded-xl bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/20 transition-all"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      Generate with AI
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-[10px] text-brand-muted hover:text-white px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                  >
+                    <Upload className="w-3 h-3" />
+                    Import CSV
+                  </button>
+                </div>
               </div>
             ) : (() => {
               const filteredCards = cardSearch.trim()
@@ -1733,6 +1791,15 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 </AnimatePresence>
               </div>
               <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+              {currentUserId && (
+                <button
+                  onClick={openAiModal}
+                  className="text-[10px] flex items-center gap-1.5 bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary px-2.5 py-1.5 rounded-lg border border-brand-primary/20 transition-all"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  AI
+                </button>
+              )}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
@@ -3138,6 +3205,156 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           </div>
         </div>
       )}
+
+      {/* AI Card Generation Modal */}
+      <AnimatePresence>
+        {aiModalOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
+              onClick={() => { if (!aiLoading) setAiModalOpen(false); }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-[90] flex items-center justify-center p-4 pointer-events-none"
+            >
+              <div className="pointer-events-auto w-full max-w-lg glass rounded-[24px] border border-white/10 shadow-2xl flex flex-col max-h-[85vh]">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-brand-primary" />
+                    <span className="text-sm font-bold text-white">Generate from Notes</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {aiRemaining !== null && (
+                      <span className="text-[10px] text-brand-muted/60">{aiRemaining} generations left today</span>
+                    )}
+                    {!aiLoading && (
+                      <button onClick={() => setAiModalOpen(false)} className="text-brand-muted hover:text-white transition-colors">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {aiPreviewCards.length === 0 ? (
+                  /* Input screen */
+                  <div className="flex flex-col gap-4 p-6">
+                    <textarea
+                      value={aiNotes}
+                      onChange={e => setAiNotes(e.target.value)}
+                      placeholder="Paste your notes, a paragraph, a textbook excerpt… AI will turn it into flashcards."
+                      className="w-full h-48 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-brand-primary/40 custom-scrollbar"
+                      disabled={aiLoading}
+                    />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-brand-muted uppercase tracking-widest">Cards</span>
+                        <div className="flex gap-1">
+                          {[5, 10, 15, 20].map(n => (
+                            <button
+                              key={n}
+                              onClick={() => setAiCardCount(n)}
+                              className={`w-8 h-7 rounded-lg text-[11px] font-bold transition-colors ${aiCardCount === n ? 'bg-brand-primary text-white' : 'bg-white/5 text-brand-muted hover:bg-white/10'}`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleAiGenerate}
+                        disabled={aiLoading || !aiNotes.trim() || aiRemaining === 0}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white text-sm font-semibold hover:bg-brand-primary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {aiLoading ? (
+                          <>
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </motion.div>
+                            Generating…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Generate
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {aiError && (
+                      <p className="text-xs text-red-400 text-center">{aiError}</p>
+                    )}
+                  </div>
+                ) : (
+                  /* Preview screen */
+                  <>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+                      <p className="text-[10px] text-brand-muted uppercase tracking-widest px-1 mb-1">{aiPreviewCards.length} cards generated — edit before saving</p>
+                      {aiPreviewCards.map((card, i) => (
+                        <div key={i} className="bg-white/5 rounded-2xl border border-white/10 p-3 flex flex-col gap-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <textarea
+                              value={card.front}
+                              onChange={e => setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, front: e.target.value } : c))}
+                              className="flex-1 bg-transparent text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed"
+                              rows={2}
+                              placeholder="Question"
+                            />
+                            <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md ${card.type === 'mcq' ? 'bg-brand-primary/15 text-brand-primary' : 'bg-white/5 text-brand-muted/50'}`}>
+                              {card.type === 'mcq' ? 'MCQ' : 'Flash'}
+                            </span>
+                          </div>
+                          <div className="h-px bg-white/5" />
+                          <textarea
+                            value={card.back}
+                            onChange={e => setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, back: e.target.value } : c))}
+                            className="w-full bg-transparent text-xs text-brand-muted placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed"
+                            rows={2}
+                            placeholder="Answer"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 pb-4 pt-2 flex gap-2 shrink-0 border-t border-white/5">
+                      <button
+                        onClick={() => setAiPreviewCards([])}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={handleAiSave}
+                        disabled={aiSaving}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-brand-primary text-white hover:bg-brand-primary/80 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                      >
+                        {aiSaving ? (
+                          <>
+                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </motion.div>
+                            Saving…
+                          </>
+                        ) : (
+                          `Save ${aiPreviewCards.filter(c => c.front.trim()).length} cards`
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
