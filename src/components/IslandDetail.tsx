@@ -3309,8 +3309,18 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                               rows={2}
                               placeholder="Question"
                             />
-                            <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md ${card.type === 'mcq' ? 'bg-brand-primary/15 text-brand-primary' : 'bg-white/5 text-brand-muted/50'}`}>
-                              {card.type === 'mcq' ? 'MCQ' : 'Flash'}
+                            <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md ${
+                              card.type === 'mcq' ? 'bg-brand-primary/15 text-brand-primary' :
+                              card.type === 'multi-select' ? 'bg-purple-500/15 text-purple-400' :
+                              card.type === 'sequencing' ? 'bg-amber-500/15 text-amber-400' :
+                              card.type === 'fill-in-the-blank' ? 'bg-emerald-500/15 text-emerald-400' :
+                              'bg-white/5 text-brand-muted/50'
+                            }`}>
+                              {card.type === 'mcq' ? 'MCQ' :
+                               card.type === 'multi-select' ? 'Multi' :
+                               card.type === 'sequencing' ? 'Order' :
+                               card.type === 'fill-in-the-blank' ? 'Fill' :
+                               'Flash'}
                             </span>
                           </div>
                           <div className="h-px bg-white/5" />

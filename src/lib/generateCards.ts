@@ -32,17 +32,24 @@ async function incrementGenerationCount(userId: string): Promise<void> {
   }
 }
 
-type RawCard =
-  | { type: 'flashcard'; front: string; back: string }
-  | {
-      type: 'mcq';
-      front: string;
-      back: string;
-      options: string[];
-      correctOptions: string[];
-      explanation: string;
-      explanations: Record<string, string>;
-    };
+function friendlyApiError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  try {
+    const body = JSON.parse(msg.match(/\{[\s\S]*\}/)?.[0] ?? '');
+    const code: number = body?.error?.code ?? 0;
+    const status: string = body?.error?.status ?? '';
+    if (code === 503 || status === 'UNAVAILABLE') return 'Gemini is overloaded right now. Wait a moment and try again.';
+    if (code === 429 || status === 'RESOURCE_EXHAUSTED') return 'Rate limit hit. Wait a few seconds and try again.';
+    if (code === 401 || code === 403) return 'AI generation is not configured correctly. Check your API key.';
+    if (body?.error?.message) return `AI error: ${body.error.message}`;
+  } catch { /* not JSON — fall through */ }
+  if (/overload|unavailable|capacity/i.test(msg)) return 'Gemini is overloaded right now. Wait a moment and try again.';
+  if (/rate.?limit|quota/i.test(msg)) return 'Rate limit hit. Wait a few seconds and try again.';
+  return 'Generation failed. Please try again.';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RawCard = Record<string, any>;
 
 export async function generateCardsFromNotes(
   notes: string,
@@ -60,27 +67,65 @@ export async function generateCardsFromNotes(
 
   const prompt = `You are a medical/academic flashcard generator. Create exactly ${cardCount} study cards from the notes below.
 
-Prefer MCQ cards (aim for ~70%). Use flashcard only for simple definitions or facts that don't lend themselves to multiple choice.
+Choose card types that best fit each piece of knowledge:
+- mcq: ~50% — factual recall with plausible distractors
+- multi-select: ~15% — when multiple answers are simultaneously correct (e.g. "select all signs of X")
+- sequencing: ~10% — when order matters (steps, stages, progression)
+- fill-in-the-blank: ~10% — key terms or values worth memorizing verbatim
+- flashcard: ~15% — simple definitions that don't fit other formats
 
 Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
 
-Each MCQ card must follow this exact shape:
+--- MCQ ---
 {
   "type": "mcq",
-  "front": "<clinical question>",
-  "back": "<correct answer text — must exactly match one of the options>",
-  "options": ["<correct answer>", "<wrong A>", "<wrong B>", "<wrong C>"],
-  "correctOptions": ["<correct answer>"],
-  "explanation": "<1-2 sentence explanation of the underlying concept>",
+  "front": "<question>",
+  "back": "<correct answer — must exactly match one entry in options and correctOptions>",
+  "options": ["<correct>", "<wrong>", "<wrong>", "<wrong>"],
+  "correctOptions": ["<correct>"],
+  "explanation": "<1-2 sentence concept explanation>",
   "explanations": {
-    "<correct answer>": "Correct — <why this is right>",
-    "<wrong A>": "Incorrect — <why this is wrong>",
-    "<wrong B>": "Incorrect — <why this is wrong>",
-    "<wrong C>": "Incorrect — <why this is wrong>"
+    "<correct>": "Correct — <why>",
+    "<wrong>": "Incorrect — <why>",
+    "<wrong>": "Incorrect — <why>",
+    "<wrong>": "Incorrect — <why>"
   }
 }
 
-Each flashcard must follow this exact shape:
+--- MULTI-SELECT (multiple correct answers) ---
+{
+  "type": "multi-select",
+  "front": "<question asking to select all that apply>",
+  "back": "<comma-separated list of correct answers>",
+  "options": ["<opt1>", "<opt2>", "<opt3>", "<opt4>", "<opt5>"],
+  "correctOptions": ["<opt1>", "<opt3>"],
+  "explanation": "<concept explanation>",
+  "explanations": {
+    "<opt1>": "Correct — <why>",
+    "<opt2>": "Incorrect — <why>",
+    "<opt3>": "Correct — <why>",
+    "<opt4>": "Incorrect — <why>",
+    "<opt5>": "Incorrect — <why>"
+  }
+}
+
+--- SEQUENCING (put steps in correct order) ---
+{
+  "type": "sequencing",
+  "front": "<question asking to order the following>",
+  "back": "<brief description of the correct sequence>",
+  "options": ["<step 1>", "<step 2>", "<step 3>", "<step 4>"]
+}
+Note: options must be listed in the CORRECT order — the app will shuffle them for the learner.
+
+--- FILL-IN-THE-BLANK ---
+{
+  "type": "fill-in-the-blank",
+  "front": "<sentence with ___ where the key term belongs>",
+  "back": "<exact word or phrase that fills the blank>"
+}
+
+--- FLASHCARD ---
 {
   "type": "flashcard",
   "front": "<question or concept>",
@@ -88,19 +133,22 @@ Each flashcard must follow this exact shape:
 }
 
 Rules:
-- Every MCQ must have exactly 4 options
-- The value of "back" must exactly match one of the strings in "options" and in "correctOptions"
-- Every option in "explanations" must exactly match a string in "options"
-- Options should be shuffled (correct answer not always first)
-- Plausible distractors only — no obviously wrong answers
+- Every MCQ and multi-select must have at least 4 options
+- MCQ correctOptions has exactly 1 entry; multi-select has 2 or more
+- "back" and all "correctOptions" strings must exactly match strings in "options"
+- All "explanations" keys must exactly match strings in "options"
+- Shuffle options (correct answer not always first)
+- Plausible distractors only
 
 Notes:
 ${notes}`;
 
-  const result = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-  });
+  let result: Awaited<ReturnType<typeof ai.models.generateContent>>;
+  try {
+    result = await ai.models.generateContent({ model: GEMINI_MODEL, contents: prompt });
+  } catch (err) {
+    throw new Error(friendlyApiError(err));
+  }
 
   const text = result.text?.trim() ?? '';
   const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
@@ -109,7 +157,7 @@ ${notes}`;
   let parsed: RawCard[];
   try {
     parsed = JSON.parse(cleaned);
-    console.log('[generateCards] types returned:', parsed.map((c: any) => c.type));
+    console.log('[generateCards] types returned:', parsed.map((c: RawCard) => c.type));
   } catch {
     throw new Error('AI returned an unreadable format. Please try again.');
   }
@@ -119,24 +167,34 @@ ${notes}`;
   await incrementGenerationCount(userId);
 
   return parsed
-    .filter(c => typeof c.front === 'string' && typeof c.back === 'string' && c.front.trim() && c.back.trim())
+    .filter((c: RawCard) => typeof c.front === 'string' && typeof c.back === 'string' && c.front.trim() && c.back.trim())
     .slice(0, cardCount)
-    .map((c): Card => {
-      if (c.type === 'mcq' && Array.isArray(c.options) && c.options.length > 0) {
+    .map((c: RawCard): Card => {
+      const front = c.front.trim();
+      const back = c.back.trim();
+
+      if ((c.type === 'mcq' || c.type === 'multi-select') && Array.isArray(c.options) && c.options.length > 0) {
         return {
-          front: c.front.trim(),
-          back: c.back.trim(),
-          type: 'mcq',
+          front,
+          back,
+          type: c.type,
           options: c.options,
-          correctOptions: c.correctOptions ?? [c.back.trim()],
+          correctOptions: Array.isArray(c.correctOptions) && c.correctOptions.length > 0
+            ? c.correctOptions
+            : [back],
           explanation: c.explanation ?? '',
           explanations: c.explanations ?? {},
         };
       }
-      return {
-        front: c.front.trim(),
-        back: c.back.trim(),
-        type: 'flashcard',
-      };
+
+      if (c.type === 'sequencing' && Array.isArray(c.options) && c.options.length > 0) {
+        return { front, back, type: 'sequencing', options: c.options };
+      }
+
+      if (c.type === 'fill-in-the-blank') {
+        return { front, back, type: 'fill-in-the-blank' };
+      }
+
+      return { front, back, type: 'flashcard' };
     });
 }
