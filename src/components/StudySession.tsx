@@ -175,6 +175,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const [showHint, setShowHint] = useState(false);
   const [cardUpdates, setCardUpdates] = useState<CardUpdateRecord>({});
   const [streak, setStreak] = useState(0);
+  const [liveCorrect, setLiveCorrect] = useState(0);
+  const [liveIncorrect, setLiveIncorrect] = useState(0);
   const [maxStreak, setMaxStreak] = useState(allTimeBestStreak);
   const [sessionMaxStreak, setSessionMaxStreak] = useState(0);
   const [isNewRecord, setIsNewRecord] = useState(false);
@@ -694,6 +696,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
       const usedClues = cluesUsed > 0;
 
+      setLiveCorrect(prev => prev + 1);
       if (!usedClues) {
         setScoreDelta(prev => prev + 1);
         setStreak(prev => {
@@ -742,6 +745,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setIsFlipped(true);
       setLastAnswerCorrect(false);
       setStreak(0);
+      setLiveIncorrect(prev => prev + 1);
       setShowAskButton(true);
 
       const srsFibWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
@@ -799,8 +803,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
+      setLiveCorrect(prev => prev + 1);
     } else {
       setStreak(0);
+      setLiveIncorrect(prev => prev + 1);
     }
 
     const srs = computeSM2(
@@ -861,6 +867,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const newStreak = streak + 1;
     setStreak(newStreak);
     updateStreakWithRecord(newStreak);
+    setLiveCorrect(prev => prev + 1);
 
     const srs = computeSM2Easy(
       currentCard.srsRepetitions ?? 0,
@@ -911,6 +918,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const newStreak = streak + 1;
     setStreak(newStreak);
     updateStreakWithRecord(newStreak);
+    setLiveCorrect(prev => prev + 1);
 
     const srs = computeSM2Hard(
       currentCard.srsRepetitions ?? 0,
@@ -1046,8 +1054,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
+      setLiveCorrect(prev => prev + 1);
     } else {
       setStreak(0);
+      setLiveIncorrect(prev => prev + 1);
       setShowAskButton(true);
     }
 
@@ -1102,8 +1112,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
+      setLiveCorrect(prev => prev + 1);
     } else {
       setStreak(0);
+      setLiveIncorrect(prev => prev + 1);
     }
 
     const srsSeq = computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
@@ -1160,6 +1172,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
+      setLiveCorrect(prev => prev + 1);
 
       const srsMcqCorrect = computeSM2(4, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
       const status = intervalToStatus(srsMcqCorrect.interval);
@@ -1190,6 +1203,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       }));
     } else {
       setStreak(0);
+      setLiveIncorrect(prev => prev + 1);
       setShowAskButton(true);
 
       const srsMcqWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
@@ -1383,6 +1397,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             setStreak(newStreak);
             updateStreakWithRecord(newStreak);
             setScoreDelta(prev => prev + 1);
+            setLiveCorrect(prev => prev + 1);
 
             const srsMatchCorrect = computeSM2(5, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
             const status = intervalToStatus(srsMatchCorrect.interval);
@@ -1414,6 +1429,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             setDirection(1);
           } else {
             setStreak(0);
+            setLiveIncorrect(prev => prev + 1);
 
             const srsMatchWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
             const status = intervalToStatus(srsMatchWrong.interval);
@@ -2727,7 +2743,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 animate={{ scale: 1, color: '#ffffff' }}
                 className="text-xs md:text-sm font-black"
               >
-                {Object.values(cardUpdates as any).filter((c: any) => (c.sessionCorrect ?? 0) > 0).length}
+                {liveCorrect}
               </motion.span>
               <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80 text-center leading-none">Correct</span>
             </div>
@@ -2740,7 +2756,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 animate={{ scale: 1, color: '#ffffff' }}
                 className="text-xs md:text-sm font-black"
               >
-                {Object.values(cardUpdates as any).filter((c: any) => (c.sessionCorrect ?? 0) === 0).length}
+                {liveIncorrect}
               </motion.span>
               <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80 text-center leading-none">Incorrect</span>
             </div>

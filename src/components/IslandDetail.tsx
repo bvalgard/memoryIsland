@@ -273,6 +273,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [showHintField, setShowHintField] = useState(false);
   const [showExplanationField, setShowExplanationField] = useState(false);
   const [showImageField, setShowImageField] = useState(false);
+  const stickyFields = useRef({ hint: false, explanation: false, image: false });
+
+  const setShowHintFieldSticky = (v: boolean) => { stickyFields.current.hint = v; setShowHintField(v); };
+  const setShowExplanationFieldSticky = (v: boolean) => { stickyFields.current.explanation = v; setShowExplanationField(v); };
+  const setShowImageFieldSticky = (v: boolean) => { stickyFields.current.image = v; setShowImageField(v); };
 
   const openCollaboratorPanel = async () => {
     setShowCollaboratorPanel(true);
@@ -322,9 +327,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setScenarioPassage('');
     setScenarioQuestions([]);
     setScenarioSubFormOpen(false);
-    setShowHintField(false);
-    setShowExplanationField(false);
-    setShowImageField(false);
+    setShowHintField(stickyFields.current.hint);
+    setShowExplanationField(stickyFields.current.explanation);
+    setShowImageField(stickyFields.current.image);
   };
   
   const handleAddScenarioQuestion = () => {
@@ -2317,10 +2322,10 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3">Card Features</p>
             <div className="flex flex-col gap-3">
               {([
-                { label: 'Hint', value: showHintField, setter: setShowHintField },
-                { label: 'Explanation', value: showExplanationField, setter: setShowExplanationField },
+                { label: 'Hint', value: showHintField, setter: setShowHintFieldSticky },
+                { label: 'Explanation', value: showExplanationField, setter: setShowExplanationFieldSticky },
                 ...(['flashcard', 'mcq', 'fill-in-the-blank'].includes(cardType)
-                  ? [{ label: 'Image', value: showImageField, setter: setShowImageField }]
+                  ? [{ label: 'Image', value: showImageField, setter: setShowImageFieldSticky }]
                   : []),
               ] as { label: string; value: boolean; setter: (v: boolean) => void }[]).map(({ label, value, setter }) => (
                 <div key={label} className="flex items-center justify-between">
