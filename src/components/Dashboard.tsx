@@ -16,11 +16,13 @@ import NewArchipelagoModal from './NewArchipelagoModal';
 import IslandDetail from './IslandDetail';
 import StudySession from './StudySession';
 import ShareModal from './ShareModal';
+import LightboxImage from './LightboxImage';
 import { useSocial } from '../hooks/useSocial';
 import ConfirmDialog from './ConfirmDialog';
 import QuestionsBoard from './QuestionsBoard';
 import { useQuestions } from '../hooks/useQuestions';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import { useLongPress } from '../hooks/useLongPress';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -70,6 +72,8 @@ export default function Dashboard() {
   });
   const [isStudying, setIsStudying] = useState(false);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>('all');
+  const [studySelection, setStudySelection] = useState<Set<string> | null>(null);
+  const [frozenStudySelection, setFrozenStudySelection] = useState<Set<string> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -153,7 +157,7 @@ export default function Dashboard() {
   // Detect when a collaborative island/archipelago is deleted by its owner while we're viewing it
   useEffect(() => {
     if (loading || !progress) return;
-    if (selectedIslandId && selectedIslandId !== 'archipelago') {
+    if (selectedIslandId && selectedIslandId !== 'archipelago' && selectedIslandId !== 'multi-select') {
       const stillExists = (progress.islands || []).some(i => i.id === selectedIslandId);
       if (!stillExists) {
         setSelectedIslandId(null);
@@ -515,6 +519,19 @@ export default function Dashboard() {
     cards: allCards
   };
 
+  // Virtual island for cross-archipelago multi-select study
+  // Uses frozenStudySelection so the island stays populated while studying
+  const activeSelection = frozenStudySelection ?? studySelection;
+  const multiSelectIslands = activeSelection
+    ? currentIslands.filter(i => activeSelection.has(i.id))
+    : [];
+  const multiSelectIsland: Island = {
+    id: 'multi-select',
+    name: `${multiSelectIslands.length} Islands`,
+    color_score: multiSelectIslands.reduce((acc, i) => acc + i.color_score, 0),
+    cards: multiSelectIslands.flatMap(i => i.cards.map(c => ({ ...c, islandName: i.name }))),
+  };
+
   // Adjusted counts for Archipelago
   const graceMs = (progress?.settings?.graceWindowMinutes ?? 0) * 60_000;
   const globalStrugglingCount = allCards.filter(c => c.status === 'struggling' || c.needsWork).length;
@@ -723,14 +740,17 @@ export default function Dashboard() {
     setActiveModal('distress');
   };
 
-  const selectedIsland = selectedIslandId === 'archipelago' ? archipelagoIsland : currentIslands.find(i => i.id === selectedIslandId);
+  const selectedIsland =
+    selectedIslandId === 'archipelago' ? archipelagoIsland :
+    selectedIslandId === 'multi-select' ? multiSelectIsland :
+    currentIslands.find(i => i.id === selectedIslandId);
 
   const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
     if (!isOnline) {
       // Queue results for sync when back online
       await queueSession({
         islandId: selectedIslandId ?? '',
-        isArchipelago: selectedIslandId === 'archipelago',
+        isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select',
         cardUpdates,
         sessionMaxStreak: maxStreak,
         sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 },
@@ -741,10 +761,11 @@ export default function Dashboard() {
       clearDraft();
       setIsStudying(false);
       setSelectedIslandId(null);
+      setFrozenStudySelection(null);
       return;
     }
 
-    if (selectedIslandId === 'archipelago') {
+    if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') {
       await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
     } else if (selectedIslandId) {
       await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
@@ -770,6 +791,7 @@ export default function Dashboard() {
     clearDraft();
     setIsStudying(false);
     setSelectedIslandId(null);
+    setFrozenStudySelection(null);
   };
 
   return (
@@ -842,6 +864,43 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Study selection floating action bar */}
+      <AnimatePresence>
+        {studySelection !== null && (
+          <motion.div
+            key="study-selection-bar"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl bg-gray-900/95 border border-white/10 shadow-2xl backdrop-blur"
+          >
+            <span className="text-sm text-brand-muted">
+              {studySelection.size} island{studySelection.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={() => setStudySelection(null)}
+              className="text-xs text-brand-muted hover:text-white px-3 py-1.5 rounded-xl hover:bg-white/10 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={studySelection.size === 0}
+              onClick={() => {
+                setFrozenStudySelection(studySelection);
+                setSelectedIslandId('multi-select');
+                setStudyMode('all');
+                setIsStudying(true);
+                setStudySelection(null);
+              }}
+              className="btn-primary text-sm px-4 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Study {studySelection.size > 0 ? studySelection.size : ''} {studySelection.size === 1 ? 'Island' : 'Islands'}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <NewIslandModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -2414,16 +2473,16 @@ export default function Dashboard() {
                   onFinish={handleFinishStudy}
                   onProgressUpdate={(cu, sd, sms) => {
                     if (selectedIslandId && selectedIsland) {
-                      saveDraft(selectedIslandId, selectedIsland.name, cu, sd, sms, selectedIslandId === 'archipelago');
+                      saveDraft(selectedIslandId, selectedIsland.name, cu, sd, sms, selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select');
                     }
                   }}
                   onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (!isOnline) {
-                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
                       else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
                       if (progress && sessionMeta) {
                         const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
@@ -2432,14 +2491,15 @@ export default function Dashboard() {
                     }
                     clearDraft();
                     setIsStudying(false);
+                    setFrozenStudySelection(null);
                   }}
                   onBackToMap={async (delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (!isOnline) {
-                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
                       else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
                       if (progress && sessionMeta) {
                         const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
@@ -2449,14 +2509,15 @@ export default function Dashboard() {
                     clearDraft();
                     setIsStudying(false);
                     setSelectedIslandId(null);
+                    setFrozenStudySelection(null);
                   }}
                   onSwitchMode={async (newMode, delta, cardUpdates, maxStreak, sessionMeta) => {
                     if (!isOnline) {
-                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
                       else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
                       if (progress && sessionMeta) {
                         const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-complete', islandId: selectedIslandId || undefined });
@@ -2696,7 +2757,175 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-pulse">
                     {[1, 2, 3].map(i => <div key={i} className="h-44 rounded-[32px] bg-white/5" />)}
                   </div>
+                ) : !selectedArchipelagoId ? (
+                  // Home view: show archipelago cards
+                  (() => {
+                    const filteredArchipelagos = ownedArchipelagos.filter(a =>
+                      a.name.toLowerCase().includes(searchQuery.toLowerCase())
+                    );
+                    return filteredArchipelagos.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                        {filteredArchipelagos.map((archipelago) => {
+                          const archIslands = currentIslands.filter(i => i.archipelagoId === archipelago.id);
+                          let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
+
+                          if (trackingMode === 'srs') {
+                            const now = Date.now();
+                            const sevenDaysMs = now + 7 * 24 * 60 * 60 * 1000;
+                            const allArchCards = archIslands.flatMap(i => getActiveTierCards(i.cards));
+                            if (allArchCards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now + graceMs)) {
+                              masteryLevel = 'struggling';
+                            } else if (allArchCards.some((c: any) => c.srsNextReview && c.srsNextReview <= sevenDaysMs)) {
+                              masteryLevel = 'learning';
+                            } else if (allArchCards.length > 0) {
+                              masteryLevel = 'mastered';
+                            }
+                          } else {
+                            const hasStruggling = archIslands.some(i => i.cards.some(c => c.status === 'struggling' || c.needsWork));
+                            if (hasStruggling) {
+                              masteryLevel = 'struggling';
+                            } else {
+                              const allArchCards = archIslands.flatMap(i => i.cards);
+                              masteryLevel = allArchCards.length > 0 && allArchCards.every(c => c.status === 'mastered') ? 'mastered' : 'learning';
+                            }
+                          }
+
+                          const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+                          let imageSrc = '';
+                          if (masteryLevel === 'struggling') imageSrc = `${basePath}/StrugglingArch.jpeg`;
+                          else if (masteryLevel === 'learning') imageSrc = `${basePath}/LearningArch.jpeg`;
+                          else imageSrc = `${basePath}/MasteredArch.jpeg`;
+
+                          return (
+                            <ArchipelagoCard
+                              key={archipelago.id}
+                              archipelago={archipelago}
+                              islandCount={archIslands.length}
+                              totalCards={archIslands.reduce((acc, i) => acc + i.cards.length, 0)}
+                              masteryLevel={masteryLevel}
+                              imageSrc={imageSrc}
+                              onClick={() => setSelectedArchipelagoId(archipelago.id)}
+                              onLongPress={() => {
+                                const ids = new Set(currentIslands.filter(i => i.archipelagoId === archipelago.id).map(i => i.id));
+                                setStudySelection(ids);
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="h-[400px] w-full rounded-[40px] glass flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute top-[-50px] right-[-50px] w-[200px] h-[200px] bg-brand-primary/5 rounded-full blur-[60px]" />
+                        <div className="text-center relative z-10">
+                          <div className="w-20 h-20 rounded-3xl border border-brand-border bg-white/[0.02] mx-auto mb-6 flex items-center justify-center">
+                            <Compass className="w-8 h-8 text-brand-muted/30" />
+                          </div>
+                          <p className="text-brand-muted/40 font-medium text-sm uppercase tracking-[0.2em]">
+                            {searchQuery ? `No archipelagos match "${searchQuery}"` : "Create an Archipelago to organize your Islands"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : studySelection !== null ? (
+                  // Select mode: show ALL islands grouped by archipelago for cross-archipelago curation
+                  <div>
+                    {ownedArchipelagos.map(arch => {
+                      const archIslands = currentIslands.filter(i => i.archipelagoId === arch.id);
+                      if (!archIslands.length) return null;
+                      const allSelected = archIslands.every(i => studySelection.has(i.id));
+                      return (
+                        <div key={arch.id} className="mb-8">
+                          <div className="flex items-center gap-3 mb-3 px-1">
+                            <span className="text-xs uppercase tracking-widest text-brand-muted font-bold">{arch.name}</span>
+                            <button
+                              onClick={() => setStudySelection(prev => {
+                                const next = new Set(prev ?? []);
+                                archIslands.forEach(i => allSelected ? next.delete(i.id) : next.add(i.id));
+                                return next;
+                              })}
+                              className="text-[10px] text-brand-muted/50 hover:text-brand-muted underline transition-colors"
+                            >
+                              {allSelected ? 'Deselect all' : 'Select all'}
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                            {archIslands.map(island => {
+                              const sc = island.cards.filter((c: any) => c.status === 'struggling' || c.needsWork).length;
+                              const mc = island.cards.filter((c: any) => c.status === 'mastered').length;
+                              let ml: 'struggling' | 'learning' | 'mastered' = 'learning';
+                              if (sc > 0) ml = 'struggling';
+                              else if (island.cards.length > 0 && mc === island.cards.length) ml = 'mastered';
+                              const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+                              const imgSrc = ml === 'struggling' ? `${basePath}/struggling.jpeg` : ml === 'mastered' ? `${basePath}/mastered.jpeg` : `${basePath}/learning.jpeg`;
+                              return (
+                                <IslandCard
+                                  key={island.id}
+                                  island={island}
+                                  masteryLevel={ml}
+                                  islandImageSrc={imgSrc}
+                                  trackingMode={trackingMode}
+                                  graceWindowMinutes={progress?.settings?.graceWindowMinutes ?? 0}
+                                  onClick={() => setSelectedIslandId(island.id)}
+                                  isOnline={isOnline}
+                                  isSelectMode
+                                  isSelected={studySelection.has(island.id)}
+                                  onLongPress={() => {}}
+                                  onSelect={() => setStudySelection(prev => {
+                                    const next = new Set(prev ?? []);
+                                    if (next.has(island.id)) next.delete(island.id);
+                                    else next.add(island.id);
+                                    return next;
+                                  })}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {currentIslands.filter(i => !i.archipelagoId).length > 0 && (
+                      <div className="mb-8">
+                        <div className="flex items-center gap-3 mb-3 px-1">
+                          <span className="text-xs uppercase tracking-widest text-brand-muted font-bold">Uncategorized</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                          {currentIslands.filter(i => !i.archipelagoId).map(island => {
+                            const sc = island.cards.filter((c: any) => c.status === 'struggling' || c.needsWork).length;
+                            const mc = island.cards.filter((c: any) => c.status === 'mastered').length;
+                            let ml: 'struggling' | 'learning' | 'mastered' = 'learning';
+                            if (sc > 0) ml = 'struggling';
+                            else if (island.cards.length > 0 && mc === island.cards.length) ml = 'mastered';
+                            const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+                            const imgSrc = ml === 'struggling' ? `${basePath}/struggling.jpeg` : ml === 'mastered' ? `${basePath}/mastered.jpeg` : `${basePath}/learning.jpeg`;
+                            return (
+                              <IslandCard
+                                key={island.id}
+                                island={island}
+                                masteryLevel={ml}
+                                islandImageSrc={imgSrc}
+                                trackingMode={trackingMode}
+                                graceWindowMinutes={progress?.settings?.graceWindowMinutes ?? 0}
+                                onClick={() => setSelectedIslandId(island.id)}
+                                isOnline={isOnline}
+                                isSelectMode
+                                isSelected={studySelection.has(island.id)}
+                                onLongPress={() => {}}
+                                onSelect={() => setStudySelection(prev => {
+                                  const next = new Set(prev ?? []);
+                                  if (next.has(island.id)) next.delete(island.id);
+                                  else next.add(island.id);
+                                  return next;
+                                })}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ) : filteredIslands.length > 0 ? (
+                  // Archipelago drill-down: show its islands
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                     {filteredIslands.map((island) => {
                       const strugglingCount = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
@@ -2751,6 +2980,15 @@ export default function Dashboard() {
                               await pin(island);
                             }
                           }}
+                          isSelectMode={studySelection !== null}
+                          isSelected={studySelection?.has(island.id) ?? false}
+                          onLongPress={() => setStudySelection(new Set([island.id]))}
+                          onSelect={() => setStudySelection(prev => {
+                            const next = new Set(prev ?? []);
+                            if (next.has(island.id)) next.delete(island.id);
+                            else next.add(island.id);
+                            return next;
+                          })}
                         />
                       );
                     })}
@@ -3138,9 +3376,13 @@ interface IslandCardProps {
   isPinned?: boolean;
   isOnline?: boolean;
   onPinToggle?: (e: { stopPropagation: () => void }) => void;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onLongPress?: () => void;
+  onSelect?: () => void;
 }
 
-function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceWindowMinutes = 0, onClick, isPinned = false, isOnline = true, onPinToggle }: IslandCardProps) {
+function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceWindowMinutes = 0, onClick, isPinned = false, isOnline = true, onPinToggle, isSelectMode = false, isSelected = false, onLongPress, onSelect }: IslandCardProps) {
   const getMasteryStyles = () => {
     switch (masteryLevel) {
       case 'struggling':
@@ -3181,30 +3423,35 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceW
   };
 
   const isOfflineUnavailable = !isOnline && !isPinned;
+  const longPressHandlers = useLongPress(onLongPress ?? (() => {}));
 
   return (
     <motion.div
       layoutId={island.id}
-      onClick={isOfflineUnavailable ? undefined : onClick}
+      {...(!isSelectMode && !isOfflineUnavailable ? longPressHandlers : {})}
+      onClick={isOfflineUnavailable ? undefined : isSelectMode ? onSelect : onClick}
       className={cn(
         "rounded-[32px] p-6 flex flex-row items-center gap-6 transition-all duration-300 relative border h-40",
         isOfflineUnavailable
           ? "opacity-40 cursor-not-allowed border-white/5 bg-white/[0.02]"
-          : cn("cursor-pointer group hover:-translate-y-1", getMasteryStyles())
+          : cn("cursor-pointer group hover:-translate-y-1", getMasteryStyles()),
+        isSelected && "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#0a0a0a]"
       )}
     >
-      
+      {isSelectMode && (
+        <div className={cn(
+          "absolute top-3 left-3 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all z-10",
+          isSelected ? "bg-emerald-500 border-emerald-500" : "border-white/40 bg-black/30"
+        )}>
+          {isSelected && <Check className="w-3 h-3 text-white" />}
+        </div>
+      )}
+
       <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] relative bg-black/40 flex items-center justify-center shrink-0 border-brand-border">
-        <img 
-          src={islandImageSrc} 
-          alt={`${masteryLevel} island`} 
-          className="w-[130%] h-[130%] object-cover transition-transform duration-500 group-hover:scale-125" 
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            if (masteryLevel === 'struggling') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=200&h=200';
-            else if (masteryLevel === 'learning') target.src = 'https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?auto=format&fit=crop&q=80&w=200&h=200';
-            else target.src = 'https://images.unsplash.com/photo-1523363065056-11f8b449174b?auto=format&fit=crop&q=80&w=200&h=200';
-          }}
+        <LightboxImage
+          src={islandImageSrc}
+          className="w-[130%] h-[130%] object-cover transition-transform duration-500 group-hover:scale-125"
+          containerClassName="w-full h-full"
         />
       </div>
       
@@ -3229,7 +3476,7 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceW
       </div>
 
       {/* Pin toggle button */}
-      {onPinToggle && (
+      {onPinToggle && !isSelectMode && (
         <button
           onClick={onPinToggle}
           title={isPinned ? 'Remove from offline' : 'Save for offline study'}
@@ -3325,6 +3572,78 @@ function NotificationsPanel({
 
       {position === 'side' && <div className="absolute top-[-6px] right-4 w-3 h-3 bg-[#111] border-l border-t border-white/10 rotate-45" />}
       {position === 'bottom' && <div className="absolute bottom-[-6px] right-4 w-3 h-3 bg-[#111] border-r border-b border-white/10 rotate-45" />}
+    </motion.div>
+  );
+}
+
+interface ArchipelagoCardProps {
+  archipelago: { id: string; name: string; isCollaborative?: boolean };
+  islandCount: number;
+  totalCards: number;
+  masteryLevel: 'struggling' | 'learning' | 'mastered';
+  imageSrc: string;
+  onClick: () => void;
+  onLongPress?: () => void;
+}
+
+function ArchipelagoCard({ archipelago, islandCount, totalCards, masteryLevel, imageSrc, onClick, onLongPress }: ArchipelagoCardProps) {
+  const longPressHandlers = useLongPress(onLongPress ?? (() => {}));
+  const getMasteryStyles = () => {
+    switch (masteryLevel) {
+      case 'struggling':
+        return 'bg-gradient-to-br from-gray-900 to-purple-900/20 border-gray-800 hover:border-purple-500/50 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)]';
+      case 'learning':
+        return 'bg-gradient-to-br from-gray-900 to-blue-900/20 border-gray-800 hover:border-blue-500/50 hover:shadow-[0_0_30px_rgba(59,130,246,0.25)]';
+      case 'mastered':
+        return 'bg-gradient-to-br from-gray-900 to-emerald-900/20 border-gray-800 hover:border-emerald-500/50 hover:shadow-[0_0_30px_rgba(16,185,129,0.25)]';
+    }
+  };
+
+  const getStatusDescription = () => {
+    switch (masteryLevel) {
+      case 'struggling': return 'Some islands need attention — struggling cards detected.';
+      case 'learning': return 'Making progress — keep studying to advance.';
+      case 'mastered': return 'Outstanding — all islands fully mastered!';
+    }
+  };
+
+  return (
+    <motion.div
+      layoutId={archipelago.id}
+      {...longPressHandlers}
+      onClick={onClick}
+      className={cn(
+        'rounded-[32px] p-6 flex flex-row items-center gap-6 transition-all duration-300 relative border h-40 cursor-pointer group hover:-translate-y-1',
+        getMasteryStyles()
+      )}
+    >
+      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] relative bg-black/40 flex items-center justify-center shrink-0 border-brand-border">
+        <LightboxImage
+          src={imageSrc}
+          className="w-[130%] h-[130%] object-cover transition-transform duration-500 group-hover:scale-125"
+          containerClassName="w-full h-full"
+        />
+      </div>
+
+      <div className="flex-1 overflow-hidden">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="text-lg font-bold text-white truncate group-hover:whitespace-normal transition-all duration-300" title={archipelago.name}>
+            {archipelago.name}
+          </h3>
+          {archipelago.isCollaborative && (
+            <span className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[9px] font-black uppercase tracking-widest">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              Crew
+            </span>
+          )}
+        </div>
+        <p className="text-brand-muted text-xs uppercase tracking-[0.15em] font-medium mb-1">
+          {islandCount} {islandCount === 1 ? 'Island' : 'Islands'} · {totalCards} Cards
+        </p>
+        <p className="text-[10px] text-brand-muted/70 italic leading-tight group-hover:text-brand-muted transition-colors">
+          {getStatusDescription()}
+        </p>
+      </div>
     </motion.div>
   );
 }

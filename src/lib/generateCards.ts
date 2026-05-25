@@ -194,12 +194,9 @@ export async function generateCardsFromNotes(
 
   const { text } = await res.json() as { text: string };
   const cleaned = (text ?? '').trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-  console.log('[generateCards] raw response:', cleaned.slice(0, 500));
-
   let parsed: RawCard[];
   try {
     parsed = JSON.parse(cleaned);
-    console.log('[generateCards] types returned:', parsed.map((c: RawCard) => c.type));
   } catch {
     throw new Error('AI returned an unreadable format. Please try again.');
   }

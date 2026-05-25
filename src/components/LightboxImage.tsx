@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ZoomIn } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface LightboxImageProps {
   src: string;
@@ -22,15 +22,10 @@ export default function LightboxImage({ src, className, containerClassName }: Li
   return (
     <>
       <div
-        className={`relative group cursor-zoom-in${containerClassName ? ` ${containerClassName}` : ''}`}
+        className={`relative cursor-zoom-in${containerClassName ? ` ${containerClassName}` : ''}`}
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
       >
         <img src={src} alt="" className={className} />
-        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <div className="bg-black/50 backdrop-blur-sm rounded-full p-2">
-            <ZoomIn className="w-4 h-4 text-white" />
-          </div>
-        </div>
       </div>
 
       {createPortal(
