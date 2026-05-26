@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn } from 'lucide-react';
+import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn, SkipForward } from 'lucide-react';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn, getActiveTierCards } from '../lib/utils';
@@ -170,6 +170,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const testModeFinishFired = useRef(false);
   const cardIslandRef = useRef<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [viewIndex, setViewIndex] = useState(0);
+  const [historyResults, setHistoryResults] = useState<(boolean | null)[]>([]);
+  const viewIndexRef = useRef(0);
+  const currentIndexRef = useRef(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [direction, setDirection] = useState(0); // 1 for right, -1 for left
   const [scoreDelta, setScoreDelta] = useState(0);
@@ -305,6 +309,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       }
       if (currentCard.type === 'matching' && matchingComplete) {
         e.preventDefault();
+        recordHistory(matchingMistakesCount === 0);
         nextCard();
         return;
       }
@@ -319,17 +324,36 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       }
       if (currentCard.type === 'matching' && matchingComplete) {
         e.preventDefault();
+        recordHistory(matchingMistakesCount === 0);
         nextCard();
         return;
       }
     }
 
-    // → / G — mark correct; ← / B — mark wrong (flashcard after flip)
+    // ← / → — history navigation (arrow keys no longer grade; use G/B for that)
+    if (e.key === 'ArrowLeft') {
+      if (viewIndex > 0) {
+        e.preventDefault();
+        setDirection(-1);
+        setViewIndex(prev => prev - 1);
+      }
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      if (viewIndex < currentIndex) {
+        e.preventDefault();
+        setDirection(1);
+        setViewIndex(prev => prev + 1);
+      }
+      return;
+    }
+
+    // G — mark correct; B — mark wrong (flashcard after flip)
     if (isFlashcard && isFlipped) {
-      if (e.key === 'ArrowRight' || e.key === 'g' || e.key === 'G') {
+      if (e.key === 'g' || e.key === 'G') {
         e.preventDefault();
         handleFlashcardGrade(true, { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 } as React.MouseEvent);
-      } else if (e.key === 'ArrowLeft' || e.key === 'b' || e.key === 'B') {
+      } else if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         handleFlashcardGrade(false, { clientX: 0, clientY: 0 } as React.MouseEvent);
       }
@@ -391,10 +415,17 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     setShuffledCards(shuffled);
     setCurrentIndex(0);
+    setViewIndex(0);
+    setHistoryResults([]);
     setSessionComplete(shuffled.length === 0);
   }, [mode]);
 
   const currentCard = shuffledCards[currentIndex];
+  const viewedCard = shuffledCards[viewIndex];
+  const isViewingHistory = viewIndex < currentIndex;
+
+  useEffect(() => { viewIndexRef.current = viewIndex; }, [viewIndex]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
   const activeScenario = currentCard?.scenarioId ? {
     id: currentCard.scenarioId,
@@ -419,6 +450,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     if (!timeoutPerCardSec || sessionComplete) { setTimeLeft(null); return; }
     setTimeLeft(timeoutPerCardSec);
     const interval = setInterval(() => {
+      if (viewIndexRef.current < currentIndexRef.current) return; // paused while reviewing history
       setTimeLeft(prev => {
         if (prev === null || prev <= 1) {
           clearInterval(interval);
@@ -431,7 +463,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   }, [currentIndex, timeoutPerCardSec, sessionComplete]);
 
   useEffect(() => {
-    if (timeLeft !== 0 || !currentCard) return;
+    if (timeLeft !== 0 || !currentCard || viewIndexRef.current < currentIndexRef.current) return;
     // Time expired — record current card as wrong and advance
     const responseTimeMs = captureResponseTime(currentCard.front);
     setStreak(0);
@@ -446,6 +478,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         ...(responseTimeMs !== undefined && { responseTimeMs, responseTimeIsCorrect: false }),
       },
     }));
+    recordHistory(false);
     setDirection(-1);
     nextCard();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -830,6 +863,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
       if (window.navigator?.vibrate && newStatus === 'mastered') window.navigator.vibrate(50);
       triggerSparkle(e as any);
+      recordHistory(true);
       setDirection(1);
       pendingNavTimerRef.current = setTimeout(() => nextCard(), 1500); // 1.5s delay to see correct answer
     } else {
@@ -944,6 +978,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       },
       ...(gradeParent && { [gradeParent.front]: gradeParent.update }),
     }));
+    recordHistory(isCorrect);
     setDirection(isCorrect ? 1 : -1);
     nextCard();
   };
@@ -994,6 +1029,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       },
       ...(easyParent && { [easyParent.front]: easyParent.update }),
     }));
+    recordHistory(true);
     setDirection(1);
     nextCard();
   };
@@ -1047,6 +1083,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       },
       ...(hardParent && { [hardParent.front]: hardParent.update }),
     }));
+    recordHistory(true);
     setDirection(1);
     nextCard();
   };
@@ -1075,6 +1112,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srs.repetitions,
       },
     }));
+    recordHistory(true);
     setDirection(1);
     nextCard();
   };
@@ -1102,17 +1140,35 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         srsRepetitions: srs.repetitions,
       },
     }));
+    recordHistory(true);
     setDirection(1);
     nextCard();
+  };
+
+  const recordHistory = (wasCorrect: boolean | null) => {
+    const idx = currentIndex;
+    setHistoryResults(prev => {
+      const next = [...prev];
+      next[idx] = wasCorrect;
+      return next;
+    });
   };
 
   const nextCard = () => {
     setLastAnswerCorrect(null);
     if (currentIndex < shuffledCards.length - 1) {
-      setCurrentIndex(prev => prev + 1);
+      const next = currentIndex + 1;
+      setCurrentIndex(next);
+      setViewIndex(next);
     } else {
       setSessionComplete(true);
     }
+  };
+
+  const skipCard = () => {
+    recordHistory(null);
+    setDirection(1);
+    nextCard();
   };
 
   const toggleMultiSelectOption = (option: string) => {
@@ -1352,6 +1408,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const handleNextComplex = () => {
     // For Fill-in-the-blank, it already calculates progress in handleFibSubmit
     if (currentCard?.type === 'fill-in-the-blank') {
+      recordHistory(isFibCorrect);
       nextCard();
       return;
     }
@@ -1367,12 +1424,14 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           }
         }
       }
+      recordHistory(isCorrect);
       setDirection(isCorrect ? 1 : -1);
       nextCard();
     }
     // For Sequencing
     else if (currentCard?.type === 'sequencing') {
       const isCorrect = shuffledSequence.every((item, idx) => item.text === currentCard.options![idx]);
+      recordHistory(isCorrect);
       setDirection(isCorrect ? 1 : -1);
       nextCard();
     }
@@ -1381,6 +1440,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const handleNextMCQ = () => {
     // Only determine direction when actually advancing
     const isCorrect = selectedOption === currentCard?.back;
+    recordHistory(lastAnswerCorrect);
     setDirection(isCorrect ? 1 : -1);
     nextCard();
   };
@@ -1818,7 +1878,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary group-hover:scale-110 transition-transform" />
               <span className="text-[10px] md:text-xs font-bold uppercase tracking-widest">
                 <span className="hidden sm:inline">Card </span>
-                {currentIndex + 1} / {shuffledCards.length}
+                {viewIndex + 1} / {shuffledCards.length}
+                {isViewingHistory && <span className="text-amber-400 ml-1">↩</span>}
               </span>
             </div>
             {timeoutPerCardSec && timeLeft !== null && (
@@ -1884,7 +1945,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         <div className="w-full perspective-1000 relative">
           <AnimatePresence mode="popLayout" initial={false} custom={direction}>
             <motion.div
-              key={currentIndex}
+              key={viewIndex}
               custom={direction}
               variants={{
                 enter: (direction: number) => ({
@@ -1918,11 +1979,61 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               className="w-full group"
             >
               <div className="w-full relative">
+                {/* History review card — shown when navigating back through answered cards */}
+                {isViewingHistory && (
+                  <div className={cn(
+                    "glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px]",
+                    historyResults[viewIndex] === true ? "border-emerald-500/20 bg-emerald-950/10" :
+                    historyResults[viewIndex] === false ? "border-red-500/20 bg-red-950/10" : "border-white/10"
+                  )}>
+                    <div className="flex items-center justify-between mb-6 shrink-0">
+                      <span className="text-[9px] uppercase tracking-widest font-bold text-brand-muted/50">Card {viewIndex + 1}</span>
+                      <span className={cn(
+                        "text-[9px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full border",
+                        historyResults[viewIndex] === true ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
+                        historyResults[viewIndex] === false ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                        "text-brand-muted/60 bg-white/5 border-white/10"
+                      )}>
+                        {historyResults[viewIndex] === true ? '✓ Correct' : historyResults[viewIndex] === false ? '✗ Incorrect' : '– Skipped'}
+                      </span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-center">
+                      <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-brand-muted/40 mb-4">Question</p>
+                      {viewedCard?.imageUrl && isOnline && (
+                        <div className="mb-4 w-full"><LightboxImage src={viewedCard.imageUrl} className="w-full max-h-48 object-contain rounded-xl" /></div>
+                      )}
+                      <h2 className="text-xl sm:text-2xl font-normal leading-snug tracking-tight text-white">
+                        <RichText>{viewedCard?.front}</RichText>
+                      </h2>
+                    </div>
+                    <div className="border-t border-white/10 my-6 shrink-0" />
+                    <div className="text-center shrink-0">
+                      <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-brand-muted/40 mb-4">Answer</p>
+                      {viewedCard?.backImageUrl && isOnline && (
+                        <div className="mb-3 w-full"><LightboxImage src={viewedCard.backImageUrl} className="w-full max-h-40 object-contain rounded-xl" /></div>
+                      )}
+                      <div className={cn(
+                        "text-base sm:text-lg leading-relaxed",
+                        historyResults[viewIndex] === true ? "text-emerald-300" :
+                        historyResults[viewIndex] === false ? "text-red-300" : "text-white/60"
+                      )}>
+                        {viewedCard?.type === 'sequencing' && viewedCard.options ? (
+                          <ol className="text-left list-decimal list-inside space-y-1 text-sm">
+                            {viewedCard.options.map((opt, i) => <li key={i}><RichText>{opt}</RichText></li>)}
+                          </ol>
+                        ) : (
+                          <RichText>{viewedCard?.back}</RichText>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Card */}
                 <div
                   className={cn(
                     "glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col items-center text-center border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px] relative",
-                    (!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped ? "justify-between" : "justify-center"
+                    (!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped ? "justify-between" : "justify-center",
+                    isViewingHistory && "hidden"
                   )}
                 >
 
@@ -2791,7 +2902,61 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </AnimatePresence>
         </div>
 
-        {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank') && (
+        {/* History navigation bar — visible once there is at least one answered card */}
+        {currentIndex > 0 || isViewingHistory ? (
+          <div className="flex items-center justify-between w-full mt-5 px-1">
+            <button
+              onClick={() => { setDirection(-1); setViewIndex(prev => Math.max(0, prev - 1)); }}
+              disabled={viewIndex === 0}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all",
+                viewIndex === 0 ? "opacity-25 cursor-not-allowed border-white/5 text-brand-muted" : "glass border-white/10 text-white hover:border-white/20 hover:bg-white/5"
+              )}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Prev</span>
+            </button>
+
+            {isViewingHistory ? (
+              <button
+                onClick={() => { setDirection(1); setViewIndex(currentIndex); }}
+                className="text-[9px] uppercase tracking-widest font-bold text-amber-400/80 hover:text-amber-400 transition-colors flex items-center gap-1"
+              >
+                <span>Back to current</span>
+              </button>
+            ) : (
+              <button
+                onClick={skipCard}
+                className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest font-bold text-brand-muted/40 hover:text-brand-muted/70 transition-colors"
+              >
+                <SkipForward className="w-3 h-3" />
+                <span>Skip</span>
+              </button>
+            )}
+
+            <div className="relative group/next">
+              <button
+                onClick={() => { setDirection(1); setViewIndex(prev => Math.min(currentIndex, prev + 1)); }}
+                disabled={viewIndex >= currentIndex}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all",
+                  viewIndex >= currentIndex ? "opacity-25 cursor-not-allowed border-white/5 text-brand-muted" : "glass border-white/10 text-white hover:border-white/20 hover:bg-white/5"
+                )}
+              >
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              {viewIndex >= currentIndex && (
+                <div className="absolute bottom-full right-0 mb-2 w-44 px-3 py-2 rounded-xl bg-brand-surface border border-white/10 text-[10px] text-brand-muted leading-snug shadow-lg pointer-events-none opacity-0 group-hover/next:opacity-100 transition-opacity duration-150 z-50">
+                  Answer this card first, or use Skip to move on.
+                  <div className="absolute top-full right-3 border-4 border-transparent border-t-white/10" />
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank') && !isViewingHistory && (
           <div className="w-full mt-8 sm:mt-12 flex justify-center min-h-[64px] relative z-[60]">
             <AnimatePresence>
               {(selectedOption !== null || (isFlipped && (currentCard.type === 'multi-select' || (currentCard.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1) || currentCard.type === 'sequencing' || currentCard.type === 'fill-in-the-blank'))) && (
@@ -2837,7 +3002,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             </AnimatePresence>
           </div>
         )}
-        {currentCard?.type === 'matching' && (
+        {currentCard?.type === 'matching' && !isViewingHistory && (
           <div className="w-full mt-8 sm:mt-12 flex flex-col items-center gap-4">
             <p className="text-center text-brand-muted/80 text-xs sm:text-sm font-bold">
               Score: <span className="text-white">{matchedRightIds.size} / {matchingRights.length}</span>
@@ -2858,7 +3023,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </div>
                   )}
                   <button
-                    onClick={nextCard}
+                    onClick={() => { recordHistory(matchingMistakesCount === 0); nextCard(); }}
                     className="btn-primary h-14 sm:h-16 px-12 flex items-center justify-center gap-2 group text-sm sm:text-base shadow-[0_20px_40px_rgba(255,255,255,0.1)] relative overflow-hidden w-full"
                   >
                     <span>Continue</span>
