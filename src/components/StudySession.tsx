@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn, SkipForward } from 'lucide-react';
+import TestModeNavigator from './TestModeNavigator';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn, getActiveTierCards } from '../lib/utils';
@@ -169,6 +170,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const firstAttemptRecorded = useRef<Set<string>>(new Set());
   const testModeFinishFired = useRef(false);
   const cardIslandRef = useRef<Record<string, string>>({});
+  const lastAnsweredIndexRef = useRef(-1);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [viewIndex, setViewIndex] = useState(0);
   const [historyResults, setHistoryResults] = useState<(boolean | null)[]>([]);
@@ -334,16 +336,14 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     if (e.key === 'ArrowLeft') {
       if (viewIndex > 0) {
         e.preventDefault();
-        setDirection(-1);
-        setViewIndex(prev => prev - 1);
+        if (isTestMode) { jumpToCard(viewIndex - 1); } else { setDirection(-1); setViewIndex(prev => prev - 1); }
       }
       return;
     }
     if (e.key === 'ArrowRight') {
-      if (viewIndex < currentIndex) {
+      if (isTestMode ? viewIndex < shuffledCards.length - 1 : viewIndex < currentIndex) {
         e.preventDefault();
-        setDirection(1);
-        setViewIndex(prev => prev + 1);
+        if (isTestMode) { jumpToCard(viewIndex + 1); } else { setDirection(1); setViewIndex(prev => prev + 1); }
       }
       return;
     }
@@ -1147,6 +1147,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const recordHistory = (wasCorrect: boolean | null) => {
     const idx = currentIndex;
+    lastAnsweredIndexRef.current = idx;
     setHistoryResults(prev => {
       const next = [...prev];
       next[idx] = wasCorrect;
@@ -1156,12 +1157,48 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const nextCard = () => {
     setLastAnswerCorrect(null);
+    if (isTestMode) {
+      const answered = lastAnsweredIndexRef.current;
+      const total = shuffledCards.length;
+      // Find next unanswered card (null or undefined), skipping the just-answered index
+      let next = -1;
+      for (let i = answered + 1; i < total; i++) {
+        if (historyResults[i] == null) { next = i; break; }
+      }
+      if (next === -1) {
+        for (let i = 0; i < answered; i++) {
+          if (historyResults[i] == null) { next = i; break; }
+        }
+      }
+      if (next !== -1) {
+        setCurrentIndex(next);
+        setViewIndex(next);
+      } else {
+        setSessionComplete(true);
+      }
+      return;
+    }
     if (currentIndex < shuffledCards.length - 1) {
       const next = currentIndex + 1;
       setCurrentIndex(next);
       setViewIndex(next);
     } else {
       setSessionComplete(true);
+    }
+  };
+
+  const jumpToCard = (n: number) => {
+    if (n < 0 || n >= shuffledCards.length || n === viewIndex) return;
+    const result = historyResults[n];
+    setDirection(n > viewIndex ? 1 : -1);
+    if (result === true || result === false) {
+      // Answered card: review-only
+      setViewIndex(n);
+    } else {
+      // Unanswered/skipped: make it the active card
+      setCurrentIndex(n);
+      setViewIndex(n);
+      lastAnsweredIndexRef.current = -1;
     }
   };
 
@@ -1983,19 +2020,25 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 {isViewingHistory && (
                   <div className={cn(
                     "glass rounded-[40px] p-6 sm:p-8 md:p-12 flex flex-col border-brand-primary/20 shadow-2xl min-h-[50vh] sm:min-h-[500px]",
-                    historyResults[viewIndex] === true ? "border-emerald-500/20 bg-emerald-950/10" :
-                    historyResults[viewIndex] === false ? "border-red-500/20 bg-red-950/10" : "border-white/10"
+                    !isTestMode && historyResults[viewIndex] === true ? "border-emerald-500/20 bg-emerald-950/10" :
+                    !isTestMode && historyResults[viewIndex] === false ? "border-red-500/20 bg-red-950/10" : "border-white/10"
                   )}>
                     <div className="flex items-center justify-between mb-6 shrink-0">
                       <span className="text-[9px] uppercase tracking-widest font-bold text-brand-muted/50">Card {viewIndex + 1}</span>
-                      <span className={cn(
-                        "text-[9px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full border",
-                        historyResults[viewIndex] === true ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
-                        historyResults[viewIndex] === false ? "text-red-400 bg-red-500/10 border-red-500/20" :
-                        "text-brand-muted/60 bg-white/5 border-white/10"
-                      )}>
-                        {historyResults[viewIndex] === true ? '✓ Correct' : historyResults[viewIndex] === false ? '✗ Incorrect' : '– Skipped'}
-                      </span>
+                      {isTestMode ? (
+                        <span className="text-[9px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full border text-brand-muted/60 bg-white/5 border-white/10">
+                          {historyResults[viewIndex] == null ? '– Unanswered' : 'Answered'}
+                        </span>
+                      ) : (
+                        <span className={cn(
+                          "text-[9px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full border",
+                          historyResults[viewIndex] === true ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" :
+                          historyResults[viewIndex] === false ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                          "text-brand-muted/60 bg-white/5 border-white/10"
+                        )}>
+                          {historyResults[viewIndex] === true ? '✓ Correct' : historyResults[viewIndex] === false ? '✗ Incorrect' : '– Skipped'}
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 flex flex-col items-center justify-center text-center">
                       <p className="text-[9px] uppercase tracking-[0.2em] font-bold text-brand-muted/40 mb-4">Question</p>
@@ -2014,8 +2057,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       )}
                       <div className={cn(
                         "text-base sm:text-lg leading-relaxed",
-                        historyResults[viewIndex] === true ? "text-emerald-300" :
-                        historyResults[viewIndex] === false ? "text-red-300" : "text-white/60"
+                        !isTestMode && historyResults[viewIndex] === true ? "text-emerald-300" :
+                        !isTestMode && historyResults[viewIndex] === false ? "text-red-300" : "text-white/60"
                       )}>
                         {viewedCard?.type === 'sequencing' && viewedCard.options ? (
                           <ol className="text-left list-decimal list-inside space-y-1 text-sm">
@@ -2094,8 +2137,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </>
                   )}
 
-                  {/* Written recall input — flashcard only, pre-flip, when setting is on */}
-                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && settings?.writtenRecallMode && (
+                  {/* Written recall input — flashcard only, pre-flip; always on in test mode */}
+                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && (settings?.writtenRecallMode || isTestMode) && (
                     <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
                       <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
                         Write your answer from memory
@@ -2122,8 +2165,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </div>
                   )}
 
-                  {/* Confidence rating — inside card front, flashcard only, pre-flip */}
-                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && !settings?.writtenRecallMode && (
+                  {/* Confidence rating — inside card front, flashcard only, pre-flip, hidden in test mode */}
+                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && !settings?.writtenRecallMode && !isTestMode && (
                     <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
                       <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
                         Rate your confidence
@@ -2242,10 +2285,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             autoFocus
                           />
                           <div className="flex gap-2">
-                            <button type="button" onClick={handleGetClue} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-sm font-bold transition-colors">
-                              Get Clue
-                            </button>
-                            <button type="submit" className="flex-1 bg-brand-primary hover:bg-white text-black py-3 rounded-xl text-sm font-bold transition-colors">
+                            {!isTestMode && (
+                              <button type="button" onClick={handleGetClue} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-sm font-bold transition-colors">
+                                Get Clue
+                              </button>
+                            )}
+                            <button type="submit" className={`bg-brand-primary hover:bg-white text-black py-3 rounded-xl text-sm font-bold transition-colors ${isTestMode ? 'w-full' : 'flex-1'}`}>
                               Submit
                             </button>
                           </div>
@@ -2253,7 +2298,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       </div>
                     ) : (
                       <div className="w-full flex-1 flex flex-col justify-center items-center gap-4 pb-4">
-                        {isFibCorrect === false && (
+                        {isFibCorrect === false && !isTestMode && (
                           <div className="flex flex-col gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 w-full max-w-sm">
                             <div className="flex items-center gap-2 mb-1">
                               <X className="w-4 h-4 text-red-500" />
@@ -2264,17 +2309,17 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         )}
                         <div className={cn(
                           "flex flex-col gap-2 p-5 rounded-2xl border w-full max-w-sm",
-                          isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : "bg-emerald-500/5 border-emerald-500/30"
+                          !isTestMode && isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : !isTestMode ? "bg-emerald-500/5 border-emerald-500/30" : "bg-white/5 border-white/10"
                         )}>
                           <div className="flex items-center gap-2 mb-1">
-                            <Check className="w-4 h-4 text-emerald-500" />
-                            <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-500">
-                              {isFibCorrect ? 'Perfectly Answered' : 'Correct Answer'}
+                            {!isTestMode && <Check className="w-4 h-4 text-emerald-500" />}
+                            <span className={cn("text-[10px] uppercase tracking-widest font-bold", isTestMode ? "text-brand-muted" : "text-emerald-500")}>
+                              {isTestMode ? 'Correct Answer' : (isFibCorrect ? 'Perfectly Answered' : 'Correct Answer')}
                             </span>
                           </div>
                           <div className="text-xl sm:text-2xl font-normal text-white tracking-tight"><RichText>{currentCard?.back}</RichText></div>
                         </div>
-                        {isFibCorrect === false && currentCard?.explanation && (
+                        {isFibCorrect === false && !isTestMode && currentCard?.explanation && (
                           <motion.div
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -2284,7 +2329,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
                           </motion.div>
                         )}
-                        {isFibCorrect && (
+                        {isFibCorrect && !isTestMode && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -2293,7 +2338,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             Progress +1
                           </motion.div>
                         )}
-                        {isFibCorrect === false && cardAnswers.length > 0 && (
+                        {isFibCorrect === false && !isTestMode && cardAnswers.length > 0 && (
                           <div className="flex flex-col gap-2 w-full max-w-sm">
                             {cardAnswers.map((answer, i) => (
                               <motion.div
@@ -2310,7 +2355,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             {renderAcceptPrompt()}
                           </div>
                         )}
-                        {isFibCorrect === false && !questionJustAsked && (
+                        {isFibCorrect === false && !isTestMode && !questionJustAsked && (
                           <motion.button
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -2320,7 +2365,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                           </motion.button>
                         )}
-                        {isFibCorrect === false && questionJustAsked && (
+                        {isFibCorrect === false && !isTestMode && questionJustAsked && (
                           <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">\uD83D\uDD25 Question posted!</p>
                         )}
                       </div>
@@ -2373,6 +2418,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
                           if (!isFlipped) {
                             btnClass = isSelected ? "bg-brand-primary/20 border-brand-primary/50 text-white" : "bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-white/70";
+                          } else if (isTestMode) {
+                            btnClass = isSelected ? "bg-white/15 border-white/30 text-white" : "bg-white/5 border-transparent text-brand-muted/30 opacity-30";
                           } else {
                             // Use getMcqCorrectOpts so legacy multi-select and new multi-answer MCQ both work
                             const isCorrectOpt = getMcqCorrectOpts(currentCard).includes(opt);
@@ -2454,7 +2501,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </button>
                         )}
                       </form>
-                      {isFlipped && currentCard?.explanation &&
+                      {isFlipped && !isTestMode && currentCard?.explanation &&
                         !(selectedMultiOptions.size === getMcqCorrectOpts(currentCard).length &&
                           [...selectedMultiOptions].every(o => getMcqCorrectOpts(currentCard).includes(o))) && (
                           <motion.div
@@ -2467,7 +2514,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </motion.div>
                         )}
                       {/* Community answers — multi-select wrong answer */}
-                      {showAskButton && cardAnswers.length > 0 && (
+                      {!isTestMode && showAskButton && cardAnswers.length > 0 && (
                         <div className="flex flex-col gap-2 w-full mt-2">
                           {cardAnswers.map((answer, i) => (
                             <motion.div
@@ -2484,7 +2531,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           {renderAcceptPrompt()}
                         </div>
                       )}
-                      {showAskButton && !questionJustAsked && (
+                      {!isTestMode && showAskButton && !questionJustAsked && (
                         <motion.button
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -2494,7 +2541,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                         </motion.button>
                       )}
-                      {questionJustAsked && (
+                      {!isTestMode && questionJustAsked && (
                         <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Question posted!</p>
                       )}
                     </div>
@@ -2511,7 +2558,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             let btnClass = "bg-white/5 border border-white/10 text-white/80";
                             let icon = null;
 
-                            if (isFlipped) {
+                            if (isFlipped && !isTestMode) {
                               const correctOpt = currentCard.options![idx];
                               if (item.text === correctOpt) {
                                 btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
@@ -2520,6 +2567,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                                 btnClass = "bg-red-500/20 border-red-500/50 text-red-500";
                                 icon = <XCircle className="w-5 h-5" />;
                               }
+                            } else if (isFlipped && isTestMode) {
+                              btnClass = "bg-white/10 border-white/20 text-white/70";
                             }
 
                             return (
@@ -2552,7 +2601,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </button>
                         )}
                       </form>
-                      {isFlipped && currentCard?.explanation && (
+                      {isFlipped && !isTestMode && currentCard?.explanation && (
                           <motion.div
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -2606,7 +2655,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         let statusText = null;
 
                         if (selectedOption) {
-                          if (opt === currentCard?.back) {
+                          if (isTestMode) {
+                            btnClass = opt === selectedOption ? "bg-white/15 border-white/30 text-white" : "bg-white/5 border-transparent text-brand-muted/30 opacity-40";
+                          } else if (opt === currentCard?.back) {
                             btnClass = "bg-emerald-500/10 border-emerald-500/50 text-white";
                             statusText = "Correct answer";
                           } else if (opt === selectedOption) {
@@ -2663,7 +2714,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               )}
 
                               <AnimatePresence>
-                                {selectedOption && (opt === currentCard?.back || opt === selectedOption) && (
+                                {selectedOption && !isTestMode && (opt === currentCard?.back || opt === selectedOption) && (
                                   <motion.div
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
@@ -2731,7 +2782,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           )}
                         </div>
                       )}
-                      {selectedOption && currentCard?.explanation && (
+                      {selectedOption && !isTestMode && currentCard?.explanation && (
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -2742,7 +2793,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         </motion.div>
                       )}
                       {/* Community answers — MCQ/sequencing wrong answer */}
-                      {showAskButton && cardAnswers.length > 0 && (
+                      {!isTestMode && showAskButton && cardAnswers.length > 0 && (
                         <div className="flex flex-col gap-2 w-full mt-2">
                           {cardAnswers.map((answer, i) => (
                             <motion.div
@@ -2760,7 +2811,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         </div>
                       )}
                       {/* Ask the Community button — MCQ wrong answer */}
-                      {showAskButton && !questionJustAsked && (
+                      {!isTestMode && showAskButton && !questionJustAsked && (
                         <motion.button
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -2770,7 +2821,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
                         </motion.button>
                       )}
-                      {questionJustAsked && (
+                      {!isTestMode && questionJustAsked && (
                         <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Question posted!</p>
                       )}
                     </div>
@@ -2807,7 +2858,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                       <h2 className="text-xl sm:text-2xl md:text-3xl font-normal leading-snug tracking-tight text-white">
                         <RichText>{currentCard?.back}</RichText>
                       </h2>
-                      {settings?.writtenRecallMode && (
+                      {(settings?.writtenRecallMode || isTestMode) && (
                         <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Your recall</span>
                           {writtenRecallText.trim() ? (
@@ -2817,13 +2868,13 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           )}
                         </div>
                       )}
-                      {currentCard?.explanation && (
+                      {!isTestMode && currentCard?.explanation && (
                         <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
                           <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
                         </div>
                       )}
-                      {cardAnswers.length > 0 && (
+                      {!isTestMode && cardAnswers.length > 0 && (
                         <div className="w-full flex flex-col gap-2">
                           {cardAnswers.map((answer, i) => (
                             <motion.div
@@ -2880,7 +2931,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             </div>
                           )}
                         </div>
-                        {!questionJustAsked ? (
+                        {!isTestMode && (!questionJustAsked ? (
                           <motion.button
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -2892,7 +2943,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </motion.button>
                         ) : (
                           <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Question posted!</p>
-                        )}
+                        ))}
                       </div>
                     </motion.div>
                   )}
@@ -2902,11 +2953,14 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </AnimatePresence>
         </div>
 
-        {/* History navigation bar — visible once there is at least one answered card */}
-        {currentIndex > 0 || isViewingHistory ? (
+        {/* History navigation bar */}
+        {(currentIndex > 0 || isViewingHistory || isTestMode) ? (
           <div className="flex items-center justify-between w-full mt-5 px-1">
             <button
-              onClick={() => { setDirection(-1); setViewIndex(prev => Math.max(0, prev - 1)); }}
+              onClick={() => {
+                if (isTestMode) { jumpToCard(viewIndex - 1); }
+                else { setDirection(-1); setViewIndex(prev => Math.max(0, prev - 1)); }
+              }}
               disabled={viewIndex === 0}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all",
@@ -2924,7 +2978,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
               >
                 <span>Back to current</span>
               </button>
-            ) : (
+            ) : !isTestMode ? (
               <button
                 onClick={skipCard}
                 className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest font-bold text-brand-muted/40 hover:text-brand-muted/70 transition-colors"
@@ -2932,21 +2986,32 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 <SkipForward className="w-3 h-3" />
                 <span>Skip</span>
               </button>
+            ) : (
+              <span className="text-[9px] uppercase tracking-widest font-bold text-brand-muted/30">
+                {currentIndex + 1} / {shuffledCards.length}
+              </span>
             )}
 
             <div className="relative group/next">
               <button
-                onClick={() => { setDirection(1); setViewIndex(prev => Math.min(currentIndex, prev + 1)); }}
-                disabled={viewIndex >= currentIndex}
+                onClick={() => {
+                  if (isTestMode) {
+                    if (viewIndex === currentIndex) { skipCard(); }
+                    else { jumpToCard(viewIndex + 1); }
+                  } else {
+                    setDirection(1); setViewIndex(prev => Math.min(currentIndex, prev + 1));
+                  }
+                }}
+                disabled={!isTestMode && viewIndex >= currentIndex}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all",
-                  viewIndex >= currentIndex ? "opacity-25 cursor-not-allowed border-white/5 text-brand-muted" : "glass border-white/10 text-white hover:border-white/20 hover:bg-white/5"
+                  !isTestMode && viewIndex >= currentIndex ? "opacity-25 cursor-not-allowed border-white/5 text-brand-muted" : "glass border-white/10 text-white hover:border-white/20 hover:bg-white/5"
                 )}
               >
                 <span>Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
-              {viewIndex >= currentIndex && (
+              {!isTestMode && viewIndex >= currentIndex && (
                 <div className="absolute bottom-full right-0 mb-2 w-44 px-3 py-2 rounded-xl bg-brand-surface border border-white/10 text-[10px] text-brand-muted leading-snug shadow-lg pointer-events-none opacity-0 group-hover/next:opacity-100 transition-opacity duration-150 z-50">
                   Answer this card first, or use Skip to move on.
                   <div className="absolute top-full right-3 border-4 border-transparent border-t-white/10" />
@@ -3006,7 +3071,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           <div className="w-full mt-8 sm:mt-12 flex flex-col items-center gap-4">
             <p className="text-center text-brand-muted/80 text-xs sm:text-sm font-bold">
               Score: <span className="text-white">{matchedRightIds.size} / {matchingRights.length}</span>
-              {matchingMistakesCount > 0 && <span className="ml-2 text-red-400">({matchingMistakesCount} errors)</span>}
+              {!isTestMode && matchingMistakesCount > 0 && <span className="ml-2 text-red-400">({matchingMistakesCount} errors)</span>}
             </p>
             <AnimatePresence>
               {matchingComplete && (
@@ -3016,7 +3081,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   exit={{ opacity: 0, y: 16 }}
                   className="w-full max-w-xl px-4 sm:px-0 flex flex-col gap-3"
                 >
-                  {currentCard.explanation && (
+                  {!isTestMode && currentCard.explanation && (
                     <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
                       <p className="text-xs font-bold uppercase tracking-widest text-brand-muted mb-2">Explanation</p>
                       <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
@@ -3035,8 +3100,18 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </div>
         )}
 
+        {/* Question navigator — test mode only */}
+        {isTestMode && (
+          <TestModeNavigator
+            totalCards={shuffledCards.length}
+            currentViewIndex={viewIndex}
+            historyResults={historyResults}
+            onJump={jumpToCard}
+          />
+        )}
+
         {/* Live Session Tracker */}
-        {(settings?.sessionDisplay ?? 'stats') === 'focused' ? null : <div className="w-full mt-12 px-4 md:px-0">
+        {!isTestMode && (settings?.sessionDisplay ?? 'stats') === 'focused' ? null : !isTestMode && <div className="w-full mt-12 px-4 md:px-0">
           <div className="mx-auto grid gap-2 md:gap-4 pointer-events-auto max-w-xl grid-cols-3">
             {/* Streak Counter */}
             <motion.div
