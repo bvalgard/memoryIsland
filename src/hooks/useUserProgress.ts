@@ -468,6 +468,7 @@ export function useUserProgress() {
       userRef,
       async (snapshot) => {
         if (!snapshot.exists()) {
+          const ADMIN_EMAILS = ['bvalgard@gmail.com'];
           const initialData = {
             uid: user.uid,
             email: user.email,
@@ -479,6 +480,7 @@ export function useUserProgress() {
             stats: defaultStats,
             settings: defaultSettings,
             dataModelVersion: 2,
+            ...(user.email && ADMIN_EMAILS.includes(user.email) && { isAdmin: true }),
           };
 
           try {
@@ -945,6 +947,9 @@ export function useUserProgress() {
   // so they survive as real entries and can be renamed by the user.
   useEffect(() => {
     if (!user || isConfigPlaceholder || !userData || !topLevelArchipelagosLoaded || archipelagoHealingDone.current) return;
+    // Mark done immediately so snapshot re-fires (e.g. from a concurrent import write)
+    // never trigger a second healing pass that creates "Recovered Archipelago N" entries.
+    archipelagoHealingDone.current = true;
     const knownIds = new Set([
       ...(userData.archipelagos || []).map((a: any) => a.id),
       ...topLevelArchipelagoDocs.map((d) => d.id),
@@ -956,7 +961,6 @@ export function useUserProgress() {
       }
     }
     if (orphanedIds.size === 0) return;
-    archipelagoHealingDone.current = true;
     let counter = 1;
     const toRestore = Array.from(orphanedIds).map((id) =>
       omitUndefined({ id, name: `Recovered Archipelago ${counter++}` })
@@ -1951,6 +1955,76 @@ export function useUserProgress() {
     }
   };
 
+  const importAnkiDecks = async (
+    decks: { id: string; name: string; cards: { front: string; back: string }[] }[],
+    selectedIds: Set<string>,
+    existingArchipelagoId: string | null,
+    newArchipelagoName: string | null
+  ): Promise<{ islandsCreated: number; cardsCreated: number }> => {
+    if (!progress || !user) throw new Error('Not signed in');
+
+    const selected = decks.filter(d => selectedIds.has(d.id));
+    if (!selected.length) throw new Error('No decks selected');
+
+    let archId: string | null = existingArchipelagoId;
+    let newArch: { id: string; name: string } | null = null;
+    if (!archId && newArchipelagoName) {
+      archId = randomId();
+      newArch = { id: archId, name: newArchipelagoName };
+    }
+
+    const ops: { ref: ReturnType<typeof doc>; data: object; merge?: boolean }[] = [];
+    let totalCards = 0;
+
+    selected.forEach(deck => {
+      const islandId = randomId();
+      const deckName = deck.name.includes('::') ? deck.name.split('::').pop()! : deck.name;
+
+      const cards = deck.cards.map((c, idx) =>
+        normalizeCard(
+          { front: c.front, back: c.back, type: 'flashcard', options: [], correctOptions: [], explanations: {}, explanation: '', pairs: [], hint: '' } as Card,
+          idx
+        )
+      );
+      totalCards += cards.length;
+
+      const island: Island = {
+        id: islandId,
+        name: deckName,
+        ...(archId ? { archipelagoId: archId } : {}),
+        color_score: 50,
+        cards,
+        isPublic: false,
+        approvalStatus: 'draft',
+        createdAt: Date.now(),
+      };
+
+      ops.push({ ref: doc(db, 'islands', islandId), data: toIslandDocument(island, user.uid, user.email) });
+      cards.forEach((card, idx) => {
+        ops.push({ ref: doc(db, 'cards', card.id!), data: toCardDocument(card, islandId, user.uid, idx) });
+      });
+    });
+
+    // Write everything atomically: include the new archipelago entry in the first batch so
+    // the island snapshot listener never sees islands whose archipelagoId isn't in the user
+    // doc yet, which is what triggers spurious "Recovered Archipelago" entries.
+    const batches = chunk(ops, 449);
+    for (let i = 0; i < batches.length; i++) {
+      const batch = writeBatch(db);
+      batches[i].forEach(({ ref, data }) => batch.set(ref, data));
+      if (i === 0 && newArch) {
+        batch.set(
+          doc(db, 'users', user.uid),
+          { archipelagos: arrayUnion(omitUndefined(newArch)), last_active: Timestamp.now() },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+    }
+
+    return { islandsCreated: selected.length, cardsCreated: totalCards };
+  };
+
   const dismissShare = async (collection_name: 'published_islands' | 'published_archipelagos', docId: string) => {
     if (!user) throw new Error('Not signed in');
     await updateDoc(doc(db, collection_name, docId), {
@@ -2251,6 +2325,7 @@ export function useUserProgress() {
     discoverArchipelagos,
     importIsland,
     importArchipelago,
+    importAnkiDecks,
     deletePublishedIsland,
     deletePublishedArchipelago,
     dismissShare,

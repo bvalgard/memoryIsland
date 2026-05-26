@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -28,6 +28,7 @@ import { useQuestions } from '../hooks/useQuestions';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useLongPress } from '../hooks/useLongPress';
 import { TestConfig, TestSessionDoc, TestDefinition, getTestHistory, saveTestSession, createTestDef, updateTestDef, getUserTestDefs } from '../hooks/useTestMode';
+import AnkiImportModal from './AnkiImportModal';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -56,6 +57,7 @@ export default function Dashboard() {
     discoverArchipelagos,
     importIsland,
     importArchipelago,
+    importAnkiDecks,
     deletePublishedIsland,
     deletePublishedArchipelago,
     dismissShare,
@@ -84,7 +86,7 @@ export default function Dashboard() {
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | null>(null);
 
   // Test Mode state
   const [isTestStudying, setIsTestStudying] = useState(false);
@@ -1089,6 +1091,13 @@ export default function Dashboard() {
         }}
         friends={friends}
         fetchProfilesByUids={fetchProfilesByUids}
+      />
+
+      <AnkiImportModal
+        isOpen={activeModal === 'ankiImport'}
+        onClose={() => setActiveModal(null)}
+        archipelagos={(progress?.archipelagos || []).map(a => ({ id: a.id, name: a.name }))}
+        onImport={importAnkiDecks}
       />
 
       {/* Community / Social Modal (Users) */}
@@ -2827,13 +2836,23 @@ export default function Dashboard() {
                     </div>
                     <p className="text-brand-muted font-normal text-sm sm:text-base">Manage your knowledge base.</p>
                   </div>
-                  <button 
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)] shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Create New Island
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setActiveModal('ankiImport')}
+                      className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-4 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
+                      title="Import Anki deck"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Import Anki
+                    </button>
+                    <button
+                      onClick={() => setIsModalOpen(true)}
+                      className="flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create New Island
+                    </button>
+                  </div>
                 </div>
 
                 {/* Archipelago Study Section */}

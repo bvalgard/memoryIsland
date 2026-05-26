@@ -93,8 +93,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && isValidUserCreate(incoming(), userId);
-      allow update: if isOwner(userId) || isAdmin();
+      // Owners may not self-grant isAdmin on create or update — only admins can set that field.
+      allow create: if isOwner(userId) && isValidUserCreate(incoming(), userId)
+                    && !incoming().keys().hasAny(['isAdmin']);
+      allow update: if isAdmin()
+                    || (isOwner(userId) && !incoming().diff(existing()).affectedKeys().hasAny(['isAdmin']));
       allow delete: if isAdmin();
     }
 

@@ -69,14 +69,14 @@ export default function TestReport({
     setFlagging(new Set());
   };
 
-  const handleAskFlare = async (visibility: 'friends' | 'global', isAnonymous: boolean) => {
+  const handleAskFlare = async (visibility: 'friends' | 'global', isAnonymous: boolean, note = '') => {
     if (!askCard) return;
     const q = session.questions.find(q => q.cardId === askCard.cardId);
     if (!q) return;
     setIsAskingQuestion(true);
     try {
       const fakeCard = { id: q.cardId, front: q.front, back: q.back, type: q.type as any };
-      await askQuestion(fakeCard as any, q.islandId, visibility, friends, currentUserName, isAnonymous);
+      await askQuestion(fakeCard as any, q.islandId, visibility, friends, currentUserName, isAnonymous, note);
     } finally {
       setIsAskingQuestion(false);
       setAskCard(null);

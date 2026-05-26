@@ -7,18 +7,20 @@ interface AskQuestionModalProps {
   friendCount: number;
   isSending: boolean;
   onClose: () => void;
-  onSend: (visibility: 'friends' | 'global', isAnonymous: boolean) => Promise<void>;
+  onSend: (visibility: 'friends' | 'global', isAnonymous: boolean, note: string) => Promise<void>;
 }
 
 export default function AskQuestionModal({ isOpen, friendCount, isSending, onClose, onSend }: AskQuestionModalProps) {
   const [anonymous, setAnonymous] = useState(false);
   const [visibility, setVisibility] = useState<'friends' | 'global'>('global');
+  const [note, setNote] = useState('');
 
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
       setAnonymous(false);
       setVisibility('global');
+      setNote('');
     }
   }, [isOpen]);
 
@@ -123,10 +125,22 @@ export default function AskQuestionModal({ isOpen, friendCount, isSending, onClo
               </button>
             </div>
 
+            {/* Note */}
+            <div className="mb-4">
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="What's confusing you? (optional)"
+                maxLength={300}
+                rows={3}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-3 py-2.5 text-xs text-white placeholder:text-white/25 resize-none focus:outline-none focus:border-orange-500/40 transition-colors"
+              />
+            </div>
+
             {/* Submit button */}
             <button
               disabled={isSending}
-              onClick={() => onSend(visibility, anonymous)}
+              onClick={() => onSend(visibility, anonymous, note)}
               className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl
                          bg-orange-500 hover:bg-orange-400 active:bg-orange-600
                          text-white font-semibold text-sm transition-colors

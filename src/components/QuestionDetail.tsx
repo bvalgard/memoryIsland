@@ -191,6 +191,14 @@ export default function QuestionDetail({
         )}
       </button>
 
+      {/* Asker's note */}
+      {question.note && (
+        <div className="shrink-0 mb-4 p-3 rounded-xl bg-white/5 border border-white/10">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-1">What's confusing them</p>
+          <p className="text-xs text-white/60 leading-relaxed">{question.note}</p>
+        </div>
+      )}
+
       {/* AI hint — shown when no crew answers yet and hint exists */}
       {question.aiHint && question.answerCount === 0 && (
         <div className="shrink-0 mb-4 p-3 rounded-xl bg-amber-500/8 border border-amber-500/20">

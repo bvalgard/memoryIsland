@@ -651,7 +651,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const switchCardType = (type: Card['type']) => {
     setCardType(type);
-    setIsScenarioMode(false);
+    if (!scenarioSubFormOpen) setIsScenarioMode(false);
     if (type === 'matching' && matchingPairs.length < 2) {
       setMatchingPairs([
         { id: Date.now().toString() + '1', left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r1', text: '', image: undefined }] },

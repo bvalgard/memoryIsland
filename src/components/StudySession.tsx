@@ -1482,11 +1482,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     nextCard();
   };
 
-  const handleAskQuestion = async (visibility: 'friends' | 'global', isAnonymous = false) => {
+  const handleAskQuestion = async (visibility: 'friends' | 'global', isAnonymous = false, note = '') => {
     if (!currentCard) return;
     try {
       setIsAskingQuestion(true);
-      await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName, isAnonymous);
+      await askQuestion(currentCard, islandId || island.id || '', visibility, friends, currentUserName, isAnonymous, note);
       setQuestionJustAsked(true);
       setAskModalOpen(false);
     } catch (err) {

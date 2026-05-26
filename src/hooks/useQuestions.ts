@@ -37,6 +37,7 @@ export interface Question {
   visibility: 'friends' | 'global';
   visibleTo: string[];
   isAnonymous?: boolean;
+  note?: string;
   aiHint?: string;
   aiHintGeneratedAt?: number;
   createdAt: Timestamp;
@@ -85,7 +86,8 @@ export function useQuestions() {
     visibility: 'friends' | 'global',
     friendUids: string[],
     askerName: string,
-    isAnonymous = false
+    isAnonymous = false,
+    note = ''
   ): Promise<string | null> => {
     const user = auth.currentUser;
     if (!user || !card.id) return null;
@@ -112,6 +114,7 @@ export function useQuestions() {
       askerId: user.uid,
       askerName: isAnonymous ? 'Anonymous Explorer' : (askerName || user.displayName || 'Explorer'),
       isAnonymous,
+      note: note.trim(),
       status: 'open',
       acceptedAnswerId: null,
       answerCount: 0,
