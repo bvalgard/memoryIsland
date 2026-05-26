@@ -152,6 +152,9 @@ interface StudySessionProps {
   archipelagoName?: string;
   currentUserName?: string;
   isOnline?: boolean;
+  isTestMode?: boolean;
+  timeoutPerCardSec?: number;
+  totalTimeLimitSec?: number;
   onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
@@ -160,10 +163,11 @@ interface StudySessionProps {
   onProgressUpdate?: (cardUpdates: CardUpdateRecord, scoreDelta: number, sessionMaxStreak: number) => void;
 }
 
-export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', isOnline = true, onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
+export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', isOnline = true, isTestMode = false, timeoutPerCardSec, totalTimeLimitSec, onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
   const sessionStartTime = useRef<number>(Date.now());
   const cardStartTime = useRef<number>(Date.now());
   const firstAttemptRecorded = useRef<Set<string>>(new Set());
+  const testModeFinishFired = useRef(false);
   const cardIslandRef = useRef<Record<string, string>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -409,11 +413,84 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }
   }, [currentCard]);
 
+  // Per-question countdown timer for test mode
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!timeoutPerCardSec || sessionComplete) { setTimeLeft(null); return; }
+    setTimeLeft(timeoutPerCardSec);
+    const interval = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [currentIndex, timeoutPerCardSec, sessionComplete]);
+
+  useEffect(() => {
+    if (timeLeft !== 0 || !currentCard) return;
+    // Time expired — record current card as wrong and advance
+    const responseTimeMs = captureResponseTime(currentCard.front);
+    setStreak(0);
+    setLiveIncorrect(prev => prev + 1);
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        ...prev[currentCard.front],
+        status: currentCard.status ?? 'struggling',
+        sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+        sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
+        ...(responseTimeMs !== undefined && { responseTimeMs, responseTimeIsCorrect: false }),
+      },
+    }));
+    setDirection(-1);
+    nextCard();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft]);
+
+  // Total session countdown timer for test mode
+  const [totalTimeLeft, setTotalTimeLeft] = useState<number | null>(
+    totalTimeLimitSec ?? null
+  );
+  useEffect(() => {
+    if (!totalTimeLimitSec || sessionComplete) return;
+    const interval = setInterval(() => {
+      setTotalTimeLeft(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          setSessionComplete(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalTimeLimitSec, sessionComplete]);
+
   useEffect(() => {
     if (Object.keys(cardUpdates).length > 0) {
       onProgressUpdate?.(cardUpdates, scoreDelta, sessionMaxStreak);
     }
   }, [cardUpdates, scoreDelta, sessionMaxStreak]);
+
+  // Test mode: fire onFinish after render (not during) when session completes
+  useEffect(() => {
+    if (!isTestMode || !sessionComplete || testModeFinishFired.current) return;
+    testModeFinishFired.current = true;
+    const meta: import('../achievements').SessionMeta = {
+      sessionDurationMs: Date.now() - sessionStartTime.current,
+      cardCount: Object.keys(cardUpdates).length,
+      correctCount: Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length,
+      sessionStartHour: new Date(sessionStartTime.current).getHours(),
+    };
+    onFinish(scoreDelta, cardUpdates, sessionMaxStreak, meta);
+  // Only re-run when sessionComplete flips — other deps are stable refs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionComplete]);
 
   const captureResponseTime = (cardFront: string): number | undefined => {
     if (firstAttemptRecorded.current.has(cardFront)) return undefined;
@@ -592,6 +669,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   }, [answers, cardQuestion?.id]);
 
   const triggerSparkle = (e: React.MouseEvent) => {
+    if (isTestMode) return;
     const newSparkle = {
       id: Date.now(),
       x: e.clientX,
@@ -1543,6 +1621,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const incorrectAnswers = Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) === 0).length;
     const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
     const meta = buildMeta();
+
+    // In test mode, results are handled by TestSession — render nothing
+    if (isTestMode) return null;
     const strugglingCards = Object.entries(cardUpdates)
       .filter(([, u]) => (u as any).sessionCorrect === 0)
       .map(([front]) => ({ name: front, islandName: cardIslandRef.current[front] }));
@@ -1740,6 +1821,36 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 {currentIndex + 1} / {shuffledCards.length}
               </span>
             </div>
+            {timeoutPerCardSec && timeLeft !== null && (
+              <div className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-colors ${
+                timeLeft <= 10
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : timeLeft <= 20
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  : 'glass border-white/5 text-brand-muted'
+              }`}>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="12" cy="12" r="9" />
+                  <path strokeLinecap="round" d="M12 7v5l3 3" />
+                </svg>
+                {timeLeft}s / Q
+              </div>
+            )}
+            {totalTimeLimitSec && totalTimeLeft !== null && (
+              <div className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-colors ${
+                totalTimeLeft <= 60
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : totalTimeLeft <= 300
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  : 'glass border-white/5 text-brand-muted'
+              }`}>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="12" cy="12" r="9" />
+                  <path strokeLinecap="round" d="M12 7v5l3 3" />
+                </svg>
+                {Math.floor(totalTimeLeft / 60)}:{String(totalTimeLeft % 60).padStart(2, '0')}
+              </div>
+            )}
           </div>
         </div>
 
@@ -2622,7 +2733,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
                           Did you get it correct?
                         </p>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className={`grid gap-2 ${isTestMode ? 'grid-cols-2' : 'grid-cols-3'}`}>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(false, e); }}
                             className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
@@ -2637,24 +2748,26 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             <Check className="w-4 h-4" />
                             <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
                           </button>
-                          <div className="flex flex-col gap-1.5">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
-                              className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                              title="This is pretty easy; show me less frequently"
-                            >
-                              <Zap className="w-4 h-4" />
-                              <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleFlashcardHard(); }}
-                              className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-10 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                              title="This was tough — show me sooner"
-                            >
-                              <TrendingDown className="w-4 h-4" />
-                              <span className="text-[10px] font-bold uppercase tracking-widest">Hard</span>
-                            </button>
-                          </div>
+                          {!isTestMode && (
+                            <div className="flex flex-col gap-1.5">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
+                                className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                                title="This is pretty easy; show me less frequently"
+                              >
+                                <Zap className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleFlashcardHard(); }}
+                                className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-10 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                                title="This was tough — show me sooner"
+                              >
+                                <TrendingDown className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Hard</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {!questionJustAsked ? (
                           <motion.button
@@ -2693,7 +2806,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     <span>Continue</span>
                     <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </motion.button>
-                  {lastAnswerCorrect && (
+                  {lastAnswerCorrect && !isTestMode && (
                     <div className="order-2 sm:order-1 flex flex-col gap-1.5 w-full sm:w-auto">
                       <motion.button
                         initial={{ opacity: 0, y: 20 }}

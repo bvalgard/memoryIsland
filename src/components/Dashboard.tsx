@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
-import { useUserProgress, Island, CardStatus, CardUpdateRecord } from '../hooks/useUserProgress';
+import { useUserProgress, Island, CardStatus, CardUpdateRecord, Card } from '../hooks/useUserProgress';
 import { useAchievements } from '../hooks/useAchievements';
 import { Achievement, SessionMeta } from '../achievements';
 import { cn, getActiveTierCards, formatTimeUntil } from '../lib/utils';
@@ -15,6 +15,10 @@ import NewIslandModal from './NewIslandModal';
 import NewArchipelagoModal from './NewArchipelagoModal';
 import IslandDetail from './IslandDetail';
 import StudySession from './StudySession';
+import TestSession from './TestSession';
+import TestModeConfig from './TestModeConfig';
+import TestModeHub from './TestModeHub';
+import TestReport from './TestReport';
 import ShareModal from './ShareModal';
 import LightboxImage from './LightboxImage';
 import { useSocial } from '../hooks/useSocial';
@@ -23,21 +27,22 @@ import QuestionsBoard from './QuestionsBoard';
 import { useQuestions } from '../hooks/useQuestions';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useLongPress } from '../hooks/useLongPress';
+import { TestConfig, TestSessionDoc, TestDefinition, getTestHistory, saveTestSession, createTestDef, updateTestDef, getUserTestDefs } from '../hooks/useTestMode';
 
 export default function Dashboard() {
   const user = auth.currentUser;
-  const { 
-    progress, 
-    loading, 
-    addIsland, 
+  const {
+    progress,
+    loading,
+    addIsland,
     addArchipelago,
-    addCardToIsland, 
+    addCardToIsland,
     updateIsland,
     removeIsland,
     updateSettings,
-    addCardsToIsland, 
-    updateCardInIsland, 
-    removeCardFromIsland, 
+    addCardsToIsland,
+    updateCardInIsland,
+    removeCardFromIsland,
     moveCardBetweenIslands,
     processSessionResults,
     processArchipelagoResults,
@@ -65,6 +70,7 @@ export default function Dashboard() {
     removeArchipelagoCollaborator,
     resetIslandProgress,
     resetArchipelagoProgress,
+    flagCardsForTomorrow,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -78,7 +84,18 @@ export default function Dashboard() {
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | null>(null);
+
+  // Test Mode state
+  const [isTestStudying, setIsTestStudying] = useState(false);
+  const [testStudyCards, setTestStudyCards] = useState<Card[]>([]);
+  const [testStudyConfig, setTestStudyConfig] = useState<TestConfig | null>(null);
+  const [userTests, setUserTests] = useState<TestDefinition[]>([]);
+  const [testSessions, setTestSessions] = useState<TestSessionDoc[]>([]);
+  const [testLoading, setTestLoading] = useState(false);
+  const [showTestConfig, setShowTestConfig] = useState(false);
+  const [activeTestReport, setActiveTestReport] = useState<TestSessionDoc | null>(null);
+  const [activeRunningTestId, setActiveRunningTestId] = useState<string | null>(null);
   const [distressInitialTab, setDistressInitialTab] = useState<'all' | 'mine'>('all');
   const [distressInitialQuestion, setDistressInitialQuestion] = useState<import('../hooks/useQuestions').Question | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -124,6 +141,19 @@ export default function Dashboard() {
       setToastQueue(rest);
     }
   }, [currentToast, toastQueue]);
+
+  // Load test data when test mode panel opens
+  useEffect(() => {
+    if (activeModal !== 'testMode' || !user?.uid) return;
+    setTestLoading(true);
+    Promise.all([getUserTestDefs(user.uid), getTestHistory(user.uid)])
+      .then(([defs, sessions]) => {
+        setUserTests(defs);
+        setTestSessions(sessions);
+        setTestLoading(false);
+      })
+      .catch(() => setTestLoading(false));
+  }, [activeModal, user?.uid]);
 
   // One-shot achievement check on first data load
   useEffect(() => {
@@ -403,10 +433,10 @@ export default function Dashboard() {
     );
 
     const unsubIslands = onSnapshot(islandQuery, (snap) => {
-      setInboundSharedIslands(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setInboundSharedIslands(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     });
     const unsubArchs = onSnapshot(archQuery, (snap) => {
-      setInboundSharedArchipelagos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setInboundSharedArchipelagos(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     });
 
     return () => {
@@ -456,7 +486,12 @@ export default function Dashboard() {
     setIsDiscovering(true);
     try {
       const islands = await discoverIslands(discoverySearch);
-      setPublicIslands(islands);
+      const seen = new Set<string>();
+      setPublicIslands(islands.filter(i => {
+        if (seen.has(i.id)) return false;
+        seen.add(i.id);
+        return true;
+      }));
     } finally {
       setIsDiscovering(false);
     }
@@ -466,7 +501,12 @@ export default function Dashboard() {
     setIsDiscovering(true);
     try {
       const archipelagos = await discoverArchipelagos(discoverySearch);
-      setPublicArchipelagos(archipelagos);
+      const seen = new Set<string>();
+      setPublicArchipelagos(archipelagos.filter(a => {
+        if (seen.has(a.id)) return false;
+        seen.add(a.id);
+        return true;
+      }));
     } finally {
       setIsDiscovering(false);
     }
@@ -793,6 +833,105 @@ export default function Dashboard() {
     setSelectedIslandId(null);
     setFrozenStudySelection(null);
   };
+
+  // Test Mode handlers
+  const handleTestStart = useCallback(async (config: TestConfig, cards: Card[], name: string) => {
+    const uid = user?.uid;
+    if (!uid) return;
+
+    let resolvedTestId: string | undefined;
+    try {
+      resolvedTestId = await createTestDef({
+        uid,
+        name,
+        config,
+        cardSnapshot: cards,
+        createdAt: Date.now(),
+        lastAttemptAt: Date.now(),
+        attemptCount: 0,
+        bestScore: 0,
+      });
+      setUserTests(prev => [{
+        id: resolvedTestId,
+        uid,
+        name,
+        config,
+        cardSnapshot: cards,
+        createdAt: Date.now(),
+        lastAttemptAt: Date.now(),
+        attemptCount: 0,
+        bestScore: 0,
+      }, ...prev]);
+    } catch {
+      // proceed without linking to a named test
+    }
+
+    setActiveRunningTestId(resolvedTestId ?? null);
+    setTestStudyConfig(config);
+    setTestStudyCards(cards);
+    setShowTestConfig(false);
+    setActiveModal(null);
+    setIsTestStudying(true);
+  }, [user?.uid]);
+
+  const handleTestFinish = useCallback(async (report: Omit<TestSessionDoc, 'id'>) => {
+    setIsTestStudying(false);
+    if (!user?.uid) return;
+    const testId = activeRunningTestId;
+    const reportWithTestId = testId ? { ...report, testId } : report;
+    const id = await saveTestSession(reportWithTestId);
+    const fullReport = { ...reportWithTestId, id };
+
+    if (testId) {
+      setUserTests(prev => prev.map(t => {
+        if (t.id !== testId) return t;
+        const newCount = t.attemptCount + 1;
+        const newBest = Math.max(t.bestScore, report.scorePercent);
+        updateTestDef(testId, { lastAttemptAt: report.completedAt, attemptCount: newCount, bestScore: newBest });
+        return { ...t, lastAttemptAt: report.completedAt, attemptCount: newCount, bestScore: newBest };
+      }));
+    }
+
+    setTestSessions(prev => [fullReport, ...prev]);
+    setActiveTestReport(fullReport);
+    setActiveRunningTestId(null);
+    setActiveModal('testMode');
+  }, [user?.uid, activeRunningTestId]);
+
+  const handleTakeAgain = useCallback((test: TestDefinition) => {
+    if (!test.cardSnapshot?.length) return;
+    setActiveTestReport(null);
+    setActiveRunningTestId(test.id ?? null);
+    setTestStudyConfig(test.config);
+    setTestStudyCards(test.cardSnapshot);
+    setActiveModal(null);
+    setIsTestStudying(true);
+  }, []);
+
+  const handleRetakeFromReport = useCallback(() => {
+    const testId = activeTestReport?.testId;
+    const testDef = testId ? userTests.find(t => t.id === testId) : undefined;
+    setActiveTestReport(null);
+    if (testDef?.cardSnapshot?.length) {
+      setActiveRunningTestId(testDef.id ?? null);
+      setTestStudyConfig(testDef.config);
+      setTestStudyCards(testDef.cardSnapshot);
+      setActiveModal(null);
+      setIsTestStudying(true);
+    } else {
+      setActiveModal('testMode');
+    }
+  }, [activeTestReport, userTests]);
+
+  const handleTestRestudy = useCallback((cardIds: string[]) => {
+    const restudyCards = testStudyCards.filter(c => cardIds.includes(c.id ?? c.front));
+    if (!restudyCards.length) return;
+    setActiveTestReport(null);
+    setActiveModal(null);
+    setTestStudyCards(restudyCards);
+    setTestStudyConfig(prev => prev ? { ...prev, questionLimit: 'all' } : null);
+    setIsTestStudying(true);
+  }, [testStudyCards]);
 
   return (
     <div className="h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative overflow-hidden">
@@ -1827,6 +1966,49 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Test Mode Hub */}
+      <AnimatePresence>
+        {activeModal === 'testMode' && !showTestConfig && !activeTestReport && (
+          <TestModeHub
+            userTests={userTests}
+            allSessions={testSessions}
+            loading={testLoading}
+            onClose={() => setActiveModal(null)}
+            onNewTest={() => { setShowTestConfig(true); setActiveModal(null); }}
+            onTakeAgain={handleTakeAgain}
+            onViewReport={(s) => setActiveTestReport(s)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Test Mode Config */}
+      <AnimatePresence>
+        {showTestConfig && (
+          <TestModeConfig
+            islands={progress?.islands ?? []}
+            archipelagos={progress?.archipelagos ?? []}
+            existingTestNames={userTests.map(t => t.name)}
+            onStart={handleTestStart}
+            onClose={() => { setShowTestConfig(false); setActiveModal('testMode'); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Test Report */}
+      <AnimatePresence>
+        {activeTestReport && (
+          <TestReport
+            session={activeTestReport}
+            onClose={() => { setActiveTestReport(null); setActiveModal('testMode'); }}
+            onRetake={handleRetakeFromReport}
+            onRestudy={(cardIds) => { setActiveTestReport(null); handleTestRestudy(cardIds); }}
+            onFlagForTomorrow={flagCardsForTomorrow}
+            friends={friends}
+            currentUserName={user?.displayName || 'Explorer'}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Stats Modal */}
       <AnimatePresence>
         {activeModal === 'stats' && (
@@ -2408,11 +2590,23 @@ export default function Dashboard() {
               Distress Signals
             </div>
           </button>
+          <button
+            onClick={() => setActiveModal('testMode')}
+            className={cn(
+              "relative group transition-all flex items-center justify-center",
+              activeModal === 'testMode' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+            )}
+          >
+            <GraduationCap className="w-6 h-6" />
+            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+              Test Mode
+            </div>
+          </button>
         </nav>
       </aside>
 
       {/* Main Content */}
-      <main className={cn("flex-1 flex flex-col min-w-0 overflow-y-auto md:pb-0", !isStudying && "pb-20")}>
+      <main className={cn("flex-1 flex flex-col min-w-0 overflow-y-auto md:pb-0", !isStudying && !isTestStudying && "pb-20")}>
         {/* Header */}
         <header className="h-14 border-b border-brand-border flex items-center justify-start px-6 md:px-12 bg-brand-bg/50 backdrop-blur-md sticky top-0 z-20">
           <div className="flex items-center gap-4 text-brand-muted group flex-1 max-w-sm">
@@ -2533,6 +2727,26 @@ export default function Dashboard() {
                     clearDraft();
                     setStudyMode(newMode);
                   }}
+                />
+              </motion.div>
+            ) : isTestStudying && testStudyConfig ? (
+              <motion.div
+                key="test-study"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex items-center justify-center min-h-[60vh]"
+              >
+                <TestSession
+                  cards={testStudyCards}
+                  config={testStudyConfig}
+                  settings={progress?.settings}
+                  friends={friends}
+                  currentUserName={user?.displayName || 'Explorer'}
+                  isOnline={isOnline}
+                  uid={user?.uid ?? ''}
+                  onTestFinish={handleTestFinish}
+                  onBack={() => setIsTestStudying(false)}
                 />
               </motion.div>
             ) : !selectedIsland ? (
@@ -3189,6 +3403,14 @@ export default function Dashboard() {
           className={cn("p-2 transition-all relative", activeModal === 'distress' ? "text-orange-400 scale-110" : "text-orange-400/40")}
         >
           <Radio className="w-6 h-6" />
+        </button>
+
+        {/* Test Mode */}
+        <button
+          onClick={() => setActiveModal('testMode')}
+          className={cn("p-2 transition-all relative", activeModal === 'testMode' ? "text-brand-primary scale-110" : "text-brand-muted")}
+        >
+          <GraduationCap className="w-6 h-6" />
         </button>
 
         {/* Mobile Notifications */}

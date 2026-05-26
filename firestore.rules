@@ -271,6 +271,22 @@ service cloud.firestore {
       }
     }
 
+    // 5a. Named test definitions — private per-user
+    match /tests/{testId} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // 5b. Test Mode sessions — private per-user exam records
+    match /test-sessions/{sessionId} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
     // 5. User reputation — cross-user increment for vote/accept rewards
     match /user_reputation/{userId} {
       allow read: if isSignedIn();

@@ -40,30 +40,39 @@ export default function ShareModal({
   const [friendProfiles, setFriendProfiles] = useState<UserProfile[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
 
+  // Reset modal state only when it first opens — not on every re-render.
+  // Putting friends/initialSelectedUids in the dep array caused tab to reset
+  // when the parent re-rendered with a new array reference mid-interaction.
   useEffect(() => {
-    if (isOpen) {
-      const eligibleUids = (initialSelectedUids || []).filter(uid => {
-        const lastShared = sharedAtTimestamps[uid];
-        return !lastShared || lastShared + RESHARE_COOLDOWN_MS - Date.now() <= 0;
-      });
-      setSelectedUids(new Set(eligibleUids));
-      setTab(initialTab);
-      setIsSubmitting(false);
-      setError(null);
-      
+    if (!isOpen) return;
+    const eligibleUids = (initialSelectedUids || []).filter(uid => {
+      const lastShared = sharedAtTimestamps[uid];
+      return !lastShared || lastShared + RESHARE_COOLDOWN_MS - Date.now() <= 0;
+    });
+    setSelectedUids(new Set(eligibleUids));
+    setTab(initialTab);
+    setIsSubmitting(false);
+    setError(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Load friend profiles separately; use join(',') so a new array ref with the
+  // same UIDs doesn't retrigger (matches the pattern used in Dashboard.tsx).
+  useEffect(() => {
+    if (!isOpen) return;
+    if (friends.length > 0) {
       const load = async () => {
         setIsLoadingFriends(true);
         const profiles = await fetchProfilesByUids(friends);
         setFriendProfiles(profiles);
         setIsLoadingFriends(false);
       };
-      if (friends.length > 0) {
-        load();
-      } else {
-        setFriendProfiles([]);
-      }
+      load();
+    } else {
+      setFriendProfiles([]);
     }
-  }, [isOpen, friends, initialSelectedUids, initialTab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, friends.join(',')]);
 
   if (!isOpen) return null;
 

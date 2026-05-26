@@ -91,6 +91,7 @@ export interface Card {
   totalAnswers?: number;
   totalCorrect?: number;
   islandName?: string;
+  islandId?: string;
   userProgress?: Record<string, UserCardProgress>;
   scenarioId?: string;
   scenarioText?: string;
@@ -906,7 +907,14 @@ export function useUserProgress() {
       ownerId: data.ownerId,
       isTopLevel: true,
     }));
-    const allArchipelagos = [...legacyArchipelagos, ...topLevelArchipelagos];
+    // Top-level Firestore documents are authoritative; deduplicate across legacy + top-level
+    // so an archipelago that exists in both (promoted but not yet removed from userData) appears once.
+    const seenAllArchIds = new Set<string>();
+    const allArchipelagos = [...topLevelArchipelagos, ...legacyArchipelagos].filter(a => {
+      if (seenAllArchIds.has(a.id)) return false;
+      seenAllArchIds.add(a.id);
+      return true;
+    });
 
     // Recover archipelago entries lost from the user doc due to past concurrent writes.
     // Islands still carry their archipelagoId; synthesize a placeholder entry so the
@@ -936,7 +944,7 @@ export function useUserProgress() {
   // One-shot per session: write recovered orphan archipelago entries back to Firestore
   // so they survive as real entries and can be renamed by the user.
   useEffect(() => {
-    if (!user || isConfigPlaceholder || !userData || archipelagoHealingDone.current) return;
+    if (!user || isConfigPlaceholder || !userData || !topLevelArchipelagosLoaded || archipelagoHealingDone.current) return;
     const knownIds = new Set([
       ...(userData.archipelagos || []).map((a: any) => a.id),
       ...topLevelArchipelagoDocs.map((d) => d.id),
@@ -958,7 +966,7 @@ export function useUserProgress() {
       { archipelagos: arrayUnion(...toRestore), last_active: Timestamp.now() },
       { merge: true }
     ).catch(() => { archipelagoHealingDone.current = false; });
-  }, [user, userData, islandDocs, topLevelArchipelagoDocs]);
+  }, [user, userData, islandDocs, topLevelArchipelagoDocs, topLevelArchipelagosLoaded]);
 
   const updateStats = async (newStats: Partial<UserStats>) => {
     if (!user || isConfigPlaceholder || !progress?.stats) return;
@@ -1765,9 +1773,9 @@ export function useUserProgress() {
       ]);
 
       const mergedMap = new Map();
-      publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+      publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { ...(docSnap.data() as any), id: docSnap.id }));
       if (targetedQuery) {
-        targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+        targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { ...(docSnap.data() as any), id: docSnap.id }));
       }
 
       let results = Array.from(mergedMap.values());
@@ -1863,9 +1871,9 @@ export function useUserProgress() {
       ]);
 
       const mergedMap = new Map();
-      publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+      publicSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { ...(docSnap.data() as any), id: docSnap.id }));
       if (targetedQuery) {
-        targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() as any) }));
+        targetedSnap.docs.forEach(docSnap => mergedMap.set(docSnap.id, { ...(docSnap.data() as any), id: docSnap.id }));
       }
 
       let results = Array.from(mergedMap.values()) as Island[];
@@ -2254,7 +2262,20 @@ export function useUserProgress() {
     removeArchipelagoCollaborator,
     resetIslandProgress,
     resetArchipelagoProgress,
+    flagCardsForTomorrow,
   };
+
+  async function flagCardsForTomorrow(cardIds: string[]): Promise<void> {
+    if (!cardIds.length) return;
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const tomorrowMs = tomorrow.getTime();
+    const batch = writeBatch(db);
+    for (const id of cardIds) {
+      batch.update(doc(db, 'cards', id), { needsWork: true, srsNextReview: tomorrowMs });
+    }
+    await batch.commit();
+  }
 }
 
 export const saveUnlockedAchievements = async (uid: string, newIds: string[]) => {
