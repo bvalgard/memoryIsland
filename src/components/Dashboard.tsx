@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload, Navigation2 } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload, Navigation2, Archive, MoreHorizontal } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -73,6 +73,10 @@ export default function Dashboard() {
     resetIslandProgress,
     resetArchipelagoProgress,
     flagCardsForTomorrow,
+    archiveArchipelago,
+    unarchiveArchipelago,
+    archiveIsland,
+    unarchiveIsland,
   } = useUserProgress();
   const [selectedIslandId, setSelectedIslandId] = useState<string | null>(null);
   const [selectedArchipelagoId, setSelectedArchipelagoId] = useState<string | null>(() => {
@@ -87,7 +91,7 @@ export default function Dashboard() {
   const [moveIslandId, setMoveIslandId] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | null>(null);
 
   // Test Mode state
   const [isTestStudying, setIsTestStudying] = useState(false);
@@ -203,11 +207,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (loading || !progress) return;
     if (selectedArchipelagoId) {
-      const stillExists = (progress.archipelagos || []).some(a => a.id === selectedArchipelagoId);
-      if (!stillExists) {
+      const found = (progress.archipelagos || []).find(a => a.id === selectedArchipelagoId);
+      if (!found) {
         setSelectedArchipelagoId(null);
         setIsStudying(false);
         setDeletedCollabMessage('This archipelago was deleted by its owner.');
+      } else if (found.isArchived) {
+        setSelectedArchipelagoId(null);
+        setIsStudying(false);
       }
     }
   }, [progress?.archipelagos, selectedArchipelagoId, loading]);
@@ -251,6 +258,7 @@ export default function Dashboard() {
   const [showUnshareArchipelagoConfirm, setShowUnshareArchipelagoConfirm] = useState(false);
   const [showDeleteArchipelagoConfirm, setShowDeleteArchipelagoConfirm] = useState(false);
   const [showResetArchipelagoConfirm, setShowResetArchipelagoConfirm] = useState(false);
+  const [showArchiveArchipelagoConfirm, setShowArchiveArchipelagoConfirm] = useState(false);
   const [blindSpotOpen, setBlindSpotOpen] = useState(false);
   const [knowledgeGapOpen, setKnowledgeGapOpen] = useState(false);
   const [deletedCollabMessage, setDeletedCollabMessage] = useState<string | null>(null);
@@ -515,8 +523,8 @@ export default function Dashboard() {
     }
   };
 
-  // Exclude imported (anchored from community) islands from the main view and study
-  const currentIslands = (progress?.islands || []).filter(i => !i.isImported);
+  // Exclude imported (anchored from community) and archived islands from the main view and study
+  const currentIslands = (progress?.islands || []).filter(i => !i.isImported && !i.isArchived);
   const islandsInArchipelago = selectedArchipelagoId 
     ? currentIslands.filter(island => island.archipelagoId === selectedArchipelagoId)
     : currentIslands;
@@ -547,8 +555,19 @@ export default function Dashboard() {
       return 0;
     });
 
-  // Only show non-imported archipelagos in the selector
-  const ownedArchipelagos = (progress?.archipelagos || []).filter(a => !a.isImported);
+  // Only show non-imported, non-archived archipelagos in the main view
+  const ownedArchipelagos = (progress?.archipelagos || []).filter(a => !a.isImported && !a.isArchived);
+
+  // True while the user has never completed a study session and has no islands yet.
+  // Drives progressive disclosure: simplified nav + single-CTA header + actionable empty state.
+  const isNewUser = !loading
+    && (progress?.stats?.totalStudySessions ?? 0) === 0
+    && currentIslands.length === 0;
+
+  // Archived items for the Archive modal
+  const archivedArchipelagos = (progress?.archipelagos || []).filter(a => !a.isImported && !!a.isArchived);
+  const archivedIslands = (progress?.islands || []).filter(i => !i.isImported && !!i.isArchived);
+  const allNonImportedIslands = (progress?.islands || []).filter(i => !i.isImported);
 
   const selectedArchipelago = ownedArchipelagos.find(a => a.id === selectedArchipelagoId);
   const archipelagoName = selectedArchipelago ? selectedArchipelago.name : 'The Archipelago';
@@ -2446,6 +2465,101 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Archive Modal */}
+      <AnimatePresence>
+        {activeModal === 'archive' && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setActiveModal(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-[32px] p-8 shadow-2xl flex flex-col max-h-[85vh]"
+            >
+              <button
+                onClick={() => setActiveModal(null)}
+                className="absolute top-6 right-6 text-brand-muted hover:text-white transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center mb-6 border border-amber-500/20">
+                <Archive className="w-6 h-6 text-amber-400" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Archive</h2>
+              <p className="text-brand-muted text-sm leading-relaxed mb-8">
+                Archived items are hidden from your main view but never deleted.
+              </p>
+              <div className="overflow-y-auto custom-scrollbar flex-1 space-y-8">
+                {archivedArchipelagos.length > 0 && (
+                  <section>
+                    <h3 className="text-[10px] uppercase tracking-widest font-black text-brand-muted mb-3">
+                      Archipelagos ({archivedArchipelagos.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {archivedArchipelagos.map(arch => (
+                        <div key={arch.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                          <div>
+                            <p className="text-sm font-bold text-white">{arch.name}</p>
+                            <p className="text-[10px] text-brand-muted uppercase tracking-widest mt-0.5">
+                              {allNonImportedIslands.filter(i => i.archipelagoId === arch.id).length} Islands
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => unarchiveArchipelago(arch.id)}
+                            className="px-3 py-1.5 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 transition-colors flex items-center gap-1.5 shrink-0 ml-4"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {archivedIslands.length > 0 && (
+                  <section>
+                    <h3 className="text-[10px] uppercase tracking-widest font-black text-brand-muted mb-3">
+                      Islands ({archivedIslands.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {archivedIslands.map(island => (
+                        <div key={island.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                          <div>
+                            <p className="text-sm font-bold text-white">{island.name}</p>
+                            <p className="text-[10px] text-brand-muted uppercase tracking-widest mt-0.5">
+                              {island.cards.length} Cards
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => unarchiveIsland(island.id)}
+                            className="px-3 py-1.5 rounded-xl bg-white/10 text-white text-xs font-bold hover:bg-white/20 transition-colors flex items-center gap-1.5 shrink-0 ml-4"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {archivedArchipelagos.length === 0 && archivedIslands.length === 0 && (
+                  <div className="py-16 text-center">
+                    <Archive className="w-10 h-10 text-brand-muted/20 mx-auto mb-4" />
+                    <p className="text-brand-muted/40 text-sm uppercase tracking-[0.2em]">Nothing archived yet</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Sidebar - Desktop Only */}
       <aside className="w-20 hidden md:flex flex-col items-center py-6 border-r border-brand-border bg-brand-card z-50 shrink-0">
         <div className="relative mb-8" ref={profileRef}>
@@ -2528,7 +2642,7 @@ export default function Dashboard() {
         </div>
         
         <nav className="flex flex-col gap-8 flex-1">
-          <button 
+          <button
             onClick={() => setSelectedIslandId(null)}
             className={cn("relative group transition-all flex items-center justify-center", selectedIslandId ? "text-brand-muted hover:text-white" : "text-white")}
           >
@@ -2537,7 +2651,7 @@ export default function Dashboard() {
               Knowledge Map
             </div>
           </button>
-          <button 
+          <button
             onClick={() => setActiveModal('discover')}
             className={cn(
               "relative group transition-all flex items-center justify-center",
@@ -2552,66 +2666,94 @@ export default function Dashboard() {
               Discover
             </div>
           </button>
-          <button 
-            onClick={() => setActiveModal('users')}
-            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
-          >
-            <Users className="w-6 h-6" />
-            {unreadSocialCount > 0 && (
-              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
-            )}
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Social
+
+          {/* Advanced nav items — hidden for brand-new users, revealed automatically after first study session */}
+          {!isNewUser && (
+            <>
+              <button
+                onClick={() => setActiveModal('users')}
+                className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              >
+                <Users className="w-6 h-6" />
+                {unreadSocialCount > 0 && (
+                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+                )}
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Social
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveModal('stats')}
+                className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              >
+                <BarChart2 className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Statistics
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveModal('leaderboard')}
+                className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              >
+                <Trophy className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Competitions
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveModal('trophies')}
+                className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              >
+                <Award className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Captain's Quarters
+                </div>
+              </button>
+              <button
+                onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
+                className="relative group text-orange-400/50 hover:text-orange-400 transition-all flex items-center justify-center"
+              >
+                <Radio className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Distress Signals
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveModal('testMode')}
+                className={cn(
+                  "relative group transition-all flex items-center justify-center",
+                  activeModal === 'testMode' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                )}
+              >
+                <GraduationCap className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Test Mode
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveModal('archive')}
+                className={cn(
+                  "relative group transition-all flex items-center justify-center",
+                  activeModal === 'archive' ? "text-amber-400" : "text-brand-muted hover:text-amber-400"
+                )}
+              >
+                <Archive className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Archive
+                </div>
+              </button>
+            </>
+          )}
+
+          {/* "More features await" hint for new users */}
+          {isNewUser && (
+            <div className="relative group flex items-center justify-center text-brand-muted/20">
+              <MoreHorizontal className="w-5 h-5" />
+              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white/70 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                More features unlock as you study
+              </div>
             </div>
-          </button>
-          <button 
-            onClick={() => setActiveModal('stats')}
-            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
-          >
-            <BarChart2 className="w-6 h-6" />
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Statistics
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveModal('leaderboard')}
-            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
-          >
-            <Trophy className="w-6 h-6" />
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Competitions
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveModal('trophies')}
-            className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
-          >
-            <Award className="w-6 h-6" />
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Captain's Quarters
-            </div>
-          </button>
-          <button
-            onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
-            className="relative group text-orange-400/50 hover:text-orange-400 transition-all flex items-center justify-center"
-          >
-            <Radio className="w-6 h-6" />
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Distress Signals
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveModal('testMode')}
-            className={cn(
-              "relative group transition-all flex items-center justify-center",
-              activeModal === 'testMode' ? "text-brand-primary" : "text-brand-muted hover:text-white"
-            )}
-          >
-            <GraduationCap className="w-6 h-6" />
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              Test Mode
-            </div>
-          </button>
+          )}
         </nav>
       </aside>
 
@@ -2838,21 +2980,33 @@ export default function Dashboard() {
                     <p className="text-brand-muted font-normal text-sm sm:text-base">Manage your knowledge base.</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => setActiveModal('ankiImport')}
-                      className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-4 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
-                      title="Import Anki deck"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Import Anki
-                    </button>
-                    <button
-                      onClick={() => setIsModalOpen(true)}
-                      className="flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Create New Island
-                    </button>
+                    {isNewUser ? (
+                      <button
+                        onClick={() => setIsArchipelagoModalOpen(true)}
+                        className="flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create Collection
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setActiveModal('ankiImport')}
+                          className="flex items-center gap-2 bg-white/5 border border-white/10 text-white px-4 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
+                          title="Import Anki deck"
+                        >
+                          <Upload className="w-4 h-4" />
+                          Import Anki
+                        </button>
+                        <button
+                          onClick={() => setIsModalOpen(true)}
+                          className="flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create New Island
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2897,6 +3051,14 @@ export default function Dashboard() {
                                   </button>
                                 );
                               })()}
+                              <button
+                                onClick={() => setShowArchiveArchipelagoConfirm(true)}
+                                className="p-1.5 rounded-lg bg-amber-500/5 border border-amber-500/10 text-amber-400/60 hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
+                                title="Archive this Archipelago"
+                              >
+                                <Archive className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-bold uppercase tracking-tight">Archive</span>
+                              </button>
                               <button
                                 onClick={() => setShowDeleteArchipelagoConfirm(true)}
                                 className="p-1.5 rounded-lg bg-red-500/5 border border-red-500/10 text-red-400/60 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/10 transition-all flex items-center gap-1.5"
@@ -3004,6 +3166,7 @@ export default function Dashboard() {
                       a.name.toLowerCase().includes(searchQuery.toLowerCase())
                     );
                     return filteredArchipelagos.length > 0 ? (
+                      <>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                         {filteredArchipelagos.map((archipelago) => {
                           const archIslands = currentIslands.filter(i => i.archipelagoId === archipelago.id);
@@ -3053,18 +3216,68 @@ export default function Dashboard() {
                           );
                         })}
                       </div>
-                    ) : (
-                      <div className="h-[400px] w-full rounded-[40px] glass flex items-center justify-center relative overflow-hidden">
-                        <div className="absolute top-[-50px] right-[-50px] w-[200px] h-[200px] bg-brand-primary/5 rounded-full blur-[60px]" />
-                        <div className="text-center relative z-10">
-                          <div className="w-20 h-20 rounded-3xl border border-brand-border bg-white/[0.02] mx-auto mb-6 flex items-center justify-center">
-                            <Compass className="w-8 h-8 text-brand-muted/30" />
+                      {/* Nudge: user has a collection but no islands yet */}
+                      {ownedArchipelagos.length > 0 && currentIslands.length === 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-6 p-5 rounded-[24px] border border-brand-primary/20 bg-brand-primary/5 flex items-center justify-between gap-4"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center shrink-0">
+                              <Plus className="w-4 h-4 text-brand-primary" />
+                            </div>
+                            <p className="text-sm text-white/70">
+                              <span className="text-white font-semibold">Collection created!</span> Now add an Island (study deck) inside it to start adding cards.
+                            </p>
                           </div>
-                          <p className="text-brand-muted/40 font-medium text-sm uppercase tracking-[0.2em]">
-                            {searchQuery ? `No archipelagos match "${searchQuery}"` : "Create an Archipelago to organize your Islands"}
-                          </p>
+                          <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="shrink-0 text-[11px] font-bold uppercase tracking-widest text-brand-primary border border-brand-primary/30 px-3 py-1.5 rounded-xl hover:bg-brand-primary/10 transition-colors whitespace-nowrap"
+                          >
+                            Add Island
+                          </button>
+                        </motion.div>
+                      )}
+                      </>
+                    ) : (
+                      searchQuery ? (
+                        <div className="h-[400px] w-full rounded-[40px] glass flex items-center justify-center relative overflow-hidden">
+                          <div className="absolute top-[-50px] right-[-50px] w-[200px] h-[200px] bg-brand-primary/5 rounded-full blur-[60px]" />
+                          <div className="text-center relative z-10">
+                            <div className="w-20 h-20 rounded-3xl border border-brand-border bg-white/[0.02] mx-auto mb-6 flex items-center justify-center">
+                              <Compass className="w-8 h-8 text-brand-muted/30" />
+                            </div>
+                            <p className="text-brand-muted/40 font-medium text-sm uppercase tracking-[0.2em]">
+                              No archipelagos match "{searchQuery}"
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="w-full rounded-[40px] glass flex flex-col items-center justify-center relative overflow-hidden py-16 px-8">
+                          <div className="absolute top-[-60px] right-[-60px] w-[280px] h-[280px] bg-brand-primary/5 rounded-full blur-[80px]" />
+                          <div className="absolute bottom-[-40px] left-[-40px] w-[200px] h-[200px] bg-indigo-500/5 rounded-full blur-[60px]" />
+                          <div className="text-center relative z-10 max-w-sm">
+                            <h2 className="text-2xl font-bold text-white mb-3">Start your first collection</h2>
+                            <p className="text-brand-muted text-sm mb-8 leading-relaxed">
+                              In Memory Island, a <span className="text-white/70 font-medium">collection</span> (called an Archipelago) holds all your study decks. Create one to get started.
+                            </p>
+                            <button
+                              onClick={() => setIsArchipelagoModalOpen(true)}
+                              className="flex items-center gap-2 bg-white text-black px-6 py-3 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.15)] mx-auto mb-4"
+                            >
+                              <Plus className="w-4 h-4" />
+                              Create your first collection
+                            </button>
+                            <button
+                              onClick={() => setActiveModal('ankiImport')}
+                              className="text-brand-muted/60 hover:text-brand-muted text-sm transition-colors underline underline-offset-4"
+                            >
+                              Or import an Anki deck
+                            </button>
+                          </div>
+                        </div>
+                      )
                     );
                   })()
                 ) : studySelection !== null ? (
@@ -3303,6 +3516,10 @@ export default function Dashboard() {
                   onAddCollaborator={async (uid) => addCollaborator(selectedIsland.id, uid)}
                   onRemoveCollaborator={async (uid) => removeCollaborator(selectedIsland.id, uid)}
                   onResetIsland={resetIslandProgress}
+                  onArchiveIsland={() => {
+                    archiveIsland(selectedIsland.id);
+                    setSelectedIslandId(null);
+                  }}
                 />
               </motion.div>
             )}
@@ -3365,16 +3582,16 @@ export default function Dashboard() {
         </div>
 
         {/* Home */}
-        <button 
-          onClick={() => { setSelectedIslandId(null); setActiveModal(null); }} 
+        <button
+          onClick={() => { setSelectedIslandId(null); setActiveModal(null); }}
           className={cn("p-2 transition-all relative", !selectedIslandId && !activeModal ? "text-white scale-110" : "text-brand-muted")}
         >
           <LayoutDashboard className="w-6 h-6" />
         </button>
 
         {/* Discover */}
-        <button 
-          onClick={() => setActiveModal('discover')} 
+        <button
+          onClick={() => setActiveModal('discover')}
           className={cn("p-2 transition-all relative", activeModal === 'discover' ? "text-brand-primary scale-110" : "text-brand-muted")}
         >
           <Compass className="w-6 h-6" />
@@ -3383,56 +3600,77 @@ export default function Dashboard() {
           )}
         </button>
 
-        {/* Social */}
-        <button 
-          onClick={() => setActiveModal('users')} 
-          className={cn("p-2 transition-all relative", activeModal === 'users' ? "text-white scale-110" : "text-brand-muted")}
-        >
-          <Users className="w-6 h-6" />
-          {unreadSocialCount > 0 && (
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
-          )}
-        </button>
+        {/* New-user quick-create button (replaces the full nav) */}
+        {isNewUser ? (
+          <button
+            onClick={() => setIsArchipelagoModalOpen(true)}
+            className="p-2 transition-all relative text-brand-primary"
+            title="Create your first collection"
+          >
+            <Plus className="w-6 h-6" />
+          </button>
+        ) : (
+          <>
+            {/* Social */}
+            <button
+              onClick={() => setActiveModal('users')}
+              className={cn("p-2 transition-all relative", activeModal === 'users' ? "text-white scale-110" : "text-brand-muted")}
+            >
+              <Users className="w-6 h-6" />
+              {unreadSocialCount > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+              )}
+            </button>
 
-        {/* Stats */}
-        <button 
-          onClick={() => setActiveModal('stats')} 
-          className={cn("p-2 transition-all relative", activeModal === 'stats' ? "text-brand-primary scale-110" : "text-brand-muted")}
-        >
-          <BarChart2 className="w-6 h-6" />
-        </button>
+            {/* Stats */}
+            <button
+              onClick={() => setActiveModal('stats')}
+              className={cn("p-2 transition-all relative", activeModal === 'stats' ? "text-brand-primary scale-110" : "text-brand-muted")}
+            >
+              <BarChart2 className="w-6 h-6" />
+            </button>
 
-        {/* Competitions */}
-        <button
-          onClick={() => setActiveModal('leaderboard')}
-          className={cn("p-2 transition-all relative", activeModal === 'leaderboard' ? "text-brand-primary scale-110" : "text-brand-muted")}
-        >
-          <Trophy className="w-6 h-6" />
-        </button>
+            {/* Competitions */}
+            <button
+              onClick={() => setActiveModal('leaderboard')}
+              className={cn("p-2 transition-all relative", activeModal === 'leaderboard' ? "text-brand-primary scale-110" : "text-brand-muted")}
+            >
+              <Trophy className="w-6 h-6" />
+            </button>
 
-        {/* Captain's Quarters */}
-        <button
-          onClick={() => setActiveModal('trophies')}
-          className={cn("p-2 transition-all relative", activeModal === 'trophies' ? "text-brand-primary scale-110" : "text-brand-muted")}
-        >
-          <Award className="w-6 h-6" />
-        </button>
+            {/* Captain's Quarters */}
+            <button
+              onClick={() => setActiveModal('trophies')}
+              className={cn("p-2 transition-all relative", activeModal === 'trophies' ? "text-brand-primary scale-110" : "text-brand-muted")}
+            >
+              <Award className="w-6 h-6" />
+            </button>
 
-        {/* Distress Signals */}
-        <button
-          onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
-          className={cn("p-2 transition-all relative", activeModal === 'distress' ? "text-orange-400 scale-110" : "text-orange-400/40")}
-        >
-          <Radio className="w-6 h-6" />
-        </button>
+            {/* Distress Signals */}
+            <button
+              onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
+              className={cn("p-2 transition-all relative", activeModal === 'distress' ? "text-orange-400 scale-110" : "text-orange-400/40")}
+            >
+              <Radio className="w-6 h-6" />
+            </button>
 
-        {/* Test Mode */}
-        <button
-          onClick={() => setActiveModal('testMode')}
-          className={cn("p-2 transition-all relative", activeModal === 'testMode' ? "text-brand-primary scale-110" : "text-brand-muted")}
-        >
-          <GraduationCap className="w-6 h-6" />
-        </button>
+            {/* Test Mode */}
+            <button
+              onClick={() => setActiveModal('testMode')}
+              className={cn("p-2 transition-all relative", activeModal === 'testMode' ? "text-brand-primary scale-110" : "text-brand-muted")}
+            >
+              <GraduationCap className="w-6 h-6" />
+            </button>
+
+            {/* Archive */}
+            <button
+              onClick={() => setActiveModal('archive')}
+              className={cn("p-2 transition-all relative", activeModal === 'archive' ? "text-amber-400 scale-110" : "text-brand-muted")}
+            >
+              <Archive className="w-6 h-6" />
+            </button>
+          </>
+        )}
 
         {/* Mobile Notifications */}
         <div className="relative" ref={notifRef}>
@@ -3578,6 +3816,54 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={() => setShowDeleteArchipelagoConfirm(false)}
+                  className="w-full py-4 text-brand-muted hover:text-white font-bold text-xs uppercase tracking-widest transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Archive Archipelago Confirm */}
+      <AnimatePresence>
+        {showArchiveArchipelagoConfirm && selectedArchipelago && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              onClick={() => setShowArchiveArchipelagoConfirm(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md glass p-8 rounded-[40px] border-amber-500/20 shadow-[0_40px_100px_rgba(0,0,0,0.8)] text-center"
+            >
+              <div className="w-20 h-20 bg-amber-500/15 rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-xl border border-amber-500/30">
+                <Archive className="w-10 h-10 text-amber-400" />
+              </div>
+              <h2 className="text-2xl font-bold mb-3 tracking-tight">Archive Archipelago?</h2>
+              <p className="text-brand-muted text-sm leading-relaxed mb-2 px-4">
+                <span className="text-white font-bold">"{selectedArchipelago.name}"</span> and its islands will be hidden from your main view.
+              </p>
+              <p className="text-amber-400/70 text-xs font-bold uppercase tracking-widest mb-10">You can restore it any time from the Archive.</p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={async () => {
+                    await archiveArchipelago(selectedArchipelago.id);
+                    setShowArchiveArchipelagoConfirm(false);
+                    setSelectedArchipelagoId(null);
+                  }}
+                  className="w-full py-4 bg-amber-500 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-lg shadow-amber-500/20 active:scale-95 transition-transform"
+                >
+                  Archive
+                </button>
+                <button
+                  onClick={() => setShowArchiveArchipelagoConfirm(false)}
                   className="w-full py-4 text-brand-muted hover:text-white font-bold text-xs uppercase tracking-widest transition-colors"
                 >
                   Cancel

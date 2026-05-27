@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles, Archive } from 'lucide-react';
 import { Island, Card } from '../hooks/useUserProgress';
 import Papa from 'papaparse';
 import { generateCardsFromNotes, getRemainingGenerations } from '../lib/generateCards';
@@ -34,6 +34,7 @@ interface IslandDetailProps {
   onAddCollaborator?: (uid: string) => Promise<void>;
   onRemoveCollaborator?: (uid: string) => Promise<void>;
   onResetIsland?: (islandId: string) => Promise<void>;
+  onArchiveIsland?: () => void;
 }
 
 function wrapSelection(
@@ -99,7 +100,7 @@ function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaE
   );
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland, onArchiveIsland }: IslandDetailProps) {
   const [view, setView] = useState<'home' | 'editor'>('home');
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
@@ -118,6 +119,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showCollaboratorPanel, setShowCollaboratorPanel] = useState(false);
   const [collaboratorProfiles, setCollaboratorProfiles] = useState<UserProfile[]>([]);
   const [friendProfilesForInvite, setFriendProfilesForInvite] = useState<UserProfile[]>([]);
@@ -1271,6 +1273,59 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>
+                )}
+
+                {onArchiveIsland && !isCollabMember && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowArchiveConfirm(true)}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                      title="Archive Island"
+                    >
+                      <Archive className="w-4 h-4" />
+                    </button>
+                    <AnimatePresence>
+                      {showArchiveConfirm && (
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[2px]"
+                            onClick={() => setShowArchiveConfirm(false)}
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, x: -10 }}
+                            animate={{ opacity: 1, scale: 1, x: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, x: -10 }}
+                            className="absolute top-0 right-full mr-3 w-64 glass p-5 rounded-[24px] border border-amber-500/20 shadow-2xl z-[70] bg-amber-500/5 backdrop-blur-xl"
+                          >
+                            <p className="text-xs font-bold text-amber-400 mb-2">Archive Island?</p>
+                            <p className="text-[10px] text-brand-muted leading-relaxed mb-4">
+                              <span className="font-bold text-white">{island.name}</span> will be hidden from your main view. You can restore it any time from the Archive.
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  onArchiveIsland();
+                                  setShowArchiveConfirm(false);
+                                }}
+                                className="flex-1 bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest py-2 rounded-xl hover:bg-amber-500/30 transition-colors"
+                              >
+                                Archive
+                              </button>
+                              <button
+                                onClick={() => setShowArchiveConfirm(false)}
+                                className="flex-1 bg-white/5 text-brand-muted text-[10px] font-black uppercase tracking-widest py-2 rounded-xl hover:bg-white/10 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 )}
 
                 {onDeleteIsland && !isCollabMember && (

@@ -110,6 +110,7 @@ export interface Archipelago {
   isPublic?: boolean;
   publishedId?: string;
   isImported?: boolean;
+  isArchived?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
   isCollaborative?: boolean;
@@ -132,6 +133,7 @@ export interface Island {
   createdAt?: number;
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
   isImported?: boolean;
+  isArchived?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
   isCollaborative?: boolean;
@@ -203,6 +205,7 @@ interface IslandDocumentData {
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected';
   submittedAt?: Timestamp;
   isImported?: boolean;
+  isArchived?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
   isCollaborative?: boolean;
@@ -217,6 +220,7 @@ interface ArchipelagoDocumentData {
   isCollaborative: boolean;
   isPublic?: boolean;
   publishedId?: string;
+  isArchived?: boolean;
   sharedWith?: string[];
   sharedAtTimestamps?: Record<string, number>;
   createdAt: number;
@@ -893,6 +897,7 @@ export function useUserProgress() {
         createdAt: data.createdAt,
         approvalStatus: data.approvalStatus,
         isImported: data.isImported || false,
+        isArchived: data.isArchived || false,
         sharedWith: data.sharedWith || [],
         sharedAtTimestamps: data.sharedAtTimestamps || {},
         isCollaborative: data.isCollaborative || false,
@@ -922,6 +927,7 @@ export function useUserProgress() {
       name: data.name,
       isPublic: data.isPublic,
       publishedId: data.publishedId,
+      isArchived: data.isArchived || false,
       sharedWith: data.sharedWith || [],
       sharedAtTimestamps: data.sharedAtTimestamps || {},
       isCollaborative: data.isCollaborative,
@@ -1203,6 +1209,94 @@ export function useUserProgress() {
     }
   };
 
+  const archiveArchipelago = async (archipelagoId: string) => {
+    if (!user || !progress || isConfigPlaceholder) return;
+    const archipelago = (progress.archipelagos || []).find(a => a.id === archipelagoId);
+    if (!archipelago) return;
+
+    if (archipelago.isTopLevel) {
+      try {
+        await updateDoc(doc(db, 'archipelagos', archipelagoId), { isArchived: true });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
+      }
+    } else {
+      const userRef = doc(db, 'users', user.uid);
+      try {
+        await runTransaction(db, async (transaction) => {
+          const userDoc = await transaction.get(userRef);
+          const current: any[] = userDoc.data()?.archipelagos || [];
+          const seenTxIds = new Set<string>();
+          const updated = current
+            .filter((a: any) => {
+              if (!a.id || seenTxIds.has(a.id)) return false;
+              seenTxIds.add(a.id);
+              return true;
+            })
+            .map((a: any) => (a.id === archipelagoId ? { ...a, isArchived: true } : a));
+          transaction.set(userRef, { archipelagos: omitUndefined(updated), last_active: Timestamp.now() }, { merge: true });
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
+
+  const unarchiveArchipelago = async (archipelagoId: string) => {
+    if (!user || !progress || isConfigPlaceholder) return;
+    const archipelago = (progress.archipelagos || []).find(a => a.id === archipelagoId);
+    if (!archipelago) return;
+
+    if (archipelago.isTopLevel) {
+      try {
+        await updateDoc(doc(db, 'archipelagos', archipelagoId), { isArchived: deleteField() });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `archipelagos/${archipelagoId}`);
+      }
+    } else {
+      const userRef = doc(db, 'users', user.uid);
+      try {
+        await runTransaction(db, async (transaction) => {
+          const userDoc = await transaction.get(userRef);
+          const current: any[] = userDoc.data()?.archipelagos || [];
+          const seenTxIds = new Set<string>();
+          const updated = current
+            .filter((a: any) => {
+              if (!a.id || seenTxIds.has(a.id)) return false;
+              seenTxIds.add(a.id);
+              return true;
+            })
+            .map((a: any) => {
+              if (a.id !== archipelagoId) return a;
+              const { isArchived: _, ...rest } = a;
+              return rest;
+            });
+          transaction.set(userRef, { archipelagos: omitUndefined(updated), last_active: Timestamp.now() }, { merge: true });
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
+
+  const archiveIsland = async (islandId: string) => {
+    if (!user || isConfigPlaceholder) return;
+    try {
+      await updateDoc(doc(db, 'islands', islandId), { isArchived: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
+    }
+  };
+
+  const unarchiveIsland = async (islandId: string) => {
+    if (!user || isConfigPlaceholder) return;
+    try {
+      await updateDoc(doc(db, 'islands', islandId), { isArchived: deleteField() });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
+    }
+  };
+
   const addIsland = async (name: string, archipelagoId?: string) => {
     if (!user) return;
     const islandId = randomId();
@@ -1238,6 +1332,7 @@ export function useUserProgress() {
     if (updates.downloads !== undefined) payload.downloads = updates.downloads;
     if (updates.createdAt !== undefined) payload.createdAt = updates.createdAt;
     if (updates.approvalStatus !== undefined) payload.approvalStatus = updates.approvalStatus;
+    if (updates.isArchived !== undefined) payload.isArchived = updates.isArchived;
 
     try {
       await updateDoc(doc(db, 'islands', islandId), payload);
@@ -2325,6 +2420,10 @@ export function useUserProgress() {
     updateSettings,
     addArchipelago,
     removeArchipelago,
+    archiveArchipelago,
+    unarchiveArchipelago,
+    archiveIsland,
+    unarchiveIsland,
     addIsland,
     updateIsland,
     removeIsland,
