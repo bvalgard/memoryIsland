@@ -12,6 +12,7 @@ const TYPE_LABELS: Record<CardType, string> = {
   'fill-in-the-blank': 'Fill in the Blank',
   matching: 'Matching',
   flashcard: 'Flashcard',
+  hotspot: 'Hotspot Image',
 };
 
 const PER_Q_OPTIONS = [

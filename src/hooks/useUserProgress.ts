@@ -58,11 +58,19 @@ export interface UserCardProgress {
   totalCorrect?: number;
 }
 
+export interface HotspotZone {
+  id: string;      // crypto.randomUUID() — for React keys
+  x: number;       // center x, normalized 0–1 (fraction of image width)
+  y: number;       // center y, normalized 0–1 (fraction of image height)
+  radius: number;  // radius, normalized 0–1 as fraction of image width (e.g. 0.10 = 10%)
+  label?: string;  // creator-visible label only, never shown to learner
+}
+
 export interface Card {
   id?: string;
   front: string;
   back: string;
-  type?: 'flashcard' | 'mcq' | 'matching' | 'fill-in-the-blank' | 'multi-select' | 'sequencing';
+  type?: 'flashcard' | 'mcq' | 'matching' | 'fill-in-the-blank' | 'multi-select' | 'sequencing' | 'hotspot';
   options?: string[];
   correctOptions?: string[];
   explanations?: Record<string, string>;
@@ -84,6 +92,7 @@ export interface Card {
   backImageCredit?: string;
   optionImages?: (string | null)[];
   pairImages?: { leftImage?: string; rightImages?: (string | null)[] }[];
+  hotspots?: HotspotZone[];
   srsInterval?: number;
   srsEaseFactor?: number;
   srsNextReview?: number;
@@ -366,6 +375,10 @@ function sanitizeCardForPublic(card: Card) {
     ...(card.scenarioId ? { scenarioId: card.scenarioId } : {}),
     ...(card.scenarioText ? { scenarioText: card.scenarioText } : {}),
     ...(card.scenarioOrder !== undefined ? { scenarioOrder: card.scenarioOrder } : {}),
+    ...(card.optionImages ? { optionImages: card.optionImages } : {}),
+    ...(card.pairImages ? { pairImages: card.pairImages } : {}),
+    ...(card.hotspots ? { hotspots: card.hotspots } : {}),
+    ...(card.lockOptionOrder ? { lockOptionOrder: card.lockOptionOrder } : {}),
   };
 }
 
@@ -833,6 +846,7 @@ export function useUserProgress() {
         backImageCredit: data.backImageCredit,
         optionImages: data.optionImages,
         pairImages: data.pairImages,
+        hotspots: data.hotspots,
         lockOptionOrder: data.lockOptionOrder,
         // Per-user progress: read from userProgress map for collab cards, fall back to top-level
         needsWork: userProg?.needsWork ?? data.needsWork,

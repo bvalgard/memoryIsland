@@ -12,8 +12,8 @@ import {
 import { db } from '../firebase';
 import { Card } from './useUserProgress';
 
-export type CardType = 'flashcard' | 'mcq' | 'matching' | 'fill-in-the-blank' | 'multi-select' | 'sequencing';
-export const ALL_CARD_TYPES: CardType[] = ['mcq', 'multi-select', 'sequencing', 'fill-in-the-blank', 'matching', 'flashcard'];
+export type CardType = 'flashcard' | 'mcq' | 'matching' | 'fill-in-the-blank' | 'multi-select' | 'sequencing' | 'hotspot';
+export const ALL_CARD_TYPES: CardType[] = ['mcq', 'multi-select', 'sequencing', 'fill-in-the-blank', 'matching', 'flashcard', 'hotspot'];
 
 export interface TestConfig {
   islandIds: string[];

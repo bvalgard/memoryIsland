@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import React from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
-import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn, SkipForward } from 'lucide-react';
+import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn, SkipForward, Target } from 'lucide-react';
 import TestModeNavigator from './TestModeNavigator';
-import { Island, CardStatus, CardUpdateRecord, UserSettings, Card } from '../hooks/useUserProgress';
+import { Island, CardStatus, CardUpdateRecord, UserSettings, Card, HotspotZone } from '../hooks/useUserProgress';
 import { SessionMeta } from '../achievements';
 import { cn, getActiveTierCards } from '../lib/utils';
 import LightboxImage from './LightboxImage';
@@ -254,6 +254,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   // Sequencing State
   const [shuffledSequence, setShuffledSequence] = useState<{ id: string, text: string }[]>([]);
+
+  // Hotspot card state
+  const [hotspotTap, setHotspotTap] = useState<{ x: number; y: number } | null>(null);
+  const [hotspotCorrect, setHotspotCorrect] = useState<boolean | null>(null);
+  const hotspotImgRef = useRef<HTMLImageElement>(null);
 
   // Community Q&A state
   const [showAskButton, setShowAskButton] = useState(false);
@@ -670,6 +675,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     // Multi-select reset
     setSelectedMultiOptions(new Set());
 
+    // Hotspot reset
+    setHotspotTap(null);
+    setHotspotCorrect(null);
+
     // Community Q&A reset
     setShowAskButton(false);
     setAskModalOpen(false);
@@ -909,6 +918,90 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       }));
       setDirection(-1);
     }
+  };
+
+  // ─── Hotspot answer handler ───────────────────────────────────────────────
+  const handleHotspotPointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
+    if (isFlipped || !currentCard?.hotspots?.length) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const tapX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const tapY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+    const zone: HotspotZone = currentCard.hotspots[0];
+    // Aspect-ratio-corrected distance: radius is a fraction of image width,
+    // so we scale the Y-delta to match the aspect ratio before measuring.
+    const aspectRatio = rect.height > 0 ? rect.width / rect.height : 1;
+    const dx = tapX - zone.x;
+    const dy = (tapY - zone.y) * aspectRatio;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Enforce minimum 44px physical touch target regardless of zone radius
+    const effectiveRadius = Math.max(zone.radius, 22 / rect.width);
+    const isCorrect = distance <= effectiveRadius;
+
+    const hsResponseTimeMs = captureResponseTime(currentCard.front);
+
+    setHotspotTap({ x: tapX, y: tapY });
+    setHotspotCorrect(isCorrect);
+    setIsFlipped(true);
+    setLastAnswerCorrect(isCorrect);
+
+    if (isCorrect) {
+      setScoreDelta(prev => prev + 1);
+      setStreak(prev => {
+        const s = prev + 1;
+        updateStreakWithRecord(s);
+        return s;
+      });
+      setLiveCorrect(prev => prev + 1);
+      if (window.navigator?.vibrate) window.navigator.vibrate(50);
+      triggerSparkle({ clientX: e.clientX, clientY: e.clientY } as React.MouseEvent);
+    } else {
+      setStreak(0);
+      setLiveIncorrect(prev => prev + 1);
+      setShowAskButton(true);
+    }
+
+    const srsHs = computeSM2(
+      isCorrect ? 4 : 0,
+      currentCard.srsRepetitions ?? 0,
+      currentCard.srsInterval ?? 1,
+      currentCard.srsEaseFactor ?? 2.5
+    );
+    const hsStatus = intervalToStatus(srsHs.interval);
+    const isBeingDemotedHs =
+      hsStatus === 'struggling' &&
+      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+
+    setSessionStats(prev => ({ ...prev, [hsStatus]: prev[hsStatus as keyof typeof prev] + 1 }));
+
+    const { consecutiveCorrect: hsCC, consecutiveIncorrect: hsCI, extraCurrentCardFields: hsExtra, parentReactivation: hsParent } = applyAnswerResult(currentCard, isCorrect);
+
+    setCardUpdates(prev => ({
+      ...prev,
+      [currentCard.front]: {
+        status: hsStatus,
+        lastReviewed: Date.now(),
+        ...(isBeingDemotedHs && { wasDemoted: true, demotionCount: currentCard.demotionCount || 0 }),
+        srsInterval: srsHs.interval,
+        srsEaseFactor: srsHs.easeFactor,
+        srsNextReview: srsHs.nextReview,
+        srsRepetitions: srsHs.repetitions,
+        sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
+        sessionCorrect: (prev[currentCard.front]?.sessionCorrect ?? 0) + (isCorrect ? 1 : 0),
+        consecutiveCorrect: hsCC,
+        consecutiveIncorrect: hsCI,
+        ...hsExtra,
+        ...(hsResponseTimeMs !== undefined && { responseTimeMs: hsResponseTimeMs, responseTimeIsCorrect: isCorrect }),
+      },
+      ...(hsParent && { [hsParent.front]: hsParent.update }),
+    }));
+
+    recordHistory(isCorrect);
+    setDirection(isCorrect ? 1 : -1);
   };
 
   const handleFlashcardGrade = (isCorrect: boolean, e: React.MouseEvent) => {
@@ -1470,6 +1563,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       const isCorrect = shuffledSequence.every((item, idx) => item.text === currentCard.options![idx]);
       recordHistory(isCorrect);
       setDirection(isCorrect ? 1 : -1);
+      nextCard();
+    }
+    // For Hotspot — result already recorded in handleHotspotPointerDown
+    else if (currentCard?.type === 'hotspot') {
       nextCard();
     }
   };
@@ -2087,7 +2184,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 >
 
                   <p className="text-brand-muted uppercase tracking-[0.2em] font-medium text-[10px] sm:text-xs mb-4 sm:mb-6 shrink-0">
-                    {currentCard?.type === 'mcq' ? (getMcqCorrectOpts(currentCard).length > 1 ? 'Select All That Apply' : 'Select the Correct Answer') : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? (isFlipped && isFibCorrect !== null ? (isFibCorrect ? 'Excellent Work' : 'Correction Analysis') : 'Fill in the Blank') : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : isFlipped ? 'Anchored Response' : 'Front Side'}
+                    {currentCard?.type === 'mcq' ? (getMcqCorrectOpts(currentCard).length > 1 ? 'Select All That Apply' : 'Select the Correct Answer') : currentCard?.type === 'matching' ? 'Match the Objects' : currentCard?.type === 'fill-in-the-blank' ? (isFlipped && isFibCorrect !== null ? (isFibCorrect ? 'Excellent Work' : 'Correction Analysis') : 'Fill in the Blank') : currentCard?.type === 'multi-select' ? 'Select All That Apply' : currentCard?.type === 'sequencing' ? 'Put in the Correct Order' : currentCard?.type === 'hotspot' ? (isFlipped ? (hotspotCorrect ? 'Correct Region!' : 'Missed It') : 'Click the Image') : isFlipped ? 'Anchored Response' : 'Front Side'}
                     {tierInfo && (
                       <span className="ml-3 px-2.5 py-1 bg-white/10 rounded-full border border-white/20 text-white font-bold text-[10px] shadow-sm">
                         Tier {tierInfo.current} / {tierInfo.total}
@@ -2118,7 +2215,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </div>
                   ) : (
                     <>
-                      {currentCard?.imageUrl && (
+                      {/* Hotspot cards render their own interactive image below — skip the generic LightboxImage here */}
+                      {currentCard?.imageUrl && currentCard?.type !== 'hotspot' && (
                         <div className="mb-4 w-full">
                           {isOnline ? (
                             <>
@@ -2618,6 +2716,96 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                           </motion.div>
                         )}
                     </div>
+                  ) : currentCard?.type === 'hotspot' ? (
+                    // ── Hotspot card ──────────────────────────────────────────
+                    <div className="w-full flex-1 flex flex-col justify-center items-center gap-4 pb-4">
+                      {!isOnline ? (
+                        <OfflineImageNotice />
+                      ) : currentCard.imageUrl ? (
+                        <div className="relative w-full select-none">
+                          <img
+                            ref={hotspotImgRef}
+                            src={currentCard.imageUrl}
+                            alt=""
+                            draggable={false}
+                            className={cn(
+                              "w-full object-contain rounded-xl",
+                              !isFlipped ? "cursor-crosshair" : "cursor-default"
+                            )}
+                            onPointerDown={!isFlipped ? handleHotspotPointerDown : undefined}
+                          />
+                          {/* SVG overlay for zone reveal + tap marker */}
+                          {(hotspotTap || isFlipped) && (
+                            <svg
+                              className="absolute inset-0 w-full h-full pointer-events-none"
+                              viewBox="0 0 1 1"
+                              preserveAspectRatio="none"
+                            >
+                              {/* Correct zone — revealed after answer */}
+                              {isFlipped && currentCard.hotspots?.map(zone => {
+                                const imgEl = hotspotImgRef.current;
+                                const ar = imgEl ? imgEl.clientWidth / imgEl.clientHeight : 1;
+                                return (
+                                  <ellipse
+                                    key={zone.id}
+                                    cx={zone.x}
+                                    cy={zone.y}
+                                    rx={zone.radius}
+                                    ry={zone.radius / ar}
+                                    fill="rgba(74,222,128,0.15)"
+                                    stroke="#4ade80"
+                                    strokeWidth="0.004"
+                                    strokeDasharray="0.014 0.007"
+                                  />
+                                );
+                              })}
+                              {/* Tap marker */}
+                              {hotspotTap && (
+                                <circle
+                                  cx={hotspotTap.x}
+                                  cy={hotspotTap.y}
+                                  r="0.025"
+                                  fill={hotspotCorrect ? "#4ade80" : "#ef4444"}
+                                  stroke="white"
+                                  strokeWidth="0.006"
+                                />
+                              )}
+                            </svg>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-brand-muted">No image attached to this card.</p>
+                      )}
+
+                      {/* Pre-answer tap hint */}
+                      {!isFlipped && currentCard.imageUrl && isOnline && (
+                        <p className="text-[11px] text-brand-muted font-semibold flex items-center gap-1.5">
+                          <Target className="w-3.5 h-3.5 text-brand-primary/70" />
+                          Tap the correct region
+                        </p>
+                      )}
+
+                      {/* Explanation / result after answering */}
+                      {isFlipped && !isTestMode && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left"
+                        >
+                          <span className={cn(
+                            "text-[10px] font-bold uppercase tracking-widest block mb-1.5",
+                            hotspotCorrect ? "text-green-400" : "text-red-400"
+                          )}>
+                            {hotspotCorrect ? '✓ Correct' : '✗ Incorrect'}
+                          </span>
+                          {currentCard.back && (
+                            <div className="text-sm text-white/70 leading-relaxed">
+                              <RichText>{currentCard.back}</RichText>
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </div>
                   ) : currentCard?.type === 'mcq' ? (
                     <div className="w-full flex-1 flex flex-col justify-center pb-4">
                       {createPortal(
@@ -3027,10 +3215,10 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </div>
         ) : null}
 
-        {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank') && !isViewingHistory && (
+        {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank' || currentCard?.type === 'hotspot') && !isViewingHistory && (
           <div className="w-full mt-8 sm:mt-12 flex justify-center min-h-[64px] relative z-[60]">
             <AnimatePresence>
-              {(selectedOption !== null || (isFlipped && (currentCard.type === 'multi-select' || (currentCard.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1) || currentCard.type === 'sequencing' || currentCard.type === 'fill-in-the-blank'))) && (
+              {(selectedOption !== null || (isFlipped && (currentCard.type === 'multi-select' || (currentCard.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1) || currentCard.type === 'sequencing' || currentCard.type === 'fill-in-the-blank' || currentCard.type === 'hotspot'))) && (
                 <div className="flex flex-col sm:flex-row gap-3 w-full justify-center max-w-xl px-4 sm:px-0">
                   <motion.button
                     initial={{ opacity: 0, y: 20 }}

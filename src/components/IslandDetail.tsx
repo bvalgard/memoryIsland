@@ -1,8 +1,9 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles, Archive } from 'lucide-react';
-import { Island, Card } from '../hooks/useUserProgress';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles, Archive, Target } from 'lucide-react';
+import { Island, Card, HotspotZone } from '../hooks/useUserProgress';
+import { HotspotEditor } from './HotspotEditor';
 import Papa from 'papaparse';
 import { generateCardsFromNotes, getRemainingGenerations } from '../lib/generateCards';
 import { cn, formatTimeUntil, getActiveTierCards } from '../lib/utils';
@@ -161,6 +162,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [backImageUrl, setBackImageUrl] = useState<string | undefined>(undefined);
   const [imageCredit, setImageCredit] = useState('');
   const [backImageCredit, setBackImageCredit] = useState('');
+  const [hotspotZone, setHotspotZone] = useState<HotspotZone | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -326,6 +328,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setBackImageUrl(undefined);
     setImageCredit('');
     setBackImageCredit('');
+    setHotspotZone(null);
     setMatchingPairs([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
@@ -405,6 +408,10 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       if (valid.length < 2) { alert('Sequencing needs at least 2 items.'); return; }
       q.options = valid.map(i => i.text.trim());
       q.back = 'Sequencing Exercise';
+    } else if (cardType === 'hotspot') {
+      if (!imageUrl) { alert('Hotspot cards require an image.'); return; }
+      if (!hotspotZone) { alert('Click on the image to place the hotspot zone.'); return; }
+      q.hotspots = [hotspotZone];
     }
 
     setScenarioQuestions(prev => [...prev, q]);
@@ -412,8 +419,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setBack('');
     setHint('');
     setExplanation('');
-    setImageUrl(undefined);
-    setBackImageUrl(undefined);
+    // For hotspot scenario questions keep the same image so the creator can mark
+    // a different zone on the next question without re-uploading.
+    if (cardType !== 'hotspot') {
+      setImageUrl(undefined);
+      setBackImageUrl(undefined);
+    }
+    // Reset zone placement for the next hotspot question in the scenario
+    setHotspotZone(null);
     setMatchingPairs([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
@@ -449,7 +462,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isScenarioMode) return;
-    if (front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing', 'mcq'].includes(cardType))) {
+    if (front.trim() && (back.trim() || ['matching', 'multi-select', 'sequencing', 'mcq', 'hotspot'].includes(cardType))) {
       let newCard: Card = { 
         id: (editingCardIndex !== null && island.cards[editingCardIndex].id) ? island.cards[editingCardIndex].id : Math.random().toString(36).substring(2, 11),
         front: front.trim(), 
@@ -530,8 +543,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         }
         newCard.options = validItems.map(i => i.text.trim());
         newCard.back = 'Sequencing Exercise';
+      } else if (cardType === 'hotspot') {
+        if (!imageUrl) { alert('Hotspot cards require an image.'); return; }
+        if (!hotspotZone) { alert('Click on the image to place the hotspot zone.'); return; }
+        newCard.hotspots = [hotspotZone];
+        // back is used as the explanation — default to empty string if not provided
+        if (!newCard.back) newCard.back = '';
       }
-      
+
       if (editingCardIndex !== null && onUpdateCard) {
         const existingCard = island.cards[editingCardIndex];
         if (existingCard.scenarioId) {
@@ -577,6 +596,8 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setShowHintField(!!(card.hint));
     setShowExplanationField(!!(card.explanation));
     setShowImageField(!!(card.imageUrl || card.backImageUrl));
+    // Restore hotspot zone when editing a hotspot card
+    setHotspotZone(card.type === 'hotspot' ? (card.hotspots?.[0] ?? null) : null);
     if ((card.type === 'mcq' || card.type === 'multi-select') && card.options) {
       const opts = card.options.map((opt, i) => {
         const isImgPlaceholder = opt.startsWith('__img_') && opt.endsWith('__');
@@ -2340,6 +2361,32 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               </motion.div>
             )}
 
+            {/* Hotspot Image editor — always visible for hotspot card type */}
+            {(!isScenarioMode || scenarioSubFormOpen) && cardType === 'hotspot' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                <label className="block text-[10px] text-brand-primary uppercase tracking-[0.2em] font-black mb-1 mt-4">
+                  Hotspot Image
+                </label>
+                <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
+                  Upload an image, then click on it to mark the correct region. Adjust zone size with the slider.
+                </p>
+                <div className="space-y-4">
+                  <ImageUpload
+                    label="Hotspot Image (required)"
+                    value={imageUrl}
+                    onChange={(url) => { setImageUrl(url); if (!url) setHotspotZone(null); }}
+                  />
+                  {imageUrl && (
+                    <HotspotEditor
+                      imageUrl={imageUrl}
+                      zone={hotspotZone}
+                      onZoneChange={setHotspotZone}
+                    />
+                  )}
+                </div>
+              </motion.div>
+            )}
+
             {/* Image upload — controlled by right-pane toggle */}
             {showImageField && (!isScenarioMode || scenarioSubFormOpen) && (cardType === 'flashcard' || cardType === 'mcq' || cardType === 'fill-in-the-blank') && (
               <div className="space-y-4">
@@ -2425,6 +2472,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 { type: 'matching' as const, label: 'Match', Icon: Repeat2 },
                 { type: 'sequencing' as const, label: 'Order', Icon: ListOrdered },
                 { type: 'fill-in-the-blank' as const, label: 'Fill in the Blank', Icon: Type },
+                { type: 'hotspot' as const, label: 'Hotspot Image', Icon: Target },
               ] as const).map(({ type, label, Icon }) => (
                 <button
                   key={type}
@@ -2463,6 +2511,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 ...(['flashcard', 'mcq', 'fill-in-the-blank'].includes(cardType)
                   ? [{ label: 'Image', value: showImageField, setter: setShowImageFieldSticky }]
                   : []),
+                // Hotspot cards always show their image editor; no toggle needed
               ] as { label: string; value: boolean; setter: (v: boolean) => void }[]).map(({ label, value, setter }) => (
                 <div key={label} className="flex items-center justify-between">
                   <span className="text-xs text-white/70 font-medium">{label}</span>
@@ -2625,10 +2674,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   type="submit"
                   disabled={
                     !front.trim() ||
-                    (!['matching', 'sequencing', 'mcq'].includes(cardType) && !back.trim()) ||
+                    (!['matching', 'sequencing', 'mcq', 'hotspot'].includes(cardType) && !back.trim()) ||
                     (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim() || o.imageUrl).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
                     (cardType === 'matching' && matchingPairs.filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image)).length < 2) ||
-                    (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2)
+                    (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2) ||
+                    (cardType === 'hotspot' && (!imageUrl || !hotspotZone))
                   }
                   className={cn("btn-primary h-12 disabled:opacity-50 text-sm", editingCardIndex !== null ? "w-2/3" : "w-full")}
                 >

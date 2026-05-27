@@ -3052,6 +3052,14 @@ export default function Dashboard() {
                                 );
                               })()}
                               <button
+                                onClick={() => setShowResetArchipelagoConfirm(true)}
+                                className="p-1.5 rounded-lg bg-amber-500/5 border border-amber-500/10 text-amber-400/60 hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
+                                title="Reset progress for this Archipelago"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-bold uppercase tracking-tight">Reset</span>
+                              </button>
+                              <button
                                 onClick={() => setShowArchiveArchipelagoConfirm(true)}
                                 className="p-1.5 rounded-lg bg-amber-500/5 border border-amber-500/10 text-amber-400/60 hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
                                 title="Archive this Archipelago"
@@ -3066,14 +3074,6 @@ export default function Dashboard() {
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span className="text-[10px] font-bold uppercase tracking-tight">Delete</span>
-                              </button>
-                              <button
-                                onClick={() => setShowResetArchipelagoConfirm(true)}
-                                className="p-1.5 rounded-lg bg-amber-500/5 border border-amber-500/10 text-amber-400/60 hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 transition-all flex items-center gap-1.5"
-                                title="Reset progress for this Archipelago"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span className="text-[10px] font-bold uppercase tracking-tight">Reset</span>
                               </button>
                             </div>
                           )}
