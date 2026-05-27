@@ -304,9 +304,12 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const openCollabInvite = async () => {
     setShowCollabInvite(true);
-    if (friends.length > 0 && friendProfilesForInvite.length === 0) {
+    // Always reload so newly accepted friends appear immediately
+    if (friends.length > 0) {
       const profiles = await fetchProfilesByUids(friends);
       setFriendProfilesForInvite(profiles);
+    } else {
+      setFriendProfilesForInvite([]);
     }
   };
   
@@ -1342,17 +1345,20 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
             )}
             {onUpdateIsland && archipelagos && archipelagos.length > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold text-brand-muted tracking-widest mt-0.5">Archipelago:</span>
-                <select
-                  value={island.archipelagoId || ''}
-                  onChange={(e) => onUpdateIsland({ archipelagoId: e.target.value || undefined })}
-                  className="bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-white px-2 py-1 outline-none cursor-pointer hover:bg-white/10 transition-colors appearance-none"
-                >
-                  <option value="" className="bg-[#111] text-brand-muted">None (All Islands)</option>
-                  {archipelagos.map(a => (
-                    <option key={a.id} value={a.id} className="bg-[#111]">{a.name}</option>
-                  ))}
-                </select>
+                <span className="text-[10px] uppercase font-bold text-brand-muted tracking-widest">Move to:</span>
+                <div className="relative">
+                  <select
+                    value={island.archipelagoId || ''}
+                    onChange={(e) => onUpdateIsland({ archipelagoId: e.target.value || undefined })}
+                    className="bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-white pl-2 pr-6 py-1 outline-none cursor-pointer hover:bg-white/10 transition-colors appearance-none"
+                  >
+                    <option value="" className="bg-[#111] text-brand-muted">None (standalone)</option>
+                    {archipelagos.map(a => (
+                      <option key={a.id} value={a.id} className="bg-[#111]">{a.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-brand-muted pointer-events-none" />
+                </div>
               </div>
             )}
           </div>

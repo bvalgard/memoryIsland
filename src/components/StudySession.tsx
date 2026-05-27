@@ -1698,10 +1698,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       (cardUpdates[card.front]?.sessionCorrect ?? 0) === 0
     );
     if (wrongCards.length === 0) return;
+    const wrongCardFronts = new Set(wrongCards.map(c => c.front));
     setShuffledCards(shuffleArray(wrongCards));
     setCurrentIndex(0);
     setSessionComplete(false);
-    setCardUpdates({});
+    // Only clear wrong cards so correct answers from round 1 are preserved and saved
+    setCardUpdates(prev => {
+      const next = { ...prev };
+      wrongCardFronts.forEach(front => delete next[front]);
+      return next;
+    });
     setStreak(0);
     setLiveCorrect(0);
     setLiveIncorrect(0);

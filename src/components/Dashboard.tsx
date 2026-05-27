@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload, Navigation2 } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -84,6 +84,7 @@ export default function Dashboard() {
   const [frozenStudySelection, setFrozenStudySelection] = useState<Set<string> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isArchipelagoModalOpen, setIsArchipelagoModalOpen] = useState(false);
+  const [moveIslandId, setMoveIslandId] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | null>(null);
@@ -3228,6 +3229,7 @@ export default function Dashboard() {
                             else next.add(island.id);
                             return next;
                           })}
+                          onMoveIsland={ownedArchipelagos.length > 0 ? (e) => { e.stopPropagation(); setMoveIslandId(island.id); } : undefined}
                         />
                       );
                     })}
@@ -3586,6 +3588,86 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Move Island to Archipelago Modal */}
+      <AnimatePresence>
+        {moveIslandId && (() => {
+          const movingIsland = progress?.islands.find(i => i.id === moveIslandId);
+          if (!movingIsland) return null;
+          return (
+            <div key="move-island-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                onClick={() => setMoveIslandId(null)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative w-full max-w-sm glass p-8 rounded-[40px] shadow-[0_40px_100px_rgba(0,0,0,0.8)]"
+              >
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-brand-primary/15 rounded-2xl flex items-center justify-center border border-brand-primary/30 shrink-0">
+                    <Navigation2 className="w-6 h-6 text-brand-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold leading-tight">Move Island</h2>
+                    <p className="text-brand-muted text-xs truncate">{movingIsland.name}</p>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-brand-muted uppercase tracking-widest font-bold mb-3">Select Destination</p>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                  <button
+                    onClick={async () => {
+                      await updateIsland(moveIslandId, { archipelagoId: undefined });
+                      setMoveIslandId(null);
+                    }}
+                    className={cn(
+                      "w-full text-left px-4 py-3 rounded-2xl border transition-all text-sm font-bold flex items-center justify-between",
+                      !movingIsland.archipelagoId
+                        ? "bg-brand-primary/20 border-brand-primary/40 text-brand-primary"
+                        : "bg-white/5 border-white/10 text-brand-muted hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    <span>None (standalone)</span>
+                    {!movingIsland.archipelagoId && <Check className="w-3.5 h-3.5 shrink-0" />}
+                  </button>
+                  {ownedArchipelagos.map(arch => (
+                    <button
+                      key={arch.id}
+                      onClick={async () => {
+                        await updateIsland(moveIslandId, { archipelagoId: arch.id });
+                        setMoveIslandId(null);
+                      }}
+                      className={cn(
+                        "w-full text-left px-4 py-3 rounded-2xl border transition-all text-sm font-bold flex items-center justify-between",
+                        movingIsland.archipelagoId === arch.id
+                          ? "bg-brand-primary/20 border-brand-primary/40 text-brand-primary"
+                          : "bg-white/5 border-white/10 text-brand-muted hover:bg-white/10 hover:text-white"
+                      )}
+                    >
+                      <span className="truncate">{arch.name}</span>
+                      {movingIsland.archipelagoId === arch.id && <Check className="w-3.5 h-3.5 shrink-0 ml-2" />}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setMoveIslandId(null)}
+                  className="mt-5 w-full py-3 text-brand-muted hover:text-white font-bold text-xs uppercase tracking-widest transition-colors"
+                >
+                  Cancel
+                </button>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
       <ConfirmDialog
         open={showResetArchipelagoConfirm}
         title="Reset archipelago progress?"
@@ -3627,9 +3709,10 @@ interface IslandCardProps {
   isSelected?: boolean;
   onLongPress?: () => void;
   onSelect?: () => void;
+  onMoveIsland?: (e: React.MouseEvent) => void;
 }
 
-function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceWindowMinutes = 0, onClick, isPinned = false, isOnline = true, onPinToggle, isSelectMode = false, isSelected = false, onLongPress, onSelect }: IslandCardProps) {
+function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceWindowMinutes = 0, onClick, isPinned = false, isOnline = true, onPinToggle, isSelectMode = false, isSelected = false, onLongPress, onSelect, onMoveIsland }: IslandCardProps) {
   const getMasteryStyles = () => {
     switch (masteryLevel) {
       case 'struggling':
@@ -3735,6 +3818,17 @@ function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceW
           )}
         >
           {isPinned ? <CloudDownload className="w-3.5 h-3.5" /> : <CloudOff className="w-3.5 h-3.5" />}
+        </button>
+      )}
+
+      {/* Move to archipelago button */}
+      {onMoveIsland && !isSelectMode && (
+        <button
+          onClick={onMoveIsland}
+          title="Move to another archipelago"
+          className="absolute bottom-3 right-3 p-1.5 rounded-xl border transition-all text-brand-muted/40 border-transparent hover:text-brand-muted hover:border-white/10 hover:bg-white/5"
+        >
+          <Navigation2 className="w-3.5 h-3.5" />
         </button>
       )}
     </motion.div>

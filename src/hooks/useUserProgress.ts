@@ -613,7 +613,7 @@ export function useUserProgress() {
             const profileRef = doc(db, 'profiles', user.uid);
             await Promise.all([
               updateDoc(userRef, { displayName: user.displayName }),
-              setDoc(profileRef, { 
+              setDoc(profileRef, {
                 displayName: user.displayName,
                 displayNameLowercase: user.displayName.toLowerCase()
               }, { merge: true })
@@ -621,6 +621,26 @@ export function useUserProgress() {
           } catch (error) {
             console.warn('Silent sync of displayName failed:', error);
           }
+        }
+
+        // Ensure a profiles document always exists so friends can find this user
+        // in targeted-share lists (fetchProfilesByUids queries the profiles collection).
+        // Older accounts or those that missed the initial write will be backfilled here.
+        try {
+          const profileRef = doc(db, 'profiles', user.uid);
+          await setDoc(
+            profileRef,
+            {
+              uid: user.uid,
+              displayName: data.displayName || user.displayName || 'Explorer',
+              displayNameLowercase: (data.displayName || user.displayName || 'Explorer').toLowerCase(),
+              photoURL: data.photoURL || user.photoURL || null,
+              lastActive: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (error) {
+          console.warn('Silent profile backfill failed:', error);
         }
 
         setUserData(data);
@@ -1209,7 +1229,7 @@ export function useUserProgress() {
     };
 
     if (updates.name !== undefined) payload.name = updates.name;
-    if (updates.archipelagoId !== undefined) payload.archipelagoId = updates.archipelagoId;
+    if ('archipelagoId' in updates) payload.archipelagoId = updates.archipelagoId ?? deleteField();
     if (updates.color_score !== undefined) payload.color_score = updates.color_score;
     if (updates.isPublic !== undefined) payload.isPublic = updates.isPublic;
     if (updates.publishedId !== undefined) payload.publishedId = updates.publishedId;
