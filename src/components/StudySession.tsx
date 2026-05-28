@@ -74,6 +74,19 @@ function computeSM2Hard(prevReps: number, prevInterval: number, prevEF: number) 
 
 // Extracts only the active card for each conceptual lineage
 
+// If any card from a scenario group is selected, pull in ALL cards from that
+// scenario (from the full unfiltered pool) so the group is always complete and
+// presented in order. Scenarios depend on earlier questions for context.
+function expandScenarioGroups(filteredCards: Card[], allCards: Card[]): Card[] {
+  const scenarioIds = new Set(
+    filteredCards.filter(c => c.scenarioId).map(c => c.scenarioId!)
+  );
+  if (scenarioIds.size === 0) return filteredCards;
+  const nonScenario = filteredCards.filter(c => !c.scenarioId);
+  const allScenario = allCards.filter(c => c.scenarioId && scenarioIds.has(c.scenarioId));
+  return [...nonScenario, ...allScenario];
+}
+
 function buildStudyDeck(cards: Card[], sortBy: 'lastReviewed' | 'srsNextReview'): Card[] {
   const groupMap = new Map<string, Card[]>();
   const standalones: Card[] = [];
@@ -398,6 +411,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
     else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs);
+    targetCards = expandScenarioGroups(targetCards, activeTierCards);
 
     const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     return shuffled;
@@ -416,6 +430,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
     else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs);
+    targetCards = expandScenarioGroups(targetCards, activeTierCards);
 
     const shuffled = buildStudyDeck(targetCards, mode === 'due' ? 'srsNextReview' : 'lastReviewed');
     setShuffledCards(shuffled);
@@ -432,12 +447,16 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   useEffect(() => { viewIndexRef.current = viewIndex; }, [viewIndex]);
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
-  const activeScenario = currentCard?.scenarioId ? {
-    id: currentCard.scenarioId,
-    text: currentCard.scenarioText ?? '',
-    questionNumber: currentCard.scenarioOrder ?? 1,
-    groupSize: shuffledCards.filter(c => c.scenarioId === currentCard.scenarioId).length,
-  } : null;
+  const activeScenario = currentCard?.scenarioId ? (() => {
+    const scenarioCardsInDeck = shuffledCards.filter(c => c.scenarioId === currentCard.scenarioId);
+    const questionNumber = scenarioCardsInDeck.findIndex(c => c.id === currentCard.id) + 1;
+    return {
+      id: currentCard.scenarioId,
+      text: currentCard.scenarioText ?? '',
+      questionNumber: questionNumber > 0 ? questionNumber : 1,
+      groupSize: scenarioCardsInDeck.length,
+    };
+  })() : null;
 
   useEffect(() => {
     cardStartTime.current = Date.now();
