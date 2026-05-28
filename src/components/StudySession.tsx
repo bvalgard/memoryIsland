@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import React from 'react';
-import { motion, AnimatePresence, Reorder } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Brain, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, Database, Zap, Library, XCircle, Check, X, Flame, TrendingDown, ZoomIn, SkipForward, Target } from 'lucide-react';
 import TestModeNavigator from './TestModeNavigator';
 import { Island, CardStatus, CardUpdateRecord, UserSettings, Card, HotspotZone } from '../hooks/useUserProgress';
@@ -267,6 +267,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   // Sequencing State
   const [shuffledSequence, setShuffledSequence] = useState<{ id: string, text: string }[]>([]);
+  const [seqDragIdx, setSeqDragIdx] = useState<number | null>(null);
+  const [seqOverIdx, setSeqOverIdx] = useState<number | null>(null);
 
   // Hotspot card state
   const [hotspotTap, setHotspotTap] = useState<{ x: number; y: number } | null>(null);
@@ -2685,12 +2687,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   ) : currentCard?.type === 'sequencing' ? (
                     <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
                       <form onSubmit={handleSequenceSubmit} className="w-full flex flex-col gap-3">
-                        <Reorder.Group
-                          axis="y"
-                          values={shuffledSequence}
-                          onReorder={setShuffledSequence}
-                          className="w-full space-y-2"
-                        >
+                        <ul className="w-full flex flex-col gap-2 list-none p-0 m-0">
                           {shuffledSequence.map((item, idx) => {
                             let btnClass = "bg-white/5 border border-white/10 text-white/80";
                             let icon = null;
@@ -2708,30 +2705,66 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                               btnClass = "bg-white/10 border-white/20 text-white/70";
                             }
 
+                            const isDraggingThis = seqDragIdx === idx;
+                            const isOverThis = seqOverIdx === idx && seqDragIdx !== idx;
+
                             return (
-                              <Reorder.Item
+                              <li
                                 key={item.id}
-                                value={item}
-                                dragListener={!isFlipped}
+                                draggable={!isFlipped}
+                                onDragStart={!isFlipped ? (e) => {
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  setSeqDragIdx(idx);
+                                } : undefined}
+                                onDragOver={!isFlipped ? (e) => {
+                                  e.preventDefault();
+                                  e.dataTransfer.dropEffect = 'move';
+                                  setSeqOverIdx(idx);
+                                } : undefined}
+                                onDrop={!isFlipped ? (e) => {
+                                  e.preventDefault();
+                                  if (seqDragIdx === null || seqDragIdx === idx) {
+                                    setSeqDragIdx(null);
+                                    setSeqOverIdx(null);
+                                    return;
+                                  }
+                                  const next = [...shuffledSequence];
+                                  const [moved] = next.splice(seqDragIdx, 1);
+                                  next.splice(idx, 0, moved);
+                                  setShuffledSequence(next);
+                                  setSeqDragIdx(null);
+                                  setSeqOverIdx(null);
+                                } : undefined}
+                                onDragEnd={!isFlipped ? () => {
+                                  setSeqDragIdx(null);
+                                  setSeqOverIdx(null);
+                                } : undefined}
                                 className={cn(
-                                  "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed shrink-0 flex items-center gap-3",
+                                  "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed flex items-center gap-3 select-none",
                                   btnClass,
-                                  !isFlipped && "cursor-grab active:cursor-grabbing hover:bg-white/10"
+                                  !isFlipped && "cursor-grab hover:bg-white/10",
+                                  isDraggingThis && "opacity-40 scale-95",
+                                  isOverThis && "ring-2 ring-brand-primary/60 ring-inset"
                                 )}
                               >
                                 <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0 pointer-events-none">
                                   {idx + 1}
                                 </div>
                                 <span className="flex-1 pointer-events-none"><RichTextInline>{item.text}</RichTextInline></span>
+                                {!isFlipped && (
+                                  <svg className="w-4 h-4 text-white/30 shrink-0 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+                                  </svg>
+                                )}
                                 {icon && (
                                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                                     {icon}
                                   </motion.div>
                                 )}
-                              </Reorder.Item>
+                              </li>
                             );
                           })}
-                        </Reorder.Group>
+                        </ul>
                         {!isFlipped && (
                           <button type="submit" className="w-full mt-4 bg-brand-primary hover:bg-white text-black py-4 rounded-xl text-sm font-bold transition-colors">
                             Submit Sequence
