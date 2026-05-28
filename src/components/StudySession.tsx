@@ -931,16 +931,30 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const tapY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
 
     const zone: HotspotZone = currentCard.hotspots[0];
-    // Aspect-ratio-corrected distance: radius is a fraction of image width,
-    // so we scale the Y-delta to match the aspect ratio before measuring.
-    const aspectRatio = rect.height > 0 ? rect.width / rect.height : 1;
-    const dx = tapX - zone.x;
-    const dy = (tapY - zone.y) * aspectRatio;
-    const distance = Math.sqrt(dx * dx + dy * dy);
 
-    // Enforce minimum 44px physical touch target regardless of zone radius
-    const effectiveRadius = Math.max(zone.radius, 22 / rect.width);
-    const isCorrect = distance <= effectiveRadius;
+    // ── Rotated-ellipse hit detection in pixel space ──────────────────────
+    // Both zone.radius (rx) and zone.radiusY (ry) are stored as fractions of
+    // image width, so converting to pixels is just multiplying by rect.width.
+    const W = rect.width;
+    const H = rect.height;
+    const rx_px = zone.radius * W;
+    const ry_px = (zone.radiusY ?? zone.radius) * W;
+    const θ = ((zone.rotation ?? 0) * Math.PI) / 180;
+
+    // Delta in pixel space
+    const dx_px = (tapX - zone.x) * W;
+    const dy_px = (tapY - zone.y) * H;
+
+    // Rotate the tap point by –θ to align with the ellipse's local axes
+    const cosθ = Math.cos(-θ);
+    const sinθ = Math.sin(-θ);
+    const dx_rot = dx_px * cosθ - dy_px * sinθ;
+    const dy_rot = dx_px * sinθ + dy_px * cosθ;
+
+    // Enforce 44 px minimum touch target on each axis
+    const effectiveRx = Math.max(rx_px, 22);
+    const effectiveRy = Math.max(ry_px, 22);
+    const isCorrect = (dx_rot / effectiveRx) ** 2 + (dy_rot / effectiveRy) ** 2 <= 1;
 
     const hsResponseTimeMs = captureResponseTime(currentCard.front);
 
@@ -2734,43 +2748,61 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                             )}
                             onPointerDown={!isFlipped ? handleHotspotPointerDown : undefined}
                           />
-                          {/* SVG overlay for zone reveal + tap marker */}
-                          {(hotspotTap || isFlipped) && (
+                          {/* ── Zone glow overlay — revealed after answer ── */}
+                          {isFlipped && (
                             <svg
                               className="absolute inset-0 w-full h-full pointer-events-none"
                               viewBox="0 0 1 1"
                               preserveAspectRatio="none"
                             >
-                              {/* Correct zone — revealed after answer */}
-                              {isFlipped && currentCard.hotspots?.map(zone => {
+                              {currentCard.hotspots?.map(zone => {
                                 const imgEl = hotspotImgRef.current;
                                 const ar = imgEl ? imgEl.clientWidth / imgEl.clientHeight : 1;
+                                const ry = (zone.radiusY ?? zone.radius) / ar;
                                 return (
                                   <ellipse
                                     key={zone.id}
                                     cx={zone.x}
                                     cy={zone.y}
                                     rx={zone.radius}
-                                    ry={zone.radius / ar}
-                                    fill="rgba(74,222,128,0.15)"
+                                    ry={ry}
+                                    transform={zone.rotation ? `rotate(${zone.rotation}, ${zone.x}, ${zone.y})` : undefined}
+                                    fill="none"
                                     stroke="#4ade80"
-                                    strokeWidth="0.004"
-                                    strokeDasharray="0.014 0.007"
+                                    strokeWidth="0.003"
+                                    style={{
+                                      filter:
+                                        'drop-shadow(0 0 4px #4ade80) drop-shadow(0 0 10px #4ade80) drop-shadow(0 0 22px rgba(74,222,128,0.55))',
+                                    }}
                                   />
                                 );
                               })}
-                              {/* Tap marker */}
-                              {hotspotTap && (
-                                <circle
-                                  cx={hotspotTap.x}
-                                  cy={hotspotTap.y}
-                                  r="0.025"
-                                  fill={hotspotCorrect ? "#4ade80" : "#ef4444"}
-                                  stroke="white"
-                                  strokeWidth="0.006"
-                                />
-                              )}
                             </svg>
+                          )}
+
+                          {/* ── Tap marker — HTML div so Tailwind animate-ping works ── */}
+                          {hotspotTap && (
+                            <div
+                              className="absolute pointer-events-none"
+                              style={{
+                                left: `${hotspotTap.x * 100}%`,
+                                top: `${hotspotTap.y * 100}%`,
+                                transform: 'translate(-50%, -50%)',
+                              }}
+                            >
+                              {/* Tactical target dot — white center, coloured ring, glow */}
+                              <div
+                                className={cn(
+                                  'relative w-4 h-4 rounded-full bg-white border-2',
+                                  hotspotCorrect ? 'border-green-400' : 'border-red-400'
+                                )}
+                                style={{
+                                  boxShadow: hotspotCorrect
+                                    ? '0 0 0 3px rgba(74,222,128,0.25), 0 0 12px #4ade80, 0 0 24px rgba(74,222,128,0.4)'
+                                    : '0 0 0 3px rgba(239,68,68,0.25), 0 0 12px #ef4444, 0 0 24px rgba(239,68,68,0.4)',
+                                }}
+                              />
+                            </div>
                           )}
                         </div>
                       ) : (
@@ -2785,23 +2817,44 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                         </p>
                       )}
 
-                      {/* Explanation / result after answering */}
+                      {/* ── Result panel — revealed after answering ── */}
                       {isFlipped && !isTestMode && (
                         <motion.div
-                          initial={{ opacity: 0, y: 8 }}
+                          initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left"
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                          className={cn(
+                            "w-full p-4 rounded-2xl border text-left",
+                            hotspotCorrect
+                              ? "bg-green-500/5 border-green-500/20"
+                              : "bg-red-500/5 border-red-500/20"
+                          )}
                         >
-                          <span className={cn(
-                            "text-[10px] font-bold uppercase tracking-widest block mb-1.5",
-                            hotspotCorrect ? "text-green-400" : "text-red-400"
-                          )}>
-                            {hotspotCorrect ? '✓ Correct' : '✗ Incorrect'}
-                          </span>
+                          {/* Title row */}
+                          <div className="flex items-center gap-2 mb-2">
+                            {hotspotCorrect ? (
+                              <CheckCircle2
+                                className="w-4 h-4 shrink-0 text-green-400"
+                                style={{ filter: 'drop-shadow(0 0 6px #4ade80)' }}
+                              />
+                            ) : (
+                              <XCircle className="w-4 h-4 shrink-0 text-red-400" />
+                            )}
+                            <span className={cn(
+                              "text-xs font-bold uppercase tracking-widest",
+                              hotspotCorrect ? "text-green-400" : "text-red-400"
+                            )}>
+                              {hotspotCorrect ? 'Correct Region' : 'Not Quite'}
+                            </span>
+                          </div>
+                          {/* Explanation */}
                           {currentCard.back && (
                             <div className="text-sm text-white/70 leading-relaxed">
                               <RichText>{currentCard.back}</RichText>
                             </div>
+                          )}
+                          {!currentCard.back && !hotspotCorrect && (
+                            <p className="text-sm text-white/50">The correct region is highlighted on the image above.</p>
                           )}
                         </motion.div>
                       )}

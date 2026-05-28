@@ -59,11 +59,13 @@ export interface UserCardProgress {
 }
 
 export interface HotspotZone {
-  id: string;      // crypto.randomUUID() — for React keys
-  x: number;       // center x, normalized 0–1 (fraction of image width)
-  y: number;       // center y, normalized 0–1 (fraction of image height)
-  radius: number;  // radius, normalized 0–1 as fraction of image width (e.g. 0.10 = 10%)
-  label?: string;  // creator-visible label only, never shown to learner
+  id: string;       // crypto.randomUUID() — for React keys
+  x: number;        // center x, normalized 0–1 (fraction of image width)
+  y: number;        // center y, normalized 0–1 (fraction of image height)
+  radius: number;   // horizontal radius (rx), normalized as fraction of image width
+  radiusY?: number; // vertical radius (ry), also as fraction of image width; defaults to radius (circle)
+  rotation?: number; // visual rotation in degrees 0–360; defaults to 0
+  label?: string;   // creator-visible label only, never shown to learner
 }
 
 export interface Card {

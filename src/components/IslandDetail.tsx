@@ -163,6 +163,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [imageCredit, setImageCredit] = useState('');
   const [backImageCredit, setBackImageCredit] = useState('');
   const [hotspotZone, setHotspotZone] = useState<HotspotZone | null>(null);
+  const [hotspotQuestions, setHotspotQuestions] = useState<
+    Array<{ id: string; zone: HotspotZone; front: string; back: string }>
+  >([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -329,6 +332,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setImageCredit('');
     setBackImageCredit('');
     setHotspotZone(null);
+    setHotspotQuestions([]);
     setMatchingPairs([{ id: Date.now().toString(), left: '', leftImage: undefined, rights: [{ id: Date.now().toString() + 'r0', text: '', image: undefined }] }]);
     setMcqInlineOptions([
       { id: Date.now().toString() + '1', text: '', isCorrect: true, explanation: '' },
@@ -351,10 +355,23 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setShowExplanationField(stickyFields.current.explanation);
     setShowImageField(stickyFields.current.image);
   };
-  
+
+  /** Locks in the current hotspot question into the set and clears the form for the next one. */
+  const handleAddToHotspotSet = () => {
+    if (!imageUrl || !hotspotZone || !front.trim()) return;
+    setHotspotQuestions(prev => [
+      ...prev,
+      { id: crypto.randomUUID(), zone: hotspotZone, front: front.trim(), back: back.trim() },
+    ]);
+    setFront('');
+    setBack('');
+    setHotspotZone(null);
+    // imageUrl is intentionally kept so the creator can place the next zone
+  };
+
   const handleAddScenarioQuestion = () => {
     if (!front.trim()) return;
-    if (!['matching', 'sequencing', 'mcq'].includes(cardType || '') && !back.trim()) return;
+    if (!['matching', 'sequencing', 'mcq', 'hotspot'].includes(cardType || '') && !back.trim()) return;
 
     const q: Card = {
       id: Math.random().toString(36).substring(2, 11),
@@ -544,11 +561,42 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         newCard.options = validItems.map(i => i.text.trim());
         newCard.back = 'Sequencing Exercise';
       } else if (cardType === 'hotspot') {
+        // Gather everything: already-committed set questions + the current pending question
+        const pendingQ =
+          imageUrl && hotspotZone && front.trim()
+            ? [{ id: crypto.randomUUID(), zone: hotspotZone, front: front.trim(), back: back.trim() }]
+            : [];
+        const allQs = [...hotspotQuestions, ...pendingQ];
+
+        if (allQs.length === 0) { alert('Add at least one question with a zone placed.'); return; }
+
+        if (allQs.length >= 2) {
+          // Multi-question set → save as a scenario group
+          const sid = crypto.randomUUID();
+          const setCards: Card[] = allQs.map((q, i) => ({
+            id: Math.random().toString(36).substring(2, 11),
+            front: q.front,
+            back: q.back || '',
+            type: 'hotspot' as const,
+            imageUrl: imageUrl!,
+            hotspots: [q.zone],
+            scenarioId: sid,
+            scenarioText: '',
+            scenarioOrder: i + 1,
+            tier: 1,
+          }));
+          onAddCards(setCards);
+          resetCardForm();
+          setTimeout(() => frontRef.current?.focus(), 50);
+          return; // skip normal save path
+        }
+
+        // Single question — normal single-card save
         if (!imageUrl) { alert('Hotspot cards require an image.'); return; }
-        if (!hotspotZone) { alert('Click on the image to place the hotspot zone.'); return; }
-        newCard.hotspots = [hotspotZone];
-        // back is used as the explanation — default to empty string if not provided
-        if (!newCard.back) newCard.back = '';
+        newCard.hotspots = [allQs[0].zone];
+        newCard.front = allQs[0].front;
+        newCard.back = allQs[0].back || '';
+        newCard.imageUrl = imageUrl;
       }
 
       if (editingCardIndex !== null && onUpdateCard) {
@@ -596,8 +644,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setShowHintField(!!(card.hint));
     setShowExplanationField(!!(card.explanation));
     setShowImageField(!!(card.imageUrl || card.backImageUrl));
-    // Restore hotspot zone when editing a hotspot card
+    // Restore hotspot zone when editing a hotspot card; always clear the set (can't edit sets yet)
     setHotspotZone(card.type === 'hotspot' ? (card.hotspots?.[0] ?? null) : null);
+    setHotspotQuestions([]);
     if ((card.type === 'mcq' || card.type === 'multi-select') && card.options) {
       const opts = card.options.map((opt, i) => {
         const isImgPlaceholder = opt.startsWith('__img_') && opt.endsWith('__');
@@ -2368,20 +2417,60 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   Hotspot Image
                 </label>
                 <p className="text-[10px] text-brand-muted mb-4 font-bold border-l-2 border-brand-primary/50 pl-3 py-1 bg-brand-primary/5 rounded-r-lg">
-                  Upload an image, then click on it to mark the correct region. Adjust zone size with the slider.
+                  Upload an image, click to place the answer zone, then type the question. Use "Add to Set" to add multiple questions on the same image.
                 </p>
                 <div className="space-y-4">
                   <ImageUpload
                     label="Hotspot Image (required)"
                     value={imageUrl}
-                    onChange={(url) => { setImageUrl(url); if (!url) setHotspotZone(null); }}
+                    onChange={(url) => { setImageUrl(url); if (!url) { setHotspotZone(null); setHotspotQuestions([]); } }}
                   />
                   {imageUrl && (
                     <HotspotEditor
                       imageUrl={imageUrl}
                       zone={hotspotZone}
                       onZoneChange={setHotspotZone}
+                      existingZones={hotspotQuestions.map((q, i) => ({ zone: q.zone, index: i }))}
                     />
+                  )}
+
+                  {/* Questions already locked into the set */}
+                  {hotspotQuestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium">
+                        Questions in set
+                      </p>
+                      {hotspotQuestions.map((q, i) => (
+                        <div key={q.id} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
+                          <span className="text-[10px] font-black text-white shrink-0 w-5 h-5 rounded-full bg-indigo-500/70 flex items-center justify-center">
+                            {i + 1}
+                          </span>
+                          <p className="text-sm text-white/70 flex-1 truncate">{q.front}</p>
+                          <button
+                            type="button"
+                            onClick={() => setHotspotQuestions(prev => prev.filter((_, j) => j !== i))}
+                            className="text-brand-muted hover:text-red-400 transition-colors shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* "Add to Set" — locks in the current question and starts the next */}
+                  {imageUrl && hotspotZone && front.trim() && (!isScenarioMode || scenarioSubFormOpen) && (
+                    <button
+                      type="button"
+                      onClick={handleAddToHotspotSet}
+                      className="w-full flex items-center justify-center gap-2 border border-dashed border-brand-primary/40 hover:border-brand-primary/80 text-brand-primary/70 hover:text-brand-primary py-3 rounded-xl text-xs font-bold transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add to Set
+                      {hotspotQuestions.length > 0 && (
+                        <span className="ml-1 text-brand-muted">({hotspotQuestions.length} so far)</span>
+                      )}
+                    </button>
                   )}
                 </div>
               </motion.div>
@@ -2678,11 +2767,20 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     (cardType === 'mcq' && (mcqInlineOptions.filter(o => o.text.trim() || o.imageUrl).length < 2 || !mcqInlineOptions.some(o => o.isCorrect))) ||
                     (cardType === 'matching' && matchingPairs.filter(p => (p.left.trim() || p.leftImage) && p.rights.some(r => r.text.trim() || r.image)).length < 2) ||
                     (cardType === 'sequencing' && sequenceItems.filter(i => i.text.trim()).length < 2) ||
-                    (cardType === 'hotspot' && (!imageUrl || !hotspotZone))
+                    // Hotspot: disabled when nothing is ready to save
+                    (cardType === 'hotspot' && (
+                      !imageUrl ||
+                      // No set built yet AND current pending question is incomplete
+                      (hotspotQuestions.length === 0 && (!hotspotZone || !front.trim()))
+                    ))
                   }
                   className={cn("btn-primary h-12 disabled:opacity-50 text-sm", editingCardIndex !== null ? "w-2/3" : "w-full")}
                 >
-                  {editingCardIndex !== null ? 'Update Card' : 'Save Card'}
+                  {editingCardIndex !== null
+                    ? 'Update Card'
+                    : cardType === 'hotspot' && hotspotQuestions.length > 0
+                      ? `Save Set (${hotspotQuestions.length + (hotspotZone && front.trim() ? 1 : 0)})`
+                      : 'Save Card'}
                 </button>
               </div>
             )}
