@@ -29,6 +29,8 @@ import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useLongPress } from '../hooks/useLongPress';
 import { TestConfig, TestSessionDoc, TestDefinition, getTestHistory, saveTestSession, createTestDef, updateTestDef, getUserTestDefs } from '../hooks/useTestMode';
 import AnkiImportModal from './AnkiImportModal';
+import DuplicateScanModal from './DuplicateScanModal';
+import { ScanLine } from 'lucide-react';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -91,7 +93,7 @@ export default function Dashboard() {
   const [moveIslandId, setMoveIslandId] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null>(null);
 
   // Test Mode state
   const [isTestStudying, setIsTestStudying] = useState(false);
@@ -954,6 +956,13 @@ export default function Dashboard() {
     setTestStudyConfig(prev => prev ? { ...prev, questionLimit: 'all' } : null);
     setIsTestStudying(true);
   }, [testStudyCards]);
+
+  const deleteCardById = useCallback((cardId: string, islandId: string) => {
+    const island = progress?.islands.find(i => i.id === islandId);
+    if (!island) return;
+    const idx = island.cards.findIndex(c => c.id === cardId);
+    if (idx !== -1) removeCardFromIsland(islandId, idx);
+  }, [progress?.islands, removeCardFromIsland]);
 
   return (
     <div className="h-screen max-w-full bg-brand-bg flex flex-col md:flex-row text-white relative overflow-hidden">
@@ -2467,6 +2476,15 @@ export default function Dashboard() {
 
       {/* Archive Modal */}
       <AnimatePresence>
+        {activeModal === 'duplicateScan' && (
+          <DuplicateScanModal
+            islands={progress?.islands || []}
+            scope="global"
+            onClose={() => setActiveModal(null)}
+            onDeleteCard={deleteCardById}
+          />
+        )}
+
         {activeModal === 'archive' && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
@@ -2707,6 +2725,15 @@ export default function Dashboard() {
                 <Award className="w-6 h-6" />
                 <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
                   Captain's Quarters
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveModal('duplicateScan')}
+                className={cn("relative group transition-all flex items-center justify-center", activeModal === 'duplicateScan' ? "text-amber-400" : "text-brand-muted hover:text-amber-400")}
+              >
+                <ScanLine className="w-6 h-6" />
+                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                  Duplicate Scanner
                 </div>
               </button>
               <button
@@ -3484,6 +3511,7 @@ export default function Dashboard() {
                   }}
                   onUpdateCard={(cardIndex, card) => updateCardInIsland(selectedIsland.id, cardIndex, card)}
                   onDeleteCard={(cardIndex) => removeCardFromIsland(selectedIsland.id, cardIndex)}
+                  onDeleteCardById={deleteCardById}
                   onMoveCard={(cardIndex, targetIslandId) => moveCardBetweenIslands(selectedIsland.id, targetIslandId, cardIndex)}
                   onDeleteIsland={() => {
                     removeIsland(selectedIsland.id);
@@ -3644,6 +3672,14 @@ export default function Dashboard() {
               className={cn("p-2 transition-all relative", activeModal === 'trophies' ? "text-brand-primary scale-110" : "text-brand-muted")}
             >
               <Award className="w-6 h-6" />
+            </button>
+
+            {/* Duplicate Scanner */}
+            <button
+              onClick={() => setActiveModal('duplicateScan')}
+              className={cn("p-2 transition-all relative", activeModal === 'duplicateScan' ? "text-amber-400 scale-110" : "text-brand-muted")}
+            >
+              <ScanLine className="w-6 h-6" />
             </button>
 
             {/* Distress Signals */}

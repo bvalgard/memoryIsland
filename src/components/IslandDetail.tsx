@@ -1,12 +1,14 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles, Archive, Target } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, CreditCard, Play, Upload, Share2, Globe, Users, Lock, Check, Download, X, ArrowUp, Type, CheckSquare, ListOrdered, Move, Pencil, Eye, BookOpen, Shuffle, Repeat2, Copy, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Menu, Search, ChevronDown, RotateCcw, ImageIcon, Sparkles, Archive, Target, ScanLine } from 'lucide-react';
 import { Island, Card, HotspotZone } from '../hooks/useUserProgress';
 import { HotspotEditor } from './HotspotEditor';
 import Papa from 'papaparse';
 import { generateCardsFromNotes, getRemainingGenerations } from '../lib/generateCards';
 import { cn, formatTimeUntil, getActiveTierCards } from '../lib/utils';
+import { findDuplicatesForCard, DuplicateMatch } from '../lib/duplicateDetection';
+import DuplicateScanModal from './DuplicateScanModal';
 import ShareModal from './ShareModal';
 import ConfirmDialog from './ConfirmDialog';
 import ImageUpload from './ImageUpload';
@@ -36,7 +38,10 @@ interface IslandDetailProps {
   onRemoveCollaborator?: (uid: string) => Promise<void>;
   onResetIsland?: (islandId: string) => Promise<void>;
   onArchiveIsland?: () => void;
+  onDeleteCardById?: (cardId: string, islandId: string) => void;
 }
+
+type AiPreviewCard = Card & { _isDuplicate?: boolean; _duplicateLocation?: string };
 
 function wrapSelection(
   ref: React.RefObject<HTMLTextAreaElement | null>,
@@ -101,7 +106,7 @@ function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaE
   );
 }
 
-export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland, onArchiveIsland }: IslandDetailProps) {
+export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland, onArchiveIsland, onDeleteCardById }: IslandDetailProps) {
   const [view, setView] = useState<'home' | 'editor'>('home');
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
@@ -175,9 +180,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [aiInstructions, setAiInstructions] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [aiPreviewCards, setAiPreviewCards] = useState<Card[]>([]);
+  const [aiPreviewCards, setAiPreviewCards] = useState<AiPreviewCard[]>([]);
   const [aiRemaining, setAiRemaining] = useState<number | null>(null);
   const [aiSaving, setAiSaving] = useState(false);
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateMatch[]>([]);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
@@ -250,6 +257,15 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!front.trim()) { setDuplicateWarnings([]); return; }
+    const timer = setTimeout(() => {
+      const excludeId = editingCardIndex !== null ? island.cards[editingCardIndex]?.id : undefined;
+      setDuplicateWarnings(findDuplicatesForCard({ front, type: cardType }, allIslands, excludeId));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [front, cardType, editingCardIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDirty = editingCardIndex !== null
     ? (() => {
@@ -902,7 +918,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     setAiError(null);
     try {
       const cards = await generateCardsFromNotes(aiNotes.trim(), aiCardCount, currentUserId, aiSelectedTypes, aiInstructions.trim() || undefined);
-      setAiPreviewCards(cards);
+      const marked: AiPreviewCard[] = cards.map(card => {
+        const matches = findDuplicatesForCard(card, allIslands);
+        if (matches.length === 0) return card;
+        const loc = matches[0];
+        const locationStr = loc.islandId === island.id ? `${loc.islandName} (this island)` : loc.islandName;
+        return { ...card, _isDuplicate: true, _duplicateLocation: locationStr };
+      });
+      setAiPreviewCards(marked);
       setAiRemaining(prev => (prev !== null ? Math.max(0, prev - 1) : null));
     } catch (err) {
       setAiError(err instanceof Error ? err.message : 'Generation failed. Please try again.');
@@ -914,7 +937,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const handleAiSave = () => {
     if (aiSaving) return;
     setAiSaving(true);
-    const cards = aiPreviewCards.filter(c => c.front.trim() && c.back.trim());
+    const cards = aiPreviewCards.filter(c => c.front.trim() && c.back.trim() && !c._isDuplicate);
     if (cards.length > 0) onAddCards(cards);
     setAiModalOpen(false);
     setAiPreviewCards([]);
@@ -1334,6 +1357,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                     </AnimatePresence>
                   </div>
                 )}
+
+                <button
+                  onClick={() => setScanModalOpen(true)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-brand-muted hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                  title="Scan for Duplicate Cards"
+                >
+                  <ScanLine className="w-4 h-4" />
+                </button>
 
                 {onResetIsland && (
                   <button
@@ -2062,6 +2093,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   rows={3}
                   className="bg-transparent border-none outline-none resize-none w-full text-center text-2xl font-bold text-white placeholder:text-white/15 focus:ring-0 leading-relaxed"
                 />
+                {duplicateWarnings.length > 0 && (
+                  <p className="text-[10px] text-amber-400/80 text-center leading-relaxed">
+                    ⚠ Duplicate already in: {duplicateWarnings.map(d => d.islandName).join(', ')}
+                  </p>
+                )}
               </div>
             )}
 
@@ -3545,14 +3581,31 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                   /* Preview screen */
                   <>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
-                      <p className="text-[10px] text-brand-muted uppercase tracking-widest px-1 mb-1">{aiPreviewCards.length} cards generated — edit before saving</p>
+                      {(() => {
+                        const dupCount = aiPreviewCards.filter(c => c._isDuplicate).length;
+                        const saveCount = aiPreviewCards.filter(c => c.front.trim() && !c._isDuplicate).length;
+                        return (
+                          <p className="text-[10px] text-brand-muted uppercase tracking-widest px-1 mb-1">
+                            {aiPreviewCards.length} cards generated
+                            {dupCount > 0 && <span className="text-amber-400/80"> · {dupCount} duplicate{dupCount > 1 ? 's' : ''} excluded</span>}
+                            {!dupCount && ' — edit before saving'}
+                          </p>
+                        );
+                      })()}
                       {aiPreviewCards.map((card, i) => (
-                        <div key={i} className="bg-white/5 rounded-2xl border border-white/10 p-3 flex flex-col gap-2">
+                        <div key={i} className={`rounded-2xl border p-3 flex flex-col gap-2 ${card._isDuplicate ? 'bg-amber-500/5 border-amber-500/20 opacity-60' : 'bg-white/5 border-white/10'}`}>
+                          {card._isDuplicate && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-amber-400/80">
+                              <ScanLine className="w-3 h-3 shrink-0" />
+                              <span>Duplicate — already in {card._duplicateLocation}</span>
+                            </div>
+                          )}
                           <div className="flex items-center justify-between gap-2">
                             <textarea
                               value={card.front}
-                              onChange={e => setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, front: e.target.value } : c))}
-                              className="flex-1 bg-transparent text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed"
+                              onChange={e => !card._isDuplicate && setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, front: e.target.value } : c))}
+                              disabled={!!card._isDuplicate}
+                              className={`flex-1 bg-transparent text-sm placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed ${card._isDuplicate ? 'line-through text-white/30' : 'text-white'}`}
                               rows={2}
                               placeholder="Question"
                             />
@@ -3573,8 +3626,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                           <div className="h-px bg-white/5" />
                           <textarea
                             value={card.back}
-                            onChange={e => setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, back: e.target.value } : c))}
-                            className="w-full bg-transparent text-xs text-brand-muted placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed"
+                            onChange={e => !card._isDuplicate && setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, back: e.target.value } : c))}
+                            disabled={!!card._isDuplicate}
+                            className={`w-full bg-transparent text-xs placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed ${card._isDuplicate ? 'line-through text-brand-muted/30' : 'text-brand-muted'}`}
                             rows={2}
                             placeholder="Answer"
                           />
@@ -3601,7 +3655,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                             Saving…
                           </>
                         ) : (
-                          `Save ${aiPreviewCards.filter(c => c.front.trim()).length} cards`
+                          `Add ${aiPreviewCards.filter(c => c.front.trim() && !c._isDuplicate).length} cards`
                         )}
                       </button>
                     </div>
@@ -3612,6 +3666,29 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           </>
         )}
       </AnimatePresence>
+
+      {/* Duplicate Scanner Modal */}
+      {scanModalOpen && (
+        <DuplicateScanModal
+          islands={(() => {
+            const archipelagoId = island.archipelagoId;
+            if (archipelagoId) {
+              return allIslands.filter(i => i.archipelagoId === archipelagoId);
+            }
+            return [island];
+          })()}
+          scope={island.archipelagoId ? 'archipelago' : 'island'}
+          onClose={() => setScanModalOpen(false)}
+          onDeleteCard={(cardId, islandId) => {
+            if (onDeleteCardById) {
+              onDeleteCardById(cardId, islandId);
+            } else if (islandId === island.id && onDeleteCard) {
+              const idx = island.cards.findIndex(c => c.id === cardId);
+              if (idx !== -1) onDeleteCard(idx);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
