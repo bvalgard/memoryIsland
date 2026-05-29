@@ -25,18 +25,21 @@ function worseStatus(a: CardStatus | undefined, b: CardStatus | undefined): Card
 
 function resolveConflicts(
   queuedUpdates: CardUpdateRecord,
-  allCards: Array<{ front: string; status?: CardStatus; lastReviewed?: number }>,
+  allCards: Array<{ id?: string; front: string; status?: CardStatus; lastReviewed?: number }>,
   offlineTimestamp: number,
 ): CardUpdateRecord {
   const cardMap = new Map(allCards.map(c => [c.front, c]));
+  const cardIdMap = new Map(allCards.filter(c => c.id).map(c => [c.id!, c]));
   const resolved: CardUpdateRecord = {};
 
   for (const [front, update] of Object.entries(queuedUpdates)) {
-    const current = cardMap.get(front);
+    const current = (update.cardId ? cardIdMap.get(update.cardId) : undefined) ?? cardMap.get(front);
     const currentLastReviewed = current?.lastReviewed ?? 0;
     const keepCurrentSRS = currentLastReviewed > offlineTimestamp;
 
     resolved[front] = {
+      cardId: update.cardId,
+      islandId: update.islandId,
       status: worseStatus(current?.status, update.status),
       consecutiveCorrect: update.consecutiveCorrect,
       lastReviewed: Math.max(currentLastReviewed, offlineTimestamp),

@@ -26,6 +26,8 @@ import { SessionMeta } from '../achievements';
 
 export type CardStatus = 'learning' | 'struggling' | 'mastered';
 export type CardUpdateRecord = Record<string, {
+  cardId?: string;
+  islandId?: string;
   status: CardStatus;
   consecutiveCorrect?: number;
   consecutiveIncorrect?: number;
@@ -831,6 +833,7 @@ export function useUserProgress() {
       const userProg = isCollab && uid ? data.userProgress?.[uid] : undefined;
       return {
         id,
+        islandId: data.islandId,
         front: data.front,
         back: data.back,
         type: data.type,
@@ -1613,12 +1616,22 @@ export function useUserProgress() {
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
 
-    const isCollab = island.isCollaborative === true;
+    // isCollab is true only when the current user is a non-owner collaborator.
+    // Owned collaborative islands use the same top-level write path as regular islands
+    // so that assembleCard (which reads top-level fields for owned islands) stays consistent.
+    const isCollab = island.isCollaborative === true && !!island.ownerId && island.ownerId !== user.uid;
     const uid = user.uid;
+    const updatesByCardId = new Map(
+      Object.values(cardUpdates)
+        .filter((update) => update.cardId)
+        .map((update) => [update.cardId!, update])
+    );
 
     const batch = writeBatch(db);
     island.cards.forEach((card) => {
-      const update = cardUpdates[card.front];
+      const byFront = cardUpdates[card.front];
+      const update = (card.id ? updatesByCardId.get(card.id) : undefined) ??
+        (byFront && (!byFront.cardId || byFront.cardId === card.id) ? byFront : undefined);
       if (update && card.id) {
         batch.update(doc(db, 'cards', card.id), buildCardPayload(card, update, isCollab, uid));
       }
@@ -1635,11 +1648,18 @@ export function useUserProgress() {
     if (!progress || !user) return;
 
     const uid = user.uid;
+    const updatesByCardId = new Map(
+      Object.values(cardUpdates)
+        .filter((update) => update.cardId)
+        .map((update) => [update.cardId!, update])
+    );
     const batch = writeBatch(db);
     progress.islands.forEach((island) => {
-      const isCollab = island.isCollaborative === true;
+      const isCollab = island.isCollaborative === true && !!island.ownerId && island.ownerId !== user.uid;
       island.cards.forEach((card) => {
-        const update = cardUpdates[card.front];
+        const byFront = cardUpdates[card.front];
+        const update = (card.id ? updatesByCardId.get(card.id) : undefined) ??
+          (byFront && (!byFront.cardId || byFront.cardId === card.id) ? byFront : undefined);
         if (update && card.id) {
           batch.update(doc(db, 'cards', card.id), buildCardPayload(card, update, isCollab, uid));
         }
@@ -1659,12 +1679,19 @@ export function useUserProgress() {
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
 
-    const isCollab = island.isCollaborative === true;
+    const isCollab = island.isCollaborative === true && !!island.ownerId && island.ownerId !== user.uid;
     const uid = user.uid;
+    const updatesByCardId = new Map(
+      Object.values(cardUpdates)
+        .filter((update) => update.cardId)
+        .map((update) => [update.cardId!, update])
+    );
 
     const batch = writeBatch(db);
     island.cards.forEach((card) => {
-      const update = cardUpdates[card.front];
+      const byFront = cardUpdates[card.front];
+      const update = (card.id ? updatesByCardId.get(card.id) : undefined) ??
+        (byFront && (!byFront.cardId || byFront.cardId === card.id) ? byFront : undefined);
       if (update && card.id) {
         batch.update(doc(db, 'cards', card.id), buildSyncCardPayload(card, update, isCollab, uid));
       }
@@ -1681,11 +1708,18 @@ export function useUserProgress() {
     if (!progress || !user) return;
 
     const uid = user.uid;
+    const updatesByCardId = new Map(
+      Object.values(cardUpdates)
+        .filter((update) => update.cardId)
+        .map((update) => [update.cardId!, update])
+    );
     const batch = writeBatch(db);
     progress.islands.forEach((island) => {
-      const isCollab = island.isCollaborative === true;
+      const isCollab = island.isCollaborative === true && !!island.ownerId && island.ownerId !== user.uid;
       island.cards.forEach((card) => {
-        const update = cardUpdates[card.front];
+        const byFront = cardUpdates[card.front];
+        const update = (card.id ? updatesByCardId.get(card.id) : undefined) ??
+          (byFront && (!byFront.cardId || byFront.cardId === card.id) ? byFront : undefined);
         if (update && card.id) {
           batch.update(doc(db, 'cards', card.id), buildSyncCardPayload(card, update, isCollab, uid));
         }

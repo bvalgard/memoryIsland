@@ -573,7 +573,7 @@ export default function Dashboard() {
   const archipelagoName = selectedArchipelago ? selectedArchipelago.name : 'The Archipelago';
 
   // Combine all cards for Archipelago Study (imported islands excluded)
-  const allCards = islandsInArchipelago.flatMap(i => i.cards.map(c => ({ ...c, islandName: i.name }))) || [];
+  const allCards = islandsInArchipelago.flatMap(i => i.cards.map(c => ({ ...c, islandId: i.id, islandName: i.name }))) || [];
   const archipelagoIsland: Island = {
     id: 'archipelago',
     name: archipelagoName,
@@ -591,7 +591,7 @@ export default function Dashboard() {
     id: 'multi-select',
     name: `${multiSelectIslands.length} Islands`,
     color_score: multiSelectIslands.reduce((acc, i) => acc + i.color_score, 0),
-    cards: multiSelectIslands.flatMap(i => i.cards.map(c => ({ ...c, islandName: i.name }))),
+    cards: multiSelectIslands.flatMap(i => i.cards.map(c => ({ ...c, islandId: i.id, islandName: i.name }))),
   };
 
   // Adjusted counts for Archipelago

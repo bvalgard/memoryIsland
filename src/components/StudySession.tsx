@@ -178,6 +178,18 @@ interface StudySessionProps {
 }
 
 export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', isOnline = true, isTestMode = false, timeoutPerCardSec, totalTimeLimitSec, onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
+  // Grace window in milliseconds — used to shift srsNextReview so studied cards
+  // always land OUTSIDE the due window and immediately leave the due count.
+  // Formula: srsNextReview = SM2.nextReview + graceMs
+  // The stored srsInterval is unchanged so SM2 state stays correct.
+  const graceMs = (settings?.graceWindowMinutes ?? 0) * 60_000;
+
+  // Bumps a computed SRS result past the grace window. Without this, when
+  // graceWindowMinutes >= srsInterval * 1440, a just-answered card's new
+  // srsNextReview falls inside the grace window and the due count never drops.
+  const withGrace = (srs: { interval: number; repetitions: number; easeFactor: number; nextReview: number }) =>
+    graceMs > 0 ? { ...srs, nextReview: srs.nextReview + graceMs } : srs;
+
   const sessionStartTime = useRef<number>(Date.now());
   const cardStartTime = useRef<number>(Date.now());
   const firstAttemptRecorded = useRef<Set<string>>(new Set());
@@ -404,6 +416,21 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   }, []);
 
 
+  // Front-text set of cards that were actually "due" at session start.
+  // Used on the completion screen so the user knows exactly which of their studied
+  // cards contributed to reducing the global due count (studying non-due cards in
+  // 'all' mode never reduces the count, which confuses users who expect it to drop).
+  const [dueCardFrontsAtStart] = useState<Set<string>>(() => {
+    const activeTierCards = getActiveTierCards(island.cards);
+    const now = Date.now();
+    const graceMs = (settings?.graceWindowMinutes ?? 0) * 60_000;
+    return new Set(
+      activeTierCards
+        .filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs)
+        .map(c => c.front)
+    );
+  });
+
   const [shuffledCards, setShuffledCards] = useState(() => {
     const activeTierCards = getActiveTierCards(island.cards);
     const now = Date.now();
@@ -530,9 +557,30 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalTimeLimitSec, sessionComplete]);
 
+  const attachCardIdentities = (updates: CardUpdateRecord): CardUpdateRecord => {
+    const cardsByFront = new Map<string, Card>();
+    [...shuffledCards, ...island.cards].forEach(card => {
+      if (!cardsByFront.has(card.front)) cardsByFront.set(card.front, card);
+    });
+
+    return Object.fromEntries(
+      Object.entries(updates).map(([front, update]) => {
+        const card = cardsByFront.get(front);
+        return [
+          front,
+          {
+            ...update,
+            cardId: update.cardId ?? card?.id,
+            islandId: update.islandId ?? card?.islandId,
+          },
+        ];
+      })
+    );
+  };
+
   useEffect(() => {
     if (Object.keys(cardUpdates).length > 0) {
-      onProgressUpdate?.(cardUpdates, scoreDelta, sessionMaxStreak);
+      onProgressUpdate?.(attachCardIdentities(cardUpdates), scoreDelta, sessionMaxStreak);
     }
   }, [cardUpdates, scoreDelta, sessionMaxStreak]);
 
@@ -546,7 +594,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       correctCount: Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length,
       sessionStartHour: new Date(sessionStartTime.current).getHours(),
     };
-    onFinish(scoreDelta, cardUpdates, sessionMaxStreak, meta);
+    onFinish(scoreDelta, attachCardIdentities(cardUpdates), sessionMaxStreak, meta);
   // Only re-run when sessionComplete flips — other deps are stable refs
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionComplete]);
@@ -860,12 +908,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         });
       }
 
-      const srsFib = computeSM2(
+      const srsFib = withGrace(computeSM2(
         usedClues ? 3 : 4,
         currentCard.srsRepetitions ?? 0,
         currentCard.srsInterval ?? 1,
         currentCard.srsEaseFactor ?? 2.5
-      );
+      ));
       const newStatus = intervalToStatus(srsFib.interval);
 
       setSessionStats(prev => ({ ...prev, [newStatus]: prev[newStatus as keyof typeof prev] + 1 }));
@@ -904,7 +952,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setLiveIncorrect(prev => prev + 1);
       setShowAskButton(true);
 
-      const srsFibWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+      const srsFibWrong = withGrace(computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
       const status = intervalToStatus(srsFibWrong.interval);
 
       setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
@@ -1000,12 +1048,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setShowAskButton(true);
     }
 
-    const srsHs = computeSM2(
+    const srsHs = withGrace(computeSM2(
       isCorrect ? 4 : 0,
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
-    );
+    ));
     const hsStatus = intervalToStatus(srsHs.interval);
     const isBeingDemotedHs =
       hsStatus === 'struggling' &&
@@ -1065,12 +1113,12 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setLiveIncorrect(prev => prev + 1);
     }
 
-    const srs = computeSM2(
+    const srs = withGrace(computeSM2(
       isCorrect ? 4 : 0,
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
-    );
+    ));
     const status = intervalToStatus(srs.interval);
 
     setSessionStats(prev => ({
@@ -1128,11 +1176,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     updateStreakWithRecord(newStreak);
     setLiveCorrect(prev => prev + 1);
 
-    const srs = computeSM2Easy(
+    const srs = withGrace(computeSM2Easy(
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
-    );
+    ));
     const status = intervalToStatus(srs.interval);
 
     setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
@@ -1182,11 +1230,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     updateStreakWithRecord(newStreak);
     setLiveCorrect(prev => prev + 1);
 
-    const srs = computeSM2Hard(
+    const srs = withGrace(computeSM2Hard(
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
-    );
+    ));
     const status = intervalToStatus(srs.interval);
 
     setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
@@ -1221,11 +1269,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     if (window.navigator?.vibrate) window.navigator.vibrate(50);
     triggerSparkle(e);
 
-    const srs = computeSM2Easy(
+    const srs = withGrace(computeSM2Easy(
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
-    );
+    ));
     const status = intervalToStatus(srs.interval);
 
     setCardUpdates(prev => ({
@@ -1249,11 +1297,11 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     if (!currentCard) return;
     if (window.navigator?.vibrate) window.navigator.vibrate(30);
 
-    const srs = computeSM2Hard(
+    const srs = withGrace(computeSM2Hard(
       currentCard.srsRepetitions ?? 0,
       currentCard.srsInterval ?? 1,
       currentCard.srsEaseFactor ?? 2.5
-    );
+    ));
     const status = intervalToStatus(srs.interval);
 
     setCardUpdates(prev => ({
@@ -1331,6 +1379,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   };
 
   const skipCard = () => {
+    // Skipped cards intentionally get NO entry in cardUpdates — the user explicitly
+    // wants skipped cards to remain "due" on the dashboard so they're surfaced again
+    // next session. Do not write any SRS update for them.
     recordHistory(null);
     setDirection(1);
     nextCard();
@@ -1382,7 +1433,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setShowAskButton(true);
     }
 
-    const srsMs = computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+    const srsMs = withGrace(computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
     const status = intervalToStatus(srsMs.interval);
 
     setSessionStats(prev => ({
@@ -1441,7 +1492,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setLiveIncorrect(prev => prev + 1);
     }
 
-    const srsSeq = computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+    const srsSeq = withGrace(computeSM2(isCorrect ? 4 : 0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
     const status = intervalToStatus(srsSeq.interval);
 
     setSessionStats(prev => ({
@@ -1498,7 +1549,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       updateStreakWithRecord(newStreak);
       setLiveCorrect(prev => prev + 1);
 
-      const srsMcqCorrect = computeSM2(4, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+      const srsMcqCorrect = withGrace(computeSM2(4, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
       const status = intervalToStatus(srsMcqCorrect.interval);
 
       setSessionStats(prev => ({
@@ -1531,7 +1582,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setLiveIncorrect(prev => prev + 1);
       setShowAskButton(true);
 
-      const srsMcqWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+      const srsMcqWrong = withGrace(computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
       const status = intervalToStatus(srsMcqWrong.interval);
 
       setSessionStats(prev => ({
@@ -1734,7 +1785,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             setScoreDelta(prev => prev + 1);
             setLiveCorrect(prev => prev + 1);
 
-            const srsMatchCorrect = computeSM2(5, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+            const srsMatchCorrect = withGrace(computeSM2(5, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
             const status = intervalToStatus(srsMatchCorrect.interval);
 
             setSessionStats(prev => ({
@@ -1767,7 +1818,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             setStreak(0);
             setLiveIncorrect(prev => prev + 1);
 
-            const srsMatchWrong = computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5);
+            const srsMatchWrong = withGrace(computeSM2(0, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
             const status = intervalToStatus(srsMatchWrong.interval);
 
             setSessionStats(prev => ({
@@ -1824,6 +1875,26 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }
   };
 
+  // Merges the reel-in backup into cardUpdates before a navigation callback fires.
+  // Cards that were deleted when the reel-in started and never re-answered (no new
+  // cardUpdates entry yet) are restored from the backup so they still get written to
+  // Firestore with their original wrong-answer SRS values.
+  const mergeReelInBackup = (updates: CardUpdateRecord): CardUpdateRecord => {
+    const backup = reelInBackupRef.current;
+    if (Object.keys(backup).length === 0) return updates;
+    const merged = { ...updates };
+    Object.entries(backup).forEach(([front, update]) => {
+      if (!merged[front]) merged[front] = update;
+    });
+    return merged;
+  };
+
+  // Backup of wrong-card updates from before the reel-in drill started.
+  // If the user starts the reel-in but leaves mid-drill without re-answering any
+  // wrong cards, the original wrong-answer SRS data is restored on navigation so
+  // those cards still get saved (preventing them from staying permanently "due").
+  const reelInBackupRef = useRef<CardUpdateRecord>({});
+
   const startWrongAnswerDrill = () => {
     const wrongCards = shuffledCards.filter(card =>
       cardUpdates[card.front] !== undefined &&
@@ -1831,6 +1902,15 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     );
     if (wrongCards.length === 0) return;
     const wrongCardFronts = new Set(wrongCards.map(c => c.front));
+
+    // Save the wrong cards' current updates before removing them, so they can be
+    // restored if the user abandons the reel-in without answering any cards.
+    const backup: CardUpdateRecord = {};
+    wrongCardFronts.forEach(front => {
+      if (cardUpdates[front]) backup[front] = cardUpdates[front];
+    });
+    reelInBackupRef.current = backup;
+
     setShuffledCards(shuffleArray(wrongCards));
     setCurrentIndex(0);
     setSessionComplete(false);
@@ -1855,6 +1935,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const correctAnswers = Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length;
     const incorrectAnswers = Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) === 0).length;
     const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
+    // How many of the cards just reviewed were actually "due" — i.e. will be removed
+    // from the global due count after this session saves.
+    const dueCardsCleared = Object.keys(cardUpdates).filter(front => dueCardFrontsAtStart.has(front)).length;
     const meta = buildMeta();
 
     // In test mode, results are handled by TestSession — render nothing
@@ -1900,6 +1983,24 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
           </span>
         </div>
 
+        {/* Due cards cleared indicator — helps user understand why the global count
+            did or didn't change after the session */}
+        {dueCardFrontsAtStart.size > 0 ? (
+          <div className="mb-4 text-xs text-sky-400/80 flex items-center justify-center gap-1.5">
+            <span>🗓️</span>
+            <span>
+              {dueCardsCleared > 0
+                ? `${dueCardsCleared} overdue card${dueCardsCleared !== 1 ? 's' : ''} rescheduled — due count will drop`
+                : `No overdue cards in this session — due count unchanged`}
+            </span>
+          </div>
+        ) : mode !== 'due' ? (
+          <div className="mb-4 text-xs text-brand-muted/50 flex items-center justify-center gap-1.5">
+            <span>🗓️</span>
+            <span>No cards were overdue — due count unchanged</span>
+          </div>
+        ) : null}
+
         {/* Cards to revisit */}
         {strugglingCards.length > 0 && (
           <div className="border-l-2 border-red-500/50 pl-3 mb-6 text-left">
@@ -1936,16 +2037,18 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         )}
 
         <button
-          onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak, meta)}
+          onClick={() => {
+            onFinish(scoreDelta, attachCardIdentities(cardUpdates), maxStreak, meta);
+          }}
           className="w-full btn-primary h-16 text-lg mb-4"
         >
           Return to Map
         </button>
 
-        {/* Compact footer */}
+        {/* Compact footer — note: save to Firestore happens when "Return to Map" is tapped */}
         <div className="flex items-center justify-center gap-2 text-brand-muted/60">
           <CheckCircle2 className="w-4 h-4 text-brand-primary/60" />
-          <span className="text-sm font-medium">Sync Complete</span>
+          <span className="text-sm font-medium">Session Complete</span>
           <span className="text-brand-muted/30">·</span>
           <span className="text-sm">{island.name}</span>
         </div>
@@ -2007,7 +2110,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             <NavAction
               icon={ArrowLeft}
               label="To Map"
-              onClick={() => onBackToMap(scoreDelta, cardUpdates, maxStreak, buildMeta())}
+              onClick={() => onBackToMap(scoreDelta, attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
             />
 
             <div className="hidden sm:flex items-center gap-3 glass px-4 py-2 rounded-full border-white/5 shadow-lg ml-2">
@@ -2030,7 +2133,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             <NavAction
               icon={Database}
               label="Manage Cards"
-              onClick={() => onManage(scoreDelta, cardUpdates, maxStreak, buildMeta())}
+              onClick={() => onManage(scoreDelta, attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
             />
 
             <NavAction
@@ -2046,7 +2149,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 icon={mode === 'all' ? Zap : Library}
                 label={mode === 'all' ? 'Struggling' : 'All Cards'}
                 variant="primary"
-                onClick={() => onSwitchMode(mode === 'all' ? 'struggling' : 'all', scoreDelta, cardUpdates, maxStreak, buildMeta())}
+                onClick={() => onSwitchMode(mode === 'all' ? 'struggling' : 'all', scoreDelta, attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
               />
             )}
             <div className="flex items-center gap-2 glass px-3 md:px-4 py-2 rounded-full border-white/5 shadow-lg group relative">
