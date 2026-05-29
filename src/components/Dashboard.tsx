@@ -1899,6 +1899,40 @@ export default function Dashboard() {
                   </div>
                 </div>
                 
+                <p className="text-xs uppercase tracking-widest text-brand-muted/60 font-bold pt-2">Library Tools</p>
+
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <ScanLine className="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-white mb-1">Duplicate Scanner</p>
+                      <p className="text-xs text-brand-muted">Find and remove duplicate cards</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveModal('duplicateScan')}
+                    className="text-xs uppercase tracking-wider font-bold text-amber-400 hover:text-amber-300 transition-colors"
+                  >
+                    Scan
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <Archive className="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-white mb-1">Archive</p>
+                      <p className="text-xs text-brand-muted">View and restore archived cards</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveModal('archive')}
+                    className="text-xs uppercase tracking-wider font-bold text-amber-400 hover:text-amber-300 transition-colors"
+                  >
+                    Open
+                  </button>
+                </div>
+
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 opacity-50 pointer-events-none">
                   <div>
                     <p className="text-sm font-bold text-white mb-1">Data Export</p>
@@ -2727,16 +2761,7 @@ export default function Dashboard() {
                   Captain's Quarters
                 </div>
               </button>
-              <button
-                onClick={() => setActiveModal('duplicateScan')}
-                className={cn("relative group transition-all flex items-center justify-center", activeModal === 'duplicateScan' ? "text-amber-400" : "text-brand-muted hover:text-amber-400")}
-              >
-                <ScanLine className="w-6 h-6" />
-                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                  Duplicate Scanner
-                </div>
-              </button>
-              <button
+<button
                 onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
                 className="relative group text-orange-400/50 hover:text-orange-400 transition-all flex items-center justify-center"
               >
@@ -2755,18 +2780,6 @@ export default function Dashboard() {
                 <GraduationCap className="w-6 h-6" />
                 <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
                   Test Mode
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveModal('archive')}
-                className={cn(
-                  "relative group transition-all flex items-center justify-center",
-                  activeModal === 'archive' ? "text-amber-400" : "text-brand-muted hover:text-amber-400"
-                )}
-              >
-                <Archive className="w-6 h-6" />
-                <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                  Archive
                 </div>
               </button>
             </>
