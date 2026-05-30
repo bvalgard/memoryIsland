@@ -13,6 +13,11 @@ import ShareModal from './ShareModal';
 import ConfirmDialog from './ConfirmDialog';
 import ImageUpload from './ImageUpload';
 import { UserProfile } from '../hooks/useSocial';
+import FormatToolbar, { wrapSelection } from './island-detail/FormatToolbar';
+import HomeViewStats from './island-detail/HomeViewStats';
+import CardPreviewModal from './island-detail/CardPreviewModal';
+import StrugglingCardsModal from './island-detail/StrugglingCardsModal';
+import AIGenerationModal from './island-detail/AIGenerationModal';
 
 interface IslandDetailProps {
   island: Island;
@@ -43,68 +48,6 @@ interface IslandDetailProps {
 
 type AiPreviewCard = Card & { _isDuplicate?: boolean; _duplicateLocation?: string };
 
-function wrapSelection(
-  ref: React.RefObject<HTMLTextAreaElement | null>,
-  setter: (v: string) => void,
-  before: string,
-  after: string
-) {
-  const el = ref.current;
-  if (!el) return;
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  const value = el.value;
-  const newValue = value.slice(0, start) + before + value.slice(start, end) + after + value.slice(end);
-  setter(newValue);
-  requestAnimationFrame(() => {
-    el.focus();
-    el.setSelectionRange(start + before.length, end + before.length);
-  });
-}
-
-const FORMAT_BUTTONS = [
-  { label: 'B', title: 'Bold', before: '**', after: '**', cls: 'font-bold' },
-  { label: 'I', title: 'Italic', before: '*', after: '*', cls: 'italic' },
-  { label: 'U', title: 'Underline', before: '<u>', after: '</u>', cls: 'underline' },
-  { label: '`', title: 'Code', before: '`', after: '`', cls: 'font-mono' },
-  { label: '∑', title: 'Inline math ($…$)', before: '$', after: '$', cls: '' },
-  { label: '∑∑', title: 'Block math ($$…$$)', before: '$$\n', after: '\n$$', cls: '' },
-] as const;
-
-function formatRelativeTime(ts: number): string {
-  if (!ts) return 'Never';
-  const diff = Date.now() - ts;
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
-}
-
-function FormatToolbar({ taRef, setter }: { taRef: React.RefObject<HTMLTextAreaElement | null>; setter: (v: string) => void }) {
-  return (
-    <div className="flex gap-1 mb-1.5">
-      {FORMAT_BUTTONS.map(({ label, title, before, after, cls }) => (
-        <button
-          key={label}
-          type="button"
-          title={title}
-          onMouseDown={e => e.preventDefault()}
-          onClick={() => wrapSelection(taRef, setter, before, after)}
-          className={cn('px-2 py-0.5 text-[10px] rounded-md bg-white/5 border border-white/10 text-brand-muted hover:text-white hover:bg-white/10 transition-colors', cls)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland, onArchiveIsland, onDeleteCardById }: IslandDetailProps) {
   const [view, setView] = useState<'home' | 'editor'>('home');
@@ -119,8 +62,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     return 'all';
   });
   const [showStrugglingCards, setShowStrugglingCards] = useState(false);
-  const [previewCardIdx, setPreviewCardIdx] = useState<number | null>(null);
-  const [previewRevealed, setPreviewRevealed] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -189,15 +130,6 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   const [editNameValue, setEditNameValue] = useState('');
   const [deletingCardIndex, setDeletingCardIndex] = useState<number | null>(null);
   const [previewCardIndex, setPreviewCardIndex] = useState<number | null>(null);
-  const [previewFlipped, setPreviewFlipped] = useState(false);
-  const [previewSelectedOption, setPreviewSelectedOption] = useState<string | null>(null);
-  const [previewSelectedOptions, setPreviewSelectedOptions] = useState<Set<string>>(new Set());
-  const [previewMultiSubmitted, setPreviewMultiSubmitted] = useState(false);
-  const [previewFibInput, setPreviewFibInput] = useState('');
-  const [previewFibSubmitted, setPreviewFibSubmitted] = useState(false);
-  const [previewShuffledOptions, setPreviewShuffledOptions] = useState<string[]>([]);
-  const [previewSequenceOrder, setPreviewSequenceOrder] = useState<number[]>([]);
-  const [previewSequenceSubmitted, setPreviewSequenceSubmitted] = useState(false);
   const [parentCardForProgression, setParentCardForProgression] = useState<Card | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const frontRef = useRef<HTMLTextAreaElement>(null);
@@ -753,18 +685,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
   const openCardPreview = (e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
-    const card = island.cards[idx];
-    const opts = card.options || [];
-    setPreviewShuffledOptions([...opts].sort(() => Math.random() - 0.5));
-    setPreviewSequenceOrder(opts.map((_, i) => i).sort(() => Math.random() - 0.5));
     setPreviewCardIndex(idx);
-    setPreviewFlipped(false);
-    setPreviewSelectedOption(null);
-    setPreviewSelectedOptions(new Set());
-    setPreviewMultiSubmitted(false);
-    setPreviewFibInput('');
-    setPreviewFibSubmitted(false);
-    setPreviewSequenceSubmitted(false);
   };
 
   const closeCardPreview = () => setPreviewCardIndex(null);
@@ -1601,101 +1522,22 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       </header>
 
       {view === 'home' && (
-        <div className="mt-4 space-y-5">
-          {totalCards > 0 ? (
-            <>
-              {/* Mastery bar */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-brand-muted">Mastery Progress</span>
-                  <span className="text-[10px] font-bold text-brand-muted">{progressPct}% mastered</span>
-                </div>
-                <div className="h-3 rounded-full overflow-hidden flex bg-white/5">
-                  {strugglingCount > 0 && (
-                    <div className="bg-red-500/70 h-full transition-all duration-700" style={{ width: `${(strugglingCount / totalCards) * 100}%` }} />
-                  )}
-                  {learningCount > 0 && (
-                    <div className="bg-amber-500/70 h-full transition-all duration-700" style={{ width: `${(learningCount / totalCards) * 100}%` }} />
-                  )}
-                  {masteredCount > 0 && (
-                    <div className="bg-emerald-500/70 h-full transition-all duration-700" style={{ width: `${(masteredCount / totalCards) * 100}%` }} />
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-4 mt-2">
-                  <span className="flex items-center gap-1.5 text-[11px] text-red-400/80">
-                    <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" />{strugglingCount} struggling
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[11px] text-amber-400/80">
-                    <span className="w-2 h-2 rounded-full bg-amber-500/70 inline-block" />{learningCount} learning
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[11px] text-emerald-400/80">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500/70 inline-block" />{masteredCount} mastered
-                  </span>
-                </div>
-              </div>
-
-              {/* Stat grid */}
-              <div className={cn("grid gap-3", progressTrackingMode !== 'status' ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3")}>
-                <div className="glass rounded-2xl p-4 border border-brand-border">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Progress</p>
-                  <p className={cn("text-2xl font-black", progressPct === 100 ? "text-emerald-400" : progressPct >= 50 ? "text-amber-400" : "text-white")}>{progressPct}%</p>
-                  <p className="text-[10px] text-brand-muted mt-0.5">{masteredCount} of {totalCards} mastered</p>
-                </div>
-                {accuracyStat !== null && (
-                  <div className="glass rounded-2xl p-4 border border-brand-border">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Accuracy</p>
-                    <p className={cn("text-2xl font-black", accuracyStat >= 80 ? "text-emerald-400" : accuracyStat >= 60 ? "text-amber-400" : "text-red-400")}>{accuracyStat}%</p>
-                    <p className="text-[10px] text-brand-muted mt-0.5">{islandTotalCorrect}/{islandTotalAnswers} correct</p>
-                  </div>
-                )}
-                <div className="glass rounded-2xl p-4 border border-brand-border">
-                  <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Last Studied</p>
-                  <p className="text-lg font-black text-white leading-tight">{lastStudiedTs > 0 ? formatRelativeTime(lastStudiedTs) : '—'}</p>
-                  <p className="text-[10px] text-brand-muted mt-0.5">{totalCards} cards total</p>
-                </div>
-                {progressTrackingMode !== 'status' && (
-                  <div className="glass rounded-2xl p-4 border border-brand-border">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-1">Due Now</p>
-                    <p className={cn("text-2xl font-black", dueCount > 0 ? "text-sky-400" : "text-white")}>{dueCount}</p>
-                    <p className="text-[10px] text-brand-muted mt-0.5">
-                      {dueCount === 0 && isFinite(nextDueTs) ? `Next ${formatTimeUntil(nextDueTs)}` : 'cards to review'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="glass rounded-2xl p-8 border border-brand-border text-center">
-              <p className="text-brand-muted text-sm">No cards yet — add your first card to get started.</p>
-            </div>
-          )}
-
-          {/* Struggling Cards trigger */}
-          {strugglingCount > 0 && (
-            <button
-              onClick={() => setShowStrugglingCards(true)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-widest text-red-400">Struggling Cards</span>
-                <span className="text-[11px] text-red-400/60 font-bold">({strugglingCount})</span>
-              </div>
-              <ChevronDown className="w-4 h-4 text-red-400/60" />
-            </button>
-          )}
-
-          {/* Create Cards CTA */}
-          <div className="pt-1">
-            <button
-              onClick={() => setView('editor')}
-              className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 text-brand-muted hover:text-white transition-all text-sm font-bold"
-            >
-              <Plus className="w-4 h-4" />
-              {totalCards === 0 ? 'Create Cards' : 'Create & Edit Cards'}
-            </button>
-          </div>
-        </div>
+        <HomeViewStats
+          totalCards={totalCards}
+          progressPct={progressPct}
+          strugglingCount={strugglingCount}
+          learningCount={learningCount}
+          masteredCount={masteredCount}
+          progressTrackingMode={progressTrackingMode}
+          accuracyStat={accuracyStat}
+          islandTotalCorrect={islandTotalCorrect}
+          islandTotalAnswers={islandTotalAnswers}
+          lastStudiedTs={lastStudiedTs}
+          dueCount={dueCount}
+          nextDueTs={nextDueTs}
+          onShowStruggling={() => setShowStrugglingCards(true)}
+          onNavigateToEditor={() => setView('editor')}
+        />
       )}
 
       {view === 'editor' && (
@@ -2890,508 +2732,24 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
 
       {/* Card Preview Modal */}
       <AnimatePresence>
-        {previewCardIndex !== null && (() => {
-          const card = island.cards[previewCardIndex];
-          const isFlashcard = !card.type || card.type === 'flashcard';
-          // Treat legacy multi-select as MCQ in the preview — both use options + correctOptions
-          const isMcq = card.type === 'mcq' || card.type === 'multi-select';
-          const isFib = card.type === 'fill-in-the-blank';
-          const isSeq = card.type === 'sequencing';
-          const isMatching = card.type === 'matching';
-          const typeLabel = isMcq ? 'Multiple Choice' : isFib ? 'Fill in the Blank' : isSeq ? 'Sequencing' : isMatching ? 'Matching' : 'Flashcard';
-
-          return (
-            <>
-              <motion.div
-                key="preview-backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm"
-                onClick={closeCardPreview}
-              />
-              <motion.div
-                key="preview-modal"
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-lg glass p-6 sm:p-8 rounded-[32px] border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] z-[101] max-h-[85vh] overflow-y-auto custom-scrollbar"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-brand-primary/20 flex items-center justify-center">
-                      <Eye className="w-4 h-4 text-brand-primary" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-brand-muted font-medium">{typeLabel}</p>
-                      <p className="text-xs text-white/40">Card Preview</p>
-                    </div>
-                  </div>
-                  <button onClick={closeCardPreview} className="p-2 text-brand-muted hover:text-white rounded-xl bg-white/5 transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Card Content */}
-                {isFlashcard && (
-                  <div>
-                    {/* Front face */}
-                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-4 min-h-[120px] flex flex-col items-center justify-center gap-4">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Front</p>
-                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-32 rounded-xl object-contain" />}
-                      <p className="text-lg font-bold leading-snug">{card.front}</p>
-                    </div>
-                    <AnimatePresence>
-                      {!previewFlipped ? (
-                        <motion.button
-                          key="reveal-btn"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          onClick={() => setPreviewFlipped(true)}
-                          className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30"
-                        >
-                          Reveal Answer
-                        </motion.button>
-                      ) : (
-                        <motion.div
-                          key="back-face"
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                        >
-                          <div className="glass rounded-2xl p-6 border border-emerald-500/20 text-center min-h-[100px] flex flex-col items-center justify-center gap-4 mb-4">
-                            <p className="text-[10px] uppercase tracking-widest text-emerald-400/60 font-medium">Back</p>
-                            {card.backImageUrl && <img src={card.backImageUrl} alt="" className="max-h-32 rounded-xl object-contain" />}
-                            <p className="text-base font-medium leading-snug text-white/90">{card.back}</p>
-                            {card.explanation && <p className="text-xs text-brand-muted mt-1 leading-relaxed">{card.explanation}</p>}
-                          </div>
-                          <button
-                            onClick={() => setPreviewFlipped(false)}
-                            className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors"
-                          >
-                            Flip Back
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
-
-                {isMcq && (
-                  <div>
-                    {/* Normalize correctness: new cards use correctOptions, legacy MCQ uses back */}
-                    {(() => {
-                      const correctSet = card.correctOptions?.length
-                        ? new Set(card.correctOptions)
-                        : new Set([card.back]);
-                      const isMultiAnswer = correctSet.size > 1;
-                      return (
-                    <div>
-                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">{isMultiAnswer ? 'Select All That Apply' : 'Select the Correct Answer'}</p>
-                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
-                      <p className="text-lg font-bold leading-snug">{card.front}</p>
-                    </div>
-                    <div className="space-y-2">
-                      {previewShuffledOptions.map((opt, i) => {
-                        const isCorrect = correctSet.has(opt);
-                        const isSelected = previewSelectedOption === opt;
-                        const revealed = previewSelectedOption !== null;
-                        let cls = "bg-white/5 border border-white/10 hover:bg-white/10 text-white/70";
-                        if (revealed) {
-                          if (isCorrect) cls = "bg-emerald-500/10 border-emerald-500/50 text-white";
-                          else if (isSelected) cls = "bg-red-500/10 border-red-500/50 text-white";
-                          else cls = "bg-white/5 border-transparent text-brand-muted/30 opacity-40";
-                        }
-                        const letter = String.fromCharCode(65 + i);
-                        return (
-                          <button
-                            key={opt}
-                            disabled={revealed}
-                            onClick={() => setPreviewSelectedOption(opt)}
-                            className={cn("w-full text-left px-4 py-3 rounded-xl transition-colors flex items-start gap-3 text-sm font-medium", cls)}
-                          >
-                            <span className="font-bold text-white/50 shrink-0">{letter}.</span>
-                            <span className="flex-1">{opt}</span>
-                            {revealed && isCorrect && <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
-                            {revealed && isSelected && !isCorrect && <X className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {previewSelectedOption && card.explanation && (
-                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-brand-muted mt-4 p-3 rounded-xl bg-white/5 leading-relaxed">
-                        {card.explanation}
-                      </motion.p>
-                    )}
-                    {previewSelectedOption && (
-                      <button onClick={() => { setPreviewSelectedOption(null); setPreviewShuffledOptions(p => [...p].sort(() => Math.random() - 0.5)); }} className="w-full mt-3 py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
-                        Try Again
-                      </button>
-                    )}
-                    </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                {isFib && (
-                  <div>
-                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Fill in the Blank</p>
-                      {card.imageUrl && <img src={card.imageUrl} alt="" className="max-h-28 rounded-xl object-contain" />}
-                      <p className="text-lg font-bold leading-snug">{card.front}</p>
-                    </div>
-                    {!previewFibSubmitted ? (
-                      <div className="space-y-3">
-                        <input
-                          type="text"
-                          value={previewFibInput}
-                          onChange={e => setPreviewFibInput(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && previewFibInput.trim() && setPreviewFibSubmitted(true)}
-                          placeholder="Type your answer..."
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 focus:outline-none focus:border-brand-primary/50"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => previewFibInput.trim() && setPreviewFibSubmitted(true)}
-                          disabled={!previewFibInput.trim()}
-                          className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30 disabled:opacity-40"
-                        >
-                          Check Answer
-                        </button>
-                      </div>
-                    ) : (
-                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                        <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <p className="text-[10px] uppercase tracking-widest text-brand-muted/60">Your answer</p>
-                          </div>
-                          <p className="text-sm font-medium text-white/80">{previewFibInput}</p>
-                        </div>
-                        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
-                          <p className="text-[10px] uppercase tracking-widest text-emerald-400/60">Correct answer</p>
-                          <p className="text-sm font-bold text-emerald-300">{card.back}</p>
-                        </div>
-                        {card.explanation && <p className="text-xs text-brand-muted p-3 rounded-xl bg-white/5 leading-relaxed">{card.explanation}</p>}
-                        <button onClick={() => { setPreviewFibInput(''); setPreviewFibSubmitted(false); }} className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
-                          Try Again
-                        </button>
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-
-                {isSeq && (
-                  <div>
-                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Put in the Correct Order</p>
-                      <p className="text-lg font-bold leading-snug">{card.front}</p>
-                    </div>
-                    <div className="space-y-2 mb-4">
-                      {previewSequenceOrder.map((origIdx, pos) => {
-                        const opts = card.options || [];
-                        const isCorrectPos = previewSequenceSubmitted && origIdx === pos;
-                        const isWrongPos = previewSequenceSubmitted && origIdx !== pos;
-                        return (
-                          <div key={origIdx} className={cn("flex items-center gap-3 p-3 rounded-xl border transition-colors", previewSequenceSubmitted ? (isCorrectPos ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/10 border-red-500/30") : "bg-white/5 border-white/10")}>
-                            <span className="text-xs font-bold text-brand-muted/60 w-5 shrink-0">{pos + 1}.</span>
-                            <span className="flex-1 text-sm font-medium">{opts[origIdx]}</span>
-                            {!previewSequenceSubmitted && (
-                              <div className="flex gap-1">
-                                <button disabled={pos === 0} onClick={() => { const o = [...previewSequenceOrder]; [o[pos-1], o[pos]] = [o[pos], o[pos-1]]; setPreviewSequenceOrder(o); }} className="p-1 text-brand-muted hover:text-white disabled:opacity-20 transition-colors">
-                                  <ArrowUp className="w-3.5 h-3.5" />
-                                </button>
-                                <button disabled={pos === previewSequenceOrder.length - 1} onClick={() => { const o = [...previewSequenceOrder]; [o[pos], o[pos+1]] = [o[pos+1], o[pos]]; setPreviewSequenceOrder(o); }} className="p-1 text-brand-muted hover:text-white disabled:opacity-20 transition-colors" style={{ transform: 'rotate(180deg)' }}>
-                                  <ArrowUp className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                            {previewSequenceSubmitted && isCorrectPos && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-                            {previewSequenceSubmitted && isWrongPos && <X className="w-4 h-4 text-red-400 shrink-0" />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {!previewSequenceSubmitted ? (
-                      <button onClick={() => setPreviewSequenceSubmitted(true)} className="w-full py-3 rounded-xl bg-brand-primary/20 text-brand-primary font-bold text-sm hover:bg-brand-primary/30 transition-colors border border-brand-primary/30">
-                        Check Order
-                      </button>
-                    ) : (
-                      <button onClick={() => { setPreviewSequenceOrder((card.options || []).map((_, i) => i).sort(() => Math.random() - 0.5)); setPreviewSequenceSubmitted(false); }} className="w-full py-2.5 rounded-xl bg-white/5 text-brand-muted text-sm hover:text-white transition-colors">
-                        Try Again
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {isMatching && (card.pairs || []).length > 0 && (
-                  <div>
-                    <div className="glass rounded-2xl p-6 border border-brand-primary/20 text-center mb-6 min-h-[100px] flex flex-col items-center justify-center gap-3">
-                      <p className="text-[10px] uppercase tracking-widest text-brand-muted/60 font-medium">Match the Pairs</p>
-                      <p className="text-lg font-bold leading-snug">{card.front}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {(card.pairs || []).map((pair, i) => (
-                        <div key={pair.id} className="flex items-center gap-3">
-                          <div className="flex-1 p-3 rounded-xl bg-white/5 border border-white/10 text-sm font-medium text-center">{pair.left}</div>
-                          <div className="text-brand-muted/40 shrink-0">↔</div>
-                          <div className="flex-1 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-sm font-medium text-center text-emerald-300">{pair.rights[0]}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Hint */}
-                {card.hint && (
-                  <p className="text-xs text-brand-muted/60 mt-4 text-center italic">Hint: {card.hint}</p>
-                )}
-              </motion.div>
-            </>
-          );
-        })()}
+        {previewCardIndex !== null && (
+          <CardPreviewModal
+            card={island.cards[previewCardIndex]}
+            onClose={closeCardPreview}
+          />
+        )}
       </AnimatePresence>
         </>
       )}
 
       {/* Struggling Cards Modal */}
-      <AnimatePresence>
-        {showStrugglingCards && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
-              onClick={() => { setShowStrugglingCards(false); setPreviewCardIdx(null); setPreviewRevealed(false); }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.93, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.93, y: 16 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-2xl glass rounded-[32px] border border-red-500/20 shadow-[0_40px_100px_rgba(0,0,0,0.8)] z-[101] flex flex-col max-h-[80vh]"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5 border-b border-red-500/15 shrink-0">
-                <div className="flex items-center gap-3">
-                  {previewCardIdx !== null && (
-                    <button
-                      onClick={() => { setPreviewCardIdx(null); setPreviewRevealed(false); }}
-                      className="p-1.5 text-brand-muted hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                  )}
-                  <div className="w-8 h-8 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-white tracking-tight">
-                      {previewCardIdx !== null
-                        ? `Card ${strugglingIndices.indexOf(previewCardIdx) + 1} of ${strugglingCount}`
-                        : 'Struggling Cards'}
-                    </h3>
-                    <p className="text-[11px] text-red-400/60 font-medium">
-                      {previewCardIdx !== null ? 'Practice preview' : `${strugglingCount} card${strugglingCount !== 1 ? 's' : ''} need attention`}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => { setShowStrugglingCards(false); setPreviewCardIdx(null); setPreviewRevealed(false); }}
-                  className="p-2 text-brand-muted hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Body — grid or preview */}
-              <div className="overflow-y-auto custom-scrollbar flex-1">
-                <AnimatePresence mode="wait" initial={false}>
-                  {previewCardIdx === null ? (
-                    /* ── Grid ── */
-                    <motion.div
-                      key="grid"
-                      initial={{ opacity: 0, x: -16 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -16 }}
-                      transition={{ duration: 0.15 }}
-                      className="p-5"
-                    >
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {strugglingIndices.map((idx) => {
-                          const card = island.cards[idx];
-                          const accuracy = card.totalAnswers && card.totalAnswers > 0
-                            ? Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)
-                            : null;
-                          const typeLabel =
-                            card.type === 'mcq' || card.type === 'multi-select' ? 'MCQ' :
-                            card.type === 'fill-in-the-blank' ? 'Fill-in' :
-                            card.type === 'sequencing' ? 'Sequence' :
-                            card.type === 'matching' ? 'Matching' : 'Flashcard';
-                          return (
-                            <button
-                              key={idx}
-                              onClick={() => { setPreviewCardIdx(idx); setPreviewRevealed(false); }}
-                              className="text-left glass rounded-2xl p-4 border border-red-500/20 hover:border-red-500/50 hover:bg-red-500/5 transition-all group flex flex-col gap-2.5"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-red-400/70 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/15">
-                                  {typeLabel}
-                                </span>
-                                {accuracy !== null && (
-                                  <span className="text-xs font-black text-red-400 tabular-nums">{accuracy}%</span>
-                                )}
-                              </div>
-                              <p className="text-sm font-semibold text-white/80 leading-snug line-clamp-3 group-hover:text-white transition-colors">
-                                {card.front}
-                              </p>
-                              {card.totalAnswers != null && card.totalAnswers > 0 && (
-                                <p className="text-[10px] text-red-400/50 mt-auto">
-                                  {card.totalAnswers - (card.totalCorrect ?? 0)} wrong of {card.totalAnswers} attempts
-                                </p>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  ) : (
-                    /* ── Card Preview ── */
-                    (() => {
-                      const card = island.cards[previewCardIdx];
-                      const posInList = strugglingIndices.indexOf(previewCardIdx);
-                      const prevIdx = posInList > 0 ? strugglingIndices[posInList - 1] : null;
-                      const nextIdx = posInList < strugglingIndices.length - 1 ? strugglingIndices[posInList + 1] : null;
-                      return (
-                        <motion.div
-                          key={`preview-${previewCardIdx}`}
-                          initial={{ opacity: 0, x: 16 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 16 }}
-                          transition={{ duration: 0.15 }}
-                          className="p-5 flex flex-col gap-4"
-                        >
-                          {/* Question */}
-                          <div className="glass rounded-2xl p-5 border border-white/5">
-                            <p className="text-[10px] uppercase tracking-widest font-bold text-brand-muted mb-3">Question</p>
-                            <p className="text-base font-semibold text-white leading-relaxed">{card.front}</p>
-                            {card.hint && !previewRevealed && (
-                              <p className="text-xs text-brand-muted/60 mt-3 italic">Hint: {card.hint}</p>
-                            )}
-                          </div>
-
-                          {/* MCQ options shown before reveal */}
-                          {(card.type === 'mcq' || card.type === 'multi-select') && card.options && (
-                            <div className="space-y-2">
-                              {card.options.map((opt, i) => {
-                                const isCorrect = card.correctOptions?.includes(opt);
-                                return (
-                                  <div
-                                    key={i}
-                                    className={cn(
-                                      "px-4 py-3 rounded-xl border text-sm font-medium transition-colors",
-                                      previewRevealed
-                                        ? isCorrect
-                                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                                          : "border-white/5 bg-white/3 text-white/40"
-                                        : "border-white/10 bg-white/5 text-white/70"
-                                    )}
-                                  >
-                                    {previewRevealed && isCorrect && <CheckCircle2 className="w-3.5 h-3.5 inline mr-2 text-emerald-400" />}
-                                    {opt}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Reveal / Answer */}
-                          {!previewRevealed ? (
-                            <button
-                              onClick={() => setPreviewRevealed(true)}
-                              className="w-full py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-bold text-white/70 hover:text-white transition-all"
-                            >
-                              Reveal Answer
-                            </button>
-                          ) : (
-                            <AnimatePresence>
-                              <motion.div
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="glass rounded-2xl p-5 border border-emerald-500/20 bg-emerald-500/5 flex flex-col gap-3"
-                              >
-                                <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-400/70">Answer</p>
-                                {card.type === 'matching' && card.pairs ? (
-                                  <div className="space-y-2">
-                                    {card.pairs.map((pair) => (
-                                      <div key={pair.id} className="flex items-start gap-2 text-sm">
-                                        <span className="font-bold text-white/80 shrink-0">{pair.left}</span>
-                                        <span className="text-white/40">→</span>
-                                        <span className="text-emerald-300/80">{pair.rights.join(', ')}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : card.type === 'sequencing' && card.options ? (
-                                  <ol className="space-y-1.5 list-none">
-                                    {card.options.map((step, i) => (
-                                      <li key={i} className="flex items-start gap-2 text-sm">
-                                        <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                                        <span className="text-white/80">{step}</span>
-                                      </li>
-                                    ))}
-                                  </ol>
-                                ) : (
-                                  <p className="text-sm text-white/80 leading-relaxed">{card.back}</p>
-                                )}
-                                {card.explanation && (
-                                  <p className="text-xs text-brand-muted/70 border-t border-white/5 pt-3 leading-relaxed italic">{card.explanation}</p>
-                                )}
-                              </motion.div>
-                            </AnimatePresence>
-                          )}
-
-                          {/* SRS note */}
-                          <p className="text-[10px] text-brand-muted/40 text-center leading-relaxed">
-                            Reviewing here won't reset your due date — use this to practice between sessions.
-                          </p>
-
-                          {/* Prev / Next nav */}
-                          <div className="flex items-center justify-between gap-3 pt-1">
-                            <button
-                              onClick={() => { if (prevIdx !== null) { setPreviewCardIdx(prevIdx); setPreviewRevealed(false); } }}
-                              disabled={prevIdx === null}
-                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-30 text-sm font-bold text-white/70 hover:text-white transition-all"
-                            >
-                              <ChevronLeft className="w-4 h-4" /> Prev
-                            </button>
-                            <button
-                              onClick={() => { if (nextIdx !== null) { setPreviewCardIdx(nextIdx); setPreviewRevealed(false); } }}
-                              disabled={nextIdx === null}
-                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 disabled:opacity-30 text-sm font-bold text-white/70 hover:text-white transition-all"
-                            >
-                              Next <ChevronRight className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </motion.div>
-                      );
-                    })()
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-3 border-t border-white/5 shrink-0">
-                <p className="text-[10px] text-brand-muted/50 text-center">
-                  {previewCardIdx === null ? 'Tap a card to preview it' : 'Answers hidden until revealed'}
-                </p>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <StrugglingCardsModal
+        isOpen={showStrugglingCards}
+        onClose={() => setShowStrugglingCards(false)}
+        island={island}
+        strugglingIndices={strugglingIndices}
+        strugglingCount={strugglingCount}
+      />
 
       <ConfirmDialog
         open={showUnsavedWarning}
@@ -3455,217 +2813,26 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       )}
 
       {/* AI Card Generation Modal */}
-      <AnimatePresence>
-        {aiModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm"
-              onClick={() => { if (!aiLoading) setAiModalOpen(false); }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 z-[90] flex items-center justify-center p-4 pointer-events-none"
-            >
-              <div className="pointer-events-auto w-full max-w-lg glass rounded-[24px] border border-white/10 shadow-2xl flex flex-col max-h-[85vh]">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-brand-primary" />
-                    <span className="text-sm font-bold text-white">Generate from Notes</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {aiRemaining !== null && (
-                      <span className="text-[10px] text-brand-muted/60">{aiRemaining} generations left today</span>
-                    )}
-                    {!aiLoading && (
-                      <button onClick={() => setAiModalOpen(false)} className="text-brand-muted hover:text-white transition-colors">
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {aiPreviewCards.length === 0 ? (
-                  /* Input screen */
-                  <div className="flex flex-col gap-4 p-6">
-                    <textarea
-                      value={aiNotes}
-                      onChange={e => setAiNotes(e.target.value)}
-                      placeholder="Paste your notes, a paragraph, a textbook excerpt… AI will turn it into flashcards."
-                      className="w-full h-48 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-brand-primary/40 custom-scrollbar"
-                      disabled={aiLoading}
-                    />
-                    <textarea
-                      value={aiInstructions}
-                      onChange={e => setAiInstructions(e.target.value)}
-                      placeholder="Special instructions (optional) — e.g. use NCLEX-style phrasing, focus on clinical application, keep answers under one sentence…"
-                      className="w-full h-16 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-brand-primary/40"
-                      disabled={aiLoading}
-                    />
-
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] text-brand-muted uppercase tracking-widest">Card types</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {([
-                          { value: 'mcq', label: 'Multiple Choice' },
-                          { value: 'multi-select', label: 'Multi-Select' },
-                          { value: 'sequencing', label: 'Ordering' },
-                          { value: 'fill-in-the-blank', label: 'Fill in the Blank' },
-                          { value: 'flashcard', label: 'Flashcard' },
-                        ] as const).map(({ value, label }) => {
-                          const on = aiSelectedTypes.includes(value);
-                          return (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => setAiSelectedTypes(prev =>
-                                on && prev.length > 1 ? prev.filter(t => t !== value) : on ? prev : [...prev, value]
-                              )}
-                              className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${on ? 'bg-brand-primary/15 border-brand-primary/30 text-brand-primary' : 'bg-white/5 border-white/5 text-brand-muted/50'}`}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-brand-muted uppercase tracking-widest">Cards</span>
-                        <div className="flex gap-1">
-                          {[5, 10, 15, 20].map(n => (
-                            <button
-                              key={n}
-                              onClick={() => setAiCardCount(n)}
-                              className={`w-8 h-7 rounded-lg text-[11px] font-bold transition-colors ${aiCardCount === n ? 'bg-brand-primary text-white' : 'bg-white/5 text-brand-muted hover:bg-white/10'}`}
-                            >
-                              {n}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <button
-                        onClick={handleAiGenerate}
-                        disabled={aiLoading || !aiNotes.trim() || aiRemaining === 0}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white text-sm font-semibold hover:bg-brand-primary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {aiLoading ? (
-                          <>
-                            <motion.div
-                              animate={{ rotate: 360 }}
-                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                            >
-                              <Sparkles className="w-3.5 h-3.5" />
-                            </motion.div>
-                            Generating…
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5" />
-                            Generate
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {aiError && (
-                      <p className="text-xs text-red-400 text-center">{aiError}</p>
-                    )}
-                  </div>
-                ) : (
-                  /* Preview screen */
-                  <>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
-                      {(() => {
-                        const dupCount = aiPreviewCards.filter(c => c._isDuplicate).length;
-                        const saveCount = aiPreviewCards.filter(c => c.front.trim() && !c._isDuplicate).length;
-                        return (
-                          <p className="text-[10px] text-brand-muted uppercase tracking-widest px-1 mb-1">
-                            {aiPreviewCards.length} cards generated
-                            {dupCount > 0 && <span className="text-amber-400/80"> · {dupCount} duplicate{dupCount > 1 ? 's' : ''} excluded</span>}
-                            {!dupCount && ' — edit before saving'}
-                          </p>
-                        );
-                      })()}
-                      {aiPreviewCards.map((card, i) => (
-                        <div key={i} className={`rounded-2xl border p-3 flex flex-col gap-2 ${card._isDuplicate ? 'bg-amber-500/5 border-amber-500/20 opacity-60' : 'bg-white/5 border-white/10'}`}>
-                          {card._isDuplicate && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-amber-400/80">
-                              <ScanLine className="w-3 h-3 shrink-0" />
-                              <span>Duplicate — already in {card._duplicateLocation}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between gap-2">
-                            <textarea
-                              value={card.front}
-                              onChange={e => !card._isDuplicate && setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, front: e.target.value } : c))}
-                              disabled={!!card._isDuplicate}
-                              className={`flex-1 bg-transparent text-sm placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed ${card._isDuplicate ? 'line-through text-white/30' : 'text-white'}`}
-                              rows={2}
-                              placeholder="Question"
-                            />
-                            <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md ${
-                              card.type === 'mcq' ? 'bg-brand-primary/15 text-brand-primary' :
-                              card.type === 'multi-select' ? 'bg-purple-500/15 text-purple-400' :
-                              card.type === 'sequencing' ? 'bg-amber-500/15 text-amber-400' :
-                              card.type === 'fill-in-the-blank' ? 'bg-emerald-500/15 text-emerald-400' :
-                              'bg-white/5 text-brand-muted/50'
-                            }`}>
-                              {card.type === 'mcq' ? 'MCQ' :
-                               card.type === 'multi-select' ? 'Multi' :
-                               card.type === 'sequencing' ? 'Order' :
-                               card.type === 'fill-in-the-blank' ? 'Fill' :
-                               'Flash'}
-                            </span>
-                          </div>
-                          <div className="h-px bg-white/5" />
-                          <textarea
-                            value={card.back}
-                            onChange={e => !card._isDuplicate && setAiPreviewCards(prev => prev.map((c, idx) => idx === i ? { ...c, back: e.target.value } : c))}
-                            disabled={!!card._isDuplicate}
-                            className={`w-full bg-transparent text-xs placeholder:text-brand-muted/40 resize-none focus:outline-none leading-relaxed ${card._isDuplicate ? 'line-through text-brand-muted/30' : 'text-brand-muted'}`}
-                            rows={2}
-                            placeholder="Answer"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="px-4 pb-4 pt-2 flex gap-2 shrink-0 border-t border-white/5">
-                      <button
-                        onClick={() => setAiPreviewCards([])}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-white/5 text-brand-muted hover:bg-white/10 hover:text-white transition-colors"
-                      >
-                        Back
-                      </button>
-                      <button
-                        onClick={handleAiSave}
-                        disabled={aiSaving}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-brand-primary text-white hover:bg-brand-primary/80 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                      >
-                        {aiSaving ? (
-                          <>
-                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                              <Sparkles className="w-3.5 h-3.5" />
-                            </motion.div>
-                            Saving…
-                          </>
-                        ) : (
-                          `Add ${aiPreviewCards.filter(c => c.front.trim() && !c._isDuplicate).length} cards`
-                        )}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <AIGenerationModal
+        isOpen={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        aiNotes={aiNotes}
+        setAiNotes={setAiNotes}
+        aiInstructions={aiInstructions}
+        setAiInstructions={setAiInstructions}
+        aiCardCount={aiCardCount}
+        setAiCardCount={setAiCardCount}
+        aiSelectedTypes={aiSelectedTypes}
+        setAiSelectedTypes={setAiSelectedTypes}
+        aiLoading={aiLoading}
+        aiError={aiError}
+        aiRemaining={aiRemaining}
+        aiPreviewCards={aiPreviewCards}
+        setAiPreviewCards={setAiPreviewCards}
+        aiSaving={aiSaving}
+        onGenerate={handleAiGenerate}
+        onSave={handleAiSave}
+      />
 
       {/* Duplicate Scanner Modal */}
       {scanModalOpen && (

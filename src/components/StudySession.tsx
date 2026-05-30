@@ -11,6 +11,20 @@ import LightboxImage from './LightboxImage';
 import AskQuestionModal from './AskQuestionModal';
 import { RichText, RichTextInline } from './RichText';
 import { useQuestions, type Question, type Answer } from '../hooks/useQuestions';
+import OfflineImageNotice from './study/OfflineImageNotice';
+import NavAction from './study/NavAction';
+import SparkleLayer from './study/SparkleLayer';
+import SessionComplete from './study/SessionComplete';
+import SessionHistoryNav from './study/SessionHistoryNav';
+import SessionStatsBar from './study/SessionStatsBar';
+import MatchingCardRenderer from './study/card-types/MatchingCardRenderer';
+import SequencingCardRenderer from './study/card-types/SequencingCardRenderer';
+import HotspotCardRenderer from './study/card-types/HotspotCardRenderer';
+import FIBCardRenderer from './study/card-types/FIBCardRenderer';
+import MCQMultiCardRenderer from './study/card-types/MCQMultiCardRenderer';
+import MCQSingleCardRenderer from './study/card-types/MCQSingleCardRenderer';
+import FlashcardPreFlip from './study/card-types/FlashcardPreFlip';
+import FlashcardPostFlip from './study/card-types/FlashcardPostFlip';
 
 // Reliable Fisher-Yates shuffle to prevent duplicate/dropped card bugs caused by Math.random() in sort()
 function shuffleArray<T>(array: T[]): T[] {
@@ -121,40 +135,6 @@ function buildStudyDeck(cards: Card[], sortBy: 'lastReviewed' | 'srsNextReview')
   return shuffledUnits.flat();
 }
 
-function OfflineImageNotice() {
-  return (
-    <div className="w-full max-h-48 rounded-xl border border-amber-500/20 bg-amber-500/5 flex flex-col items-center justify-center gap-2 py-6 px-4 text-center">
-      <svg className="w-6 h-6 text-amber-400/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M6.343 6.343a9 9 0 000 12.728M9.172 9.172a5 5 0 000 7.071M12 12h.01" />
-      </svg>
-      <p className="text-[11px] text-amber-300/70 leading-snug max-w-[200px]">
-        You're studying offline — images aren't available without a connection
-      </p>
-    </div>
-  );
-}
-
-function NavAction({ icon: Icon, label, onClick, variant = 'muted' }: { icon: React.ElementType, label: string, onClick: () => void, variant?: 'muted' | 'primary' }) {
-  return (
-    <div className="relative group">
-      <button
-        onClick={onClick}
-        className={cn(
-          "flex items-center gap-2 transition-colors border border-transparent px-3 py-2 rounded-xl",
-          variant === 'muted'
-            ? "text-brand-muted group-hover:text-white group-hover:border-white/10"
-            : "text-brand-primary group-hover:bg-brand-primary/10 group-hover:border-brand-primary/20 bg-brand-primary/5 border-brand-primary/10"
-        )}
-      >
-        <Icon className="w-5 h-5 md:w-4 md:h-4" />
-        <span className="text-sm font-medium hidden md:inline">{label}</span>
-      </button>
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-brand-bg/95 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg opacity-0 group-hover:opacity-100 md:group-hover:opacity-0 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-2xl">
-        {label}
-      </div>
-    </div>
-  );
-}
 
 interface StudySessionProps {
   island: Island;
@@ -1935,124 +1915,34 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const correctAnswers = Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length;
     const incorrectAnswers = Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) === 0).length;
     const accuracyPct = cardsReviewed > 0 ? Math.round((correctAnswers / cardsReviewed) * 100) : 0;
-    // How many of the cards just reviewed were actually "due" — i.e. will be removed
-    // from the global due count after this session saves.
     const dueCardsCleared = Object.keys(cardUpdates).filter(front => dueCardFrontsAtStart.has(front)).length;
     const meta = buildMeta();
-
-    // In test mode, results are handled by TestSession — render nothing
     if (isTestMode) return null;
     const strugglingCards = Object.entries(cardUpdates)
       .filter(([, u]) => (u as any).sessionCorrect === 0)
       .map(([front]) => ({ name: front, islandName: cardIslandRef.current[front] }));
 
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md mx-auto w-full text-center"
-      >
-        {/* 3-col stat grid */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-emerald-500/5 rounded-2xl p-4 border border-emerald-500/20 border-b-2 border-b-emerald-500/40">
-            <div className="text-3xl font-black text-emerald-400 mb-1">{accuracyPct}%</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Accuracy</div>
-          </div>
-          <div className="bg-white/5 rounded-2xl p-4 border border-white/10 border-b-2 border-b-white/20">
-            <div className="text-3xl font-black text-white mb-1">{cardsReviewed}</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted">Reviewed</div>
-          </div>
-          <div className="bg-brand-primary/5 rounded-2xl p-4 border border-brand-primary/20 border-b-2 border-b-brand-primary/40">
-            <div className="text-3xl font-black text-brand-primary mb-1">+{scoreDelta}</div>
-            <div className="text-[10px] font-bold tracking-widest uppercase text-brand-primary/80">Score</div>
-          </div>
-        </div>
-
-        {/* Streak / correct / incorrect strip */}
-        <div className="flex gap-2 justify-center mb-4">
-          <span className={`text-xs font-semibold px-3 py-1 rounded-full border flex items-center gap-1 ${sessionMaxStreak >= 3 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-white/5 text-brand-muted border-white/10'}`}>
-            <Flame className="w-3 h-3" />
-            {sessionMaxStreak} streak
-            {isNewRecord && <span className="text-[9px] font-bold tracking-widest uppercase ml-0.5">· Record!</span>}
-          </span>
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            ✓ {correctAnswers} correct
-          </span>
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-            ✕ {incorrectAnswers} incorrect
-          </span>
-        </div>
-
-        {/* Due cards cleared indicator — helps user understand why the global count
-            did or didn't change after the session */}
-        {dueCardFrontsAtStart.size > 0 ? (
-          <div className="mb-4 text-xs text-sky-400/80 flex items-center justify-center gap-1.5">
-            <span>🗓️</span>
-            <span>
-              {dueCardsCleared > 0
-                ? `${dueCardsCleared} overdue card${dueCardsCleared !== 1 ? 's' : ''} rescheduled — due count will drop`
-                : `No overdue cards in this session — due count unchanged`}
-            </span>
-          </div>
-        ) : mode !== 'due' ? (
-          <div className="mb-4 text-xs text-brand-muted/50 flex items-center justify-center gap-1.5">
-            <span>🗓️</span>
-            <span>No cards were overdue — due count unchanged</span>
-          </div>
-        ) : null}
-
-        {/* Cards to revisit */}
-        {strugglingCards.length > 0 && (
-          <div className="border-l-2 border-red-500/50 pl-3 mb-6 text-left">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-red-400 mb-2">Cards to revisit</div>
-            <div className="flex flex-col gap-1">
-              {strugglingCards.slice(0, 5).map((card, i) => {
-                const archLabel = archipelagoName ?? (card.islandName ? island.name : undefined);
-                const islandLabel = card.islandName ?? (archipelagoName ? island.name : undefined);
-                const locationLabel = archLabel && islandLabel ? `${archLabel} → ${islandLabel}` : island.name;
-                return (
-                  <div key={i} className="flex items-start gap-1.5">
-                    <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
-                    <div className="flex flex-col">
-                      <span className="text-sm text-brand-muted leading-tight">{card.name}</span>
-                      <span className="text-[10px] text-brand-muted/50">{locationLabel}</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {strugglingCards.length > 5 && (
-                <div className="text-xs text-brand-muted pl-4.5">+ {strugglingCards.length - 5} more</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {incorrectAnswers > 0 && (
-          <button
-            onClick={startWrongAnswerDrill}
-            className="w-full h-12 text-base mb-3 rounded-2xl font-semibold border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-          >
-            Reel in {incorrectAnswers} missed card{incorrectAnswers !== 1 ? 's' : ''}
-          </button>
-        )}
-
-        <button
-          onClick={() => {
-            onFinish(scoreDelta, attachCardIdentities(cardUpdates), maxStreak, meta);
-          }}
-          className="w-full btn-primary h-16 text-lg mb-4"
-        >
-          Return to Map
-        </button>
-
-        {/* Compact footer — note: save to Firestore happens when "Return to Map" is tapped */}
-        <div className="flex items-center justify-center gap-2 text-brand-muted/60">
-          <CheckCircle2 className="w-4 h-4 text-brand-primary/60" />
-          <span className="text-sm font-medium">Session Complete</span>
-          <span className="text-brand-muted/30">·</span>
-          <span className="text-sm">{island.name}</span>
-        </div>
-      </motion.div>
+      <SessionComplete
+        accuracyPct={accuracyPct}
+        cardsReviewed={cardsReviewed}
+        correctAnswers={correctAnswers}
+        incorrectAnswers={incorrectAnswers}
+        scoreDelta={scoreDelta}
+        sessionMaxStreak={sessionMaxStreak}
+        isNewRecord={isNewRecord}
+        dueCardsCleared={dueCardsCleared}
+        dueCardFrontsAtStartSize={dueCardFrontsAtStart.size}
+        mode={mode || 'all'}
+        islandName={island.name}
+        archipelagoName={archipelagoName}
+        strugglingCards={strugglingCards}
+        cardUpdates={attachCardIdentities(cardUpdates)}
+        maxStreak={maxStreak}
+        meta={meta}
+        onFinish={onFinish}
+        onStartWrongDrill={startWrongAnswerDrill}
+      />
     );
   }
 
@@ -2060,24 +1950,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     <>
       <div className="max-w-2xl mx-auto w-full flex flex-col items-center pb-12">
         {/* Sparkles Layer */}
-        <AnimatePresence>
-          {sparkles.map(s => (
-            <motion.div
-              key={s.id}
-              initial={{ opacity: 1, scale: 0, x: s.x, y: s.y }}
-              animate={{
-                opacity: 0,
-                scale: 2,
-                x: s.x + (Math.random() - 0.5) * 200,
-                y: s.y + (Math.random() - 0.5) * 200
-              }}
-              exit={{ opacity: 0 }}
-              className="fixed pointer-events-none z-[100] text-amber-400"
-            >
-              <Sparkles className="w-6 h-6 fill-current" />
-            </motion.div>
-          ))}
-        </AnimatePresence>
+        <SparkleLayer sparkles={sparkles} />
 
         {/* Tier progression notifications */}
         <AnimatePresence>
@@ -2379,975 +2252,136 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                     </>
                   )}
 
-                  {/* Written recall input — flashcard only, pre-flip; always on in test mode */}
-                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && (settings?.writtenRecallMode || isTestMode) && (
-                    <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
-                      <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
-                        Write your answer from memory
-                      </p>
-                      <textarea
-                        value={writtenRecallText}
-                        onChange={e => setWrittenRecallText(e.target.value)}
-                        placeholder="Type your answer…"
-                        rows={3}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-brand-muted/40 resize-none focus:outline-none focus:border-white/20"
-                      />
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
-                        disabled={writtenRecallText.trim().length === 0}
-                        className={cn(
-                          "mt-3 w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-                          writtenRecallText.trim().length > 0
-                            ? "bg-brand-primary text-white"
-                            : "bg-white/5 text-brand-muted/30 cursor-not-allowed"
-                        )}
-                      >
-                        Reveal Answer
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Confidence rating — inside card front, flashcard only, pre-flip, hidden in test mode */}
-                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && !settings?.writtenRecallMode && !isTestMode && (
-                    <div className="w-full mt-4 pt-5 border-t border-white/5" onClick={e => e.stopPropagation()}>
-                      <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
-                        Rate your confidence
-                      </p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {([
-                          { level: 1, label: 'Not Confident', active: 'bg-red-500/15 border-red-500/30 text-red-400', hover: 'hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400' },
-                          { level: 2, label: 'Somewhat Confident', active: 'bg-amber-500/15 border-amber-500/30 text-amber-400', hover: 'hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-400' },
-                          { level: 3, label: 'Confident', active: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400', hover: 'hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-400' },
-                        ] as const).map(({ level, label, active, hover }) => (
-                          <button
-                            key={level}
-                            onClick={(e) => { e.stopPropagation(); setPendingConfidence(level); setIsFlipped(true); }}
-                            className={cn(
-                              "border h-12 rounded-xl flex items-center justify-center transition-all",
-                              pendingConfidence === level
-                                ? active
-                                : cn("bg-white/5 border-white/5 text-brand-muted", hover)
-                            )}
-                          >
-                            <span className="text-[10px] font-bold uppercase tracking-widest leading-none">{label}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
-                        className="mt-3 w-full text-center text-brand-muted/25 hover:text-brand-muted/50 text-[9px] uppercase tracking-[0.2em] transition-colors"
-                      >
-                        Reveal →
-                      </button>
-                    </div>
+                  {/* Confidence rating / written recall — flashcard only, pre-flip */}
+                  {(!currentCard?.type || currentCard.type === 'flashcard') && !isFlipped && (
+                    <FlashcardPreFlip
+                      settings={settings}
+                      isTestMode={!!isTestMode}
+                      writtenRecallText={writtenRecallText}
+                      setWrittenRecallText={setWrittenRecallText}
+                      pendingConfidence={pendingConfidence}
+                      onReveal={(e) => { e.stopPropagation(); setIsFlipped(true); }}
+                      onSetConfidence={(level, e) => { e.stopPropagation(); setPendingConfidence(level); setIsFlipped(true); }}
+                    />
                   )}
 
                   {currentCard?.type === 'matching' ? (
-                    <div className="w-full flex-1 flex flex-col md:flex-row gap-4 mt-2 sm:mt-6 pb-4">
-                      <div className="flex-1 flex flex-col gap-2 relative">
-                        <h3 className="text-[10px] uppercase font-bold text-brand-muted tracking-widest mb-1 text-left hidden md:block">Terms</h3>
-                        {matchingLefts.map((left) => {
-                          const isMatched = matchedLeftIds.has(left.id);
-                          const isSelected = selectedLeft === left.id;
-                          const isError = matchingErrors.has(left.id);
-                          return (
-                            <motion.button
-                              key={left.id}
-                              layout="position"
-                              onClick={(e) => handleMatchingSelect('left', left.id, e)}
-                              className={cn(
-                                "text-left px-4 py-3 rounded-xl transition-all font-medium text-xs sm:text-sm",
-                                isSelected ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]" :
-                                  isError ? "bg-red-500/20 text-red-500 border border-red-500/50" :
-                                    "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
-                              )}
-                            >
-                              {left.image && <img src={left.image} alt="" className="w-full max-h-20 object-contain rounded-lg mb-1.5" />}
-                              {left.text && <RichTextInline>{left.text}</RichTextInline>}
-                            </motion.button>
-                          )
-                        })}
-                      </div>
-                      <div className="flex-1 flex flex-col gap-2 relative mt-4 md:mt-0">
-                        <h3 className="text-[10px] uppercase font-bold text-brand-muted tracking-widest mb-1 text-left hidden md:block">Matches</h3>
-                        {matchingRights.map((right) => {
-                          const isMatched = matchedRightIds.has(right.id);
-                          const isSelected = selectedRight === right.id;
-                          const isError = matchingErrors.has(right.id);
-                          return (
-                            <motion.button
-                              key={right.id}
-                              layout="position"
-                              disabled={isMatched}
-                              onClick={(e) => handleMatchingSelect('right', right.id, e)}
-                              className={cn(
-                                "text-left px-4 py-3 rounded-xl transition-all font-medium text-xs sm:text-sm",
-                                isMatched ? "bg-emerald-500/10 text-emerald-500/60 border border-emerald-500/20" :
-                                  isSelected ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20 scale-[1.02]" :
-                                    isError ? "bg-red-500/20 text-red-500 border border-red-500/50" :
-                                      "bg-white/5 border border-white/10 hover:bg-white/10 text-white/80"
-                              )}
-                            >
-                              {right.image && <img src={right.image} alt="" className={cn("w-full max-h-20 object-contain rounded-lg mb-1.5", isMatched && "opacity-40")} />}
-                              {right.text && <span className={cn(isMatched && "line-through decoration-emerald-500/30")}><RichTextInline>{right.text}</RichTextInline></span>}
-                            </motion.button>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    <MatchingCardRenderer
+                      matchingLefts={matchingLefts}
+                      matchingRights={matchingRights}
+                      matchedLeftIds={matchedLeftIds}
+                      matchedRightIds={matchedRightIds}
+                      matchingErrors={matchingErrors}
+                      selectedLeft={selectedLeft}
+                      selectedRight={selectedRight}
+                      onSelect={handleMatchingSelect}
+                    />
                   ) : currentCard?.type === 'fill-in-the-blank' ? (
-                    !isFlipped ? (
-                      <div className="w-full flex-1 flex flex-col justify-center items-center gap-6 pb-4 cursor-default" onClick={e => e.stopPropagation()}>
-                        <form onSubmit={handleFibSubmit} className="w-full max-w-sm flex flex-col gap-4">
-                          {cluesUsed > 0 && currentCard?.back && (
-                            <div className="flex flex-wrap justify-center gap-x-4 gap-y-3 mb-4 text-xl md:text-2xl font-mono text-brand-primary">
-                              {currentCard.back.split(' ').map((word, wordIndex, wordsArray) => {
-                                const startIndex = wordsArray.slice(0, wordIndex).join(' ').length + (wordIndex > 0 ? 1 : 0);
-                                return (
-                                  <div key={wordIndex} className="flex gap-[2px] whitespace-nowrap">
-                                    {word.split('').map((char, charOffset) => {
-                                      const globalIndex = startIndex + charOffset;
-                                      return (
-                                        <span key={charOffset} className="border-b-2 border-brand-primary pb-1 font-bold min-w-[14px] md:min-w-[18px] text-center inline-block">
-                                          {revealedIndices.includes(globalIndex) ? char : '\u00A0'}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                          <input
-                            type="text"
-                            value={fibInput}
-                            onChange={e => setFibInput(e.target.value)}
-                            placeholder="Type your answer..."
-                            className="w-full bg-white/5 border border-white/20 focus:border-brand-primary rounded-xl px-4 py-3 text-white text-center text-lg outline-none transition-colors"
-                            autoFocus
-                          />
-                          <div className="flex gap-2">
-                            {!isTestMode && (
-                              <button type="button" onClick={handleGetClue} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-sm font-bold transition-colors">
-                                Get Clue
-                              </button>
-                            )}
-                            <button type="submit" className={`bg-brand-primary hover:bg-white text-black py-3 rounded-xl text-sm font-bold transition-colors ${isTestMode ? 'w-full' : 'flex-1'}`}>
-                              Submit
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    ) : (
-                      <div className="w-full flex-1 flex flex-col justify-center items-center gap-4 pb-4">
-                        {isFibCorrect === false && !isTestMode && (
-                          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 w-full max-w-sm">
-                            <div className="flex items-center gap-2 mb-1">
-                              <X className="w-4 h-4 text-red-500" />
-                              <span className="text-[10px] uppercase tracking-widest font-bold text-red-500">Not quite</span>
-                            </div>
-                            <p className="text-lg font-medium text-white line-through opacity-70 mb-1">{lastFibSubmitted}</p>
-                          </div>
-                        )}
-                        <div className={cn(
-                          "flex flex-col gap-2 p-5 rounded-2xl border w-full max-w-sm",
-                          !isTestMode && isFibCorrect ? "bg-emerald-500/10 border-emerald-500/20" : !isTestMode ? "bg-emerald-500/5 border-emerald-500/30" : "bg-white/5 border-white/10"
-                        )}>
-                          <div className="flex items-center gap-2 mb-1">
-                            {!isTestMode && <Check className="w-4 h-4 text-emerald-500" />}
-                            <span className={cn("text-[10px] uppercase tracking-widest font-bold", isTestMode ? "text-brand-muted" : "text-emerald-500")}>
-                              {isTestMode ? 'Correct Answer' : (isFibCorrect ? 'Perfectly Answered' : 'Correct Answer')}
-                            </span>
-                          </div>
-                          <div className="text-xl sm:text-2xl font-normal text-white tracking-tight"><RichText>{currentCard?.back}</RichText></div>
-                        </div>
-                        {isFibCorrect === false && !isTestMode && currentCard?.explanation && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full max-w-sm"
-                          >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
-                          </motion.div>
-                        )}
-                        {isFibCorrect && !isTestMode && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-emerald-400 text-xs font-bold uppercase tracking-[0.2em]"
-                          >
-                            Progress +1
-                          </motion.div>
-                        )}
-                        {isFibCorrect === false && !isTestMode && cardAnswers.length > 0 && (
-                          <div className="flex flex-col gap-2 w-full max-w-sm">
-                            {cardAnswers.map((answer, i) => (
-                              <motion.div
-                                key={answer.id}
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.08 }}
-                                className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
-                              >
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                                <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
-                              </motion.div>
-                            ))}
-                            {renderAcceptPrompt()}
-                          </div>
-                        )}
-                        {isFibCorrect === false && !isTestMode && !questionJustAsked && (
-                          <motion.button
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
-                            className="w-full max-w-sm flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
-                          >
-                            <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
-                          </motion.button>
-                        )}
-                        {isFibCorrect === false && !isTestMode && questionJustAsked && (
-                          <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest">\uD83D\uDD25 Question posted!</p>
-                        )}
-                      </div>
-                    )
+                    <FIBCardRenderer
+                      isFlipped={isFlipped}
+                      isTestMode={!!isTestMode}
+                      currentCard={currentCard}
+                      cluesUsed={cluesUsed}
+                      revealedIndices={revealedIndices}
+                      fibInput={fibInput}
+                      setFibInput={setFibInput}
+                      isFibCorrect={isFibCorrect}
+                      lastFibSubmitted={lastFibSubmitted}
+                      cardAnswers={cardAnswers}
+                      cardQuestion={cardQuestion}
+                      questionJustAsked={questionJustAsked}
+                      onSubmit={handleFibSubmit}
+                      onGetClue={handleGetClue}
+                      onViewQuestion={cardQuestion && onViewQuestion ? () => onViewQuestion(cardQuestion) : undefined}
+                      onAskQuestion={() => setAskModalOpen(true)}
+                      renderAcceptPrompt={renderAcceptPrompt}
+                    />
                   ) : (currentCard?.type === 'multi-select' || (currentCard?.type === 'mcq' && getMcqCorrectOpts(currentCard).length > 1)) ? (
-                    <div className="w-full flex-1 flex flex-col justify-center items-center pb-4">
-                      {createPortal(
-                        <AnimatePresence>
-                          {mcqZoomSrc && (
-                            <motion.div
-                              key="mcq-zoom-ms"
-                              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                              transition={{ duration: 0.18 }}
-                              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-lg p-6"
-                              onClick={() => setMcqZoomSrc(null)}
-                            >
-                              <motion.img
-                                src={mcqZoomSrc} alt=""
-                                initial={{ scale: 0.82, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.82, opacity: 0 }}
-                                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-                                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                              <motion.button
-                                initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
-                                transition={{ type: 'spring', stiffness: 400, damping: 28, delay: 0.05 }}
-                                onClick={() => setMcqZoomSrc(null)}
-                                className="absolute top-5 right-5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full p-2.5 transition-colors"
-                              >
-                                <X className="w-5 h-5" />
-                              </motion.button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>,
-                        document.body
-                      )}
-                      <form onSubmit={handleMultiSelectSubmit} className="w-full flex flex-col gap-3">
-                        <div className={cn(
-                          shuffledOptionImages.some(Boolean)
-                            ? "grid grid-cols-2 gap-3"
-                            : "flex flex-col gap-3"
-                        )}>
-                        {shuffledOptions.map((opt, idx) => {
-                          const hasImages = shuffledOptionImages.some(Boolean);
-                          const isSelected = selectedMultiOptions.has(opt);
-                          const optImage = shuffledOptionImages[idx] ?? null;
-                          const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
-                          let btnClass = "bg-white/5 border border-white/10 text-white/70";
-                          let icon = null;
-
-                          if (!isFlipped) {
-                            btnClass = isSelected ? "bg-brand-primary/20 border-brand-primary/50 text-white" : "bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white text-white/70";
-                          } else if (isTestMode) {
-                            btnClass = isSelected ? "bg-white/15 border-white/30 text-white" : "bg-white/5 border-transparent text-brand-muted/30 opacity-30";
-                          } else {
-                            // Use getMcqCorrectOpts so legacy multi-select and new multi-answer MCQ both work
-                            const isCorrectOpt = getMcqCorrectOpts(currentCard).includes(opt);
-                            if (isCorrectOpt) {
-                              btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
-                              if (isSelected) {
-                                icon = <CheckCircle2 className="w-5 h-5" />;
-                              }
-                            } else if (isSelected && !isCorrectOpt) {
-                              btnClass = "bg-red-500/20 border-red-500/50 text-red-500";
-                              icon = <XCircle className="w-5 h-5" />;
-                            } else {
-                              btnClass = "bg-white/5 border-transparent text-brand-muted/30 opacity-30";
-                            }
-                          }
-
-                          return hasImages ? (
-                            <div
-                              key={idx}
-                              onClick={() => toggleMultiSelectOption(opt)}
-                              className={cn(
-                                "relative rounded-xl transition-all cursor-pointer overflow-hidden flex flex-col border group/msopt",
-                                btnClass
-                              )}
-                            >
-                              <div className="w-full aspect-[4/3] overflow-hidden flex items-center justify-center">
-                                {optImage
-                                  ? <img src={optImage} alt="" className="w-full h-full object-contain" />
-                                  : <span className="font-medium text-sm leading-snug px-4 text-center"><RichTextInline>{displayText}</RichTextInline></span>
-                                }
-                              </div>
-                              {(optImage || icon) && (
-                                <div className="px-3 py-2 flex items-center justify-between gap-2 border-t border-white/5">
-                                  <span className="text-xs font-bold text-white/50 shrink-0">{String.fromCharCode(65 + idx)}.</span>
-                                  {optImage && displayText && <span className="text-xs leading-snug flex-1"><RichTextInline>{displayText}</RichTextInline></span>}
-                                  {icon && (
-                                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                      {icon}
-                                    </motion.div>
-                                  )}
-                                </div>
-                              )}
-                              {optImage && (
-                                <button
-                                  type="button"
-                                  aria-label="Zoom image"
-                                  onClick={(e) => { e.stopPropagation(); setMcqZoomSrc(optImage); }}
-                                  className="absolute top-2 right-2 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-1.5 transition-all opacity-40 group-hover/msopt:opacity-100 focus:opacity-100"
-                                >
-                                  <ZoomIn className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <div
-                              key={idx}
-                              onClick={() => toggleMultiSelectOption(opt)}
-                              className={cn(
-                                "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed shrink-0 flex flex-col cursor-pointer",
-                                btnClass
-                              )}
-                            >
-                              {optImage && <img src={optImage} alt="" className="w-full max-h-28 object-contain rounded-lg mb-2" />}
-                              <div className="flex justify-between items-center">
-                                {displayText && <span><RichTextInline>{displayText}</RichTextInline></span>}
-                                {icon && (
-                                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                    {icon}
-                                  </motion.div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        </div>
-                        {!isFlipped && (
-                          <button type="submit" disabled={selectedMultiOptions.size === 0} className="w-full mt-4 bg-brand-primary hover:bg-white text-black py-4 rounded-xl text-sm font-bold transition-colors disabled:opacity-50">
-                            Submit Answer
-                          </button>
-                        )}
-                      </form>
-                      {isFlipped && !isTestMode && currentCard?.explanation &&
-                        !(selectedMultiOptions.size === getMcqCorrectOpts(currentCard).length &&
-                          [...selectedMultiOptions].every(o => getMcqCorrectOpts(currentCard).includes(o))) && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
-                          >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
-                          </motion.div>
-                        )}
-                      {/* Community answers — multi-select wrong answer */}
-                      {!isTestMode && showAskButton && cardAnswers.length > 0 && (
-                        <div className="flex flex-col gap-2 w-full mt-2">
-                          {cardAnswers.map((answer, i) => (
-                            <motion.div
-                              key={answer.id}
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: i * 0.08 }}
-                              className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
-                            >
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                              <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
-                            </motion.div>
-                          ))}
-                          {renderAcceptPrompt()}
-                        </div>
-                      )}
-                      {!isTestMode && showAskButton && !questionJustAsked && (
-                        <motion.button
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          onClick={(e) => { e.stopPropagation(); cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true); }}
-                          className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
-                        >
-                          <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
-                        </motion.button>
-                      )}
-                      {!isTestMode && questionJustAsked && (
-                        <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Question posted!</p>
-                      )}
-                    </div>
+                    <MCQMultiCardRenderer
+                      isFlipped={isFlipped}
+                      isTestMode={!!isTestMode}
+                      currentCard={currentCard}
+                      shuffledOptions={shuffledOptions}
+                      shuffledOptionImages={shuffledOptionImages}
+                      selectedMultiOptions={selectedMultiOptions}
+                      mcqZoomSrc={mcqZoomSrc}
+                      showAskButton={showAskButton}
+                      cardAnswers={cardAnswers}
+                      cardQuestion={cardQuestion}
+                      questionJustAsked={questionJustAsked}
+                      onToggleOption={toggleMultiSelectOption}
+                      onSubmit={handleMultiSelectSubmit}
+                      onSetMcqZoomSrc={setMcqZoomSrc}
+                      getMcqCorrectOpts={getMcqCorrectOpts}
+                      onViewQuestion={cardQuestion && onViewQuestion ? () => onViewQuestion(cardQuestion) : undefined}
+                      onAskQuestion={() => setAskModalOpen(true)}
+                      renderAcceptPrompt={renderAcceptPrompt}
+                    />
                   ) : currentCard?.type === 'sequencing' ? (
-                    <div className="w-full flex-1 flex flex-col justify-center items-center gap-3 pb-4">
-                      <form onSubmit={handleSequenceSubmit} className="w-full flex flex-col gap-3">
-                        <ul className="w-full flex flex-col gap-2 list-none p-0 m-0">
-                          {shuffledSequence.map((item, idx) => {
-                            let btnClass = "bg-white/5 border border-white/10 text-white/80";
-                            let icon = null;
-
-                            if (isFlipped && !isTestMode) {
-                              const correctOpt = currentCard.options![idx];
-                              if (item.text === correctOpt) {
-                                btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-400";
-                                icon = <CheckCircle2 className="w-5 h-5" />;
-                              } else {
-                                btnClass = "bg-red-500/20 border-red-500/50 text-red-500";
-                                icon = <XCircle className="w-5 h-5" />;
-                              }
-                            } else if (isFlipped && isTestMode) {
-                              btnClass = "bg-white/10 border-white/20 text-white/70";
-                            }
-
-                            const isDraggingThis = seqDragIdx === idx;
-                            const isOverThis = seqOverIdx === idx && seqDragIdx !== idx;
-
-                            return (
-                              <li
-                                key={item.id}
-                                draggable={!isFlipped}
-                                onDragStart={!isFlipped ? (e) => {
-                                  e.dataTransfer.effectAllowed = 'move';
-                                  setSeqDragIdx(idx);
-                                } : undefined}
-                                onDragOver={!isFlipped ? (e) => {
-                                  e.preventDefault();
-                                  e.dataTransfer.dropEffect = 'move';
-                                  setSeqOverIdx(idx);
-                                } : undefined}
-                                onDrop={!isFlipped ? (e) => {
-                                  e.preventDefault();
-                                  if (seqDragIdx === null || seqDragIdx === idx) {
-                                    setSeqDragIdx(null);
-                                    setSeqOverIdx(null);
-                                    return;
-                                  }
-                                  const next = [...shuffledSequence];
-                                  const [moved] = next.splice(seqDragIdx, 1);
-                                  next.splice(idx, 0, moved);
-                                  setShuffledSequence(next);
-                                  setSeqDragIdx(null);
-                                  setSeqOverIdx(null);
-                                } : undefined}
-                                onDragEnd={!isFlipped ? () => {
-                                  setSeqDragIdx(null);
-                                  setSeqOverIdx(null);
-                                } : undefined}
-                                className={cn(
-                                  "w-full text-left px-4 py-3 sm:px-5 sm:py-4 rounded-xl transition-all font-medium text-xs sm:text-sm md:text-base leading-relaxed flex items-center gap-3 select-none",
-                                  btnClass,
-                                  !isFlipped && "cursor-grab hover:bg-white/10",
-                                  isDraggingThis && "opacity-40 scale-95",
-                                  isOverThis && "ring-2 ring-brand-primary/60 ring-inset"
-                                )}
-                              >
-                                <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0 pointer-events-none">
-                                  {idx + 1}
-                                </div>
-                                <span className="flex-1 pointer-events-none"><RichTextInline>{item.text}</RichTextInline></span>
-                                {!isFlipped && (
-                                  <svg className="w-4 h-4 text-white/30 shrink-0 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
-                                  </svg>
-                                )}
-                                {icon && (
-                                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                    {icon}
-                                  </motion.div>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                        {!isFlipped && (
-                          <button type="submit" className="w-full mt-4 bg-brand-primary hover:bg-white text-black py-4 rounded-xl text-sm font-bold transition-colors">
-                            Submit Sequence
-                          </button>
-                        )}
-                      </form>
-                      {isFlipped && !isTestMode && currentCard?.explanation && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
-                          >
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                            <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
-                          </motion.div>
-                        )}
-                    </div>
+                    <SequencingCardRenderer
+                      isFlipped={isFlipped}
+                      isTestMode={!!isTestMode}
+                      currentCard={currentCard}
+                      shuffledSequence={shuffledSequence}
+                      seqDragIdx={seqDragIdx}
+                      seqOverIdx={seqOverIdx}
+                      setShuffledSequence={setShuffledSequence}
+                      setSeqDragIdx={setSeqDragIdx}
+                      setSeqOverIdx={setSeqOverIdx}
+                      onSubmit={handleSequenceSubmit}
+                    />
                   ) : currentCard?.type === 'hotspot' ? (
-                    // ── Hotspot card ──────────────────────────────────────────
-                    <div className="w-full flex-1 flex flex-col justify-center items-center gap-4 pb-4">
-                      {!isOnline ? (
-                        <OfflineImageNotice />
-                      ) : currentCard.imageUrl ? (
-                        <div className="relative w-full select-none">
-                          <img
-                            ref={hotspotImgRef}
-                            src={currentCard.imageUrl}
-                            alt=""
-                            draggable={false}
-                            className={cn(
-                              "w-full object-contain rounded-xl",
-                              !isFlipped ? "cursor-crosshair" : "cursor-default"
-                            )}
-                            onPointerDown={!isFlipped ? handleHotspotPointerDown : undefined}
-                          />
-                          {/* ── Zone glow overlay — revealed after answer ── */}
-                          {isFlipped && (
-                            <svg
-                              className="absolute inset-0 w-full h-full pointer-events-none"
-                              viewBox="0 0 1 1"
-                              preserveAspectRatio="none"
-                            >
-                              {currentCard.hotspots?.map(zone => {
-                                const imgEl = hotspotImgRef.current;
-                                const ar = imgEl ? imgEl.clientWidth / imgEl.clientHeight : 1;
-                                const ry = (zone.radiusY ?? zone.radius) / ar;
-                                return (
-                                  <ellipse
-                                    key={zone.id}
-                                    cx={zone.x}
-                                    cy={zone.y}
-                                    rx={zone.radius}
-                                    ry={ry}
-                                    transform={zone.rotation ? `rotate(${zone.rotation}, ${zone.x}, ${zone.y})` : undefined}
-                                    fill="none"
-                                    stroke="#4ade80"
-                                    strokeWidth="0.003"
-                                    style={{
-                                      filter:
-                                        'drop-shadow(0 0 4px #4ade80) drop-shadow(0 0 10px #4ade80) drop-shadow(0 0 22px rgba(74,222,128,0.55))',
-                                    }}
-                                  />
-                                );
-                              })}
-                            </svg>
-                          )}
-
-                          {/* ── Tap marker — HTML div so Tailwind animate-ping works ── */}
-                          {hotspotTap && (
-                            <div
-                              className="absolute pointer-events-none"
-                              style={{
-                                left: `${hotspotTap.x * 100}%`,
-                                top: `${hotspotTap.y * 100}%`,
-                                transform: 'translate(-50%, -50%)',
-                              }}
-                            >
-                              {/* Tactical target dot — white center, coloured ring, glow */}
-                              <div
-                                className={cn(
-                                  'relative w-4 h-4 rounded-full bg-white border-2',
-                                  hotspotCorrect ? 'border-green-400' : 'border-red-400'
-                                )}
-                                style={{
-                                  boxShadow: hotspotCorrect
-                                    ? '0 0 0 3px rgba(74,222,128,0.25), 0 0 12px #4ade80, 0 0 24px rgba(74,222,128,0.4)'
-                                    : '0 0 0 3px rgba(239,68,68,0.25), 0 0 12px #ef4444, 0 0 24px rgba(239,68,68,0.4)',
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-brand-muted">No image attached to this card.</p>
-                      )}
-
-                      {/* Pre-answer tap hint */}
-                      {!isFlipped && currentCard.imageUrl && isOnline && (
-                        <p className="text-[11px] text-brand-muted font-semibold flex items-center gap-1.5">
-                          <Target className="w-3.5 h-3.5 text-brand-primary/70" />
-                          Tap the correct region
-                        </p>
-                      )}
-
-                      {/* ── Result panel — revealed after answering ── */}
-                      {isFlipped && !isTestMode && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.25, ease: 'easeOut' }}
-                          className={cn(
-                            "w-full p-4 rounded-2xl border text-left",
-                            hotspotCorrect
-                              ? "bg-green-500/5 border-green-500/20"
-                              : "bg-red-500/5 border-red-500/20"
-                          )}
-                        >
-                          {/* Title row */}
-                          <div className="flex items-center gap-2 mb-2">
-                            {hotspotCorrect ? (
-                              <CheckCircle2
-                                className="w-4 h-4 shrink-0 text-green-400"
-                                style={{ filter: 'drop-shadow(0 0 6px #4ade80)' }}
-                              />
-                            ) : (
-                              <XCircle className="w-4 h-4 shrink-0 text-red-400" />
-                            )}
-                            <span className={cn(
-                              "text-xs font-bold uppercase tracking-widest",
-                              hotspotCorrect ? "text-green-400" : "text-red-400"
-                            )}>
-                              {hotspotCorrect ? 'Correct Region' : 'Not Quite'}
-                            </span>
-                          </div>
-                          {/* Explanation */}
-                          {currentCard.back && (
-                            <div className="text-sm text-white/70 leading-relaxed">
-                              <RichText>{currentCard.back}</RichText>
-                            </div>
-                          )}
-                          {!currentCard.back && !hotspotCorrect && (
-                            <p className="text-sm text-white/50">The correct region is highlighted on the image above.</p>
-                          )}
-                        </motion.div>
-                      )}
-                    </div>
+                    <HotspotCardRenderer
+                      isFlipped={isFlipped}
+                      isTestMode={!!isTestMode}
+                      isOnline={!!isOnline}
+                      currentCard={currentCard}
+                      hotspotTap={hotspotTap}
+                      hotspotCorrect={hotspotCorrect}
+                      hotspotImgRef={hotspotImgRef}
+                      onPointerDown={handleHotspotPointerDown}
+                    />
                   ) : currentCard?.type === 'mcq' ? (
-                    <div className="w-full flex-1 flex flex-col justify-center pb-4">
-                      {createPortal(
-                        <AnimatePresence>
-                          {mcqZoomSrc && (
-                            <motion.div
-                              key="mcq-zoom"
-                              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                              transition={{ duration: 0.18 }}
-                              className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-lg p-6"
-                              onClick={() => setMcqZoomSrc(null)}
-                            >
-                              <motion.img
-                                src={mcqZoomSrc} alt=""
-                                initial={{ scale: 0.82, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.82, opacity: 0 }}
-                                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-                                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                              <motion.button
-                                initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
-                                transition={{ type: 'spring', stiffness: 400, damping: 28, delay: 0.05 }}
-                                onClick={() => setMcqZoomSrc(null)}
-                                className="absolute top-5 right-5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full p-2.5 transition-colors"
-                              >
-                                <X className="w-5 h-5" />
-                              </motion.button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>,
-                        document.body
-                      )}
-                      <div className={cn(
-                        shuffledOptionImages.some(Boolean)
-                          ? "grid grid-cols-2 gap-3"
-                          : "flex flex-col gap-3"
-                      )}>
-                      {shuffledOptions.map((opt, idx) => {
-                        const hasImages = shuffledOptionImages.some(Boolean);
-                        let btnClass = "bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white";
-                        let statusText = null;
-
-                        if (selectedOption) {
-                          if (isTestMode) {
-                            btnClass = opt === selectedOption ? "bg-white/15 border-white/30 text-white" : "bg-white/5 border-transparent text-brand-muted/30 opacity-40";
-                          } else if (opt === currentCard?.back) {
-                            btnClass = "bg-emerald-500/10 border-emerald-500/50 text-white";
-                            statusText = "Correct answer";
-                          } else if (opt === selectedOption) {
-                            btnClass = "bg-red-500/10 border-red-500/50 text-white";
-                            statusText = "Not quite";
-                          } else {
-                            btnClass = "bg-white/5 border-transparent text-brand-muted/30 opacity-40";
-                          }
-                        }
-
-                        const letter = String.fromCharCode(65 + idx);
-                        const optImage = shuffledOptionImages[idx] ?? null;
-                        const displayText = opt.startsWith('__img_') && opt.endsWith('__') ? '' : opt;
-
-                        return (
-                          <div key={idx} className="relative flex flex-col group/opt">
-                            <motion.button
-                              layout
-                              whileHover={!selectedOption ? { scale: 1.02 } : {}}
-                              whileTap={!selectedOption ? { scale: 0.98 } : {}}
-                              onClick={(e: any) => handleOptionSelect(opt, e)}
-                              disabled={selectedOption !== null}
-                              className={cn(
-                                "w-full rounded-xl transition-colors flex flex-col overflow-hidden",
-                                hasImages ? "border" : "text-left px-4 py-3 sm:px-5 sm:py-4",
-                                btnClass
-                              )}
-                            >
-                              {hasImages ? (
-                                <>
-                                  <div className="w-full aspect-[4/3] overflow-hidden flex items-center justify-center">
-                                    {optImage
-                                      ? <img src={optImage} alt="" className="w-full h-full object-contain" />
-                                      : <span className="font-medium text-sm leading-snug px-4 text-center"><RichTextInline>{displayText}</RichTextInline></span>
-                                    }
-                                  </div>
-                                  <div className={cn("px-3 py-2 flex items-center gap-2", optImage && displayText ? "border-t border-white/5" : optImage ? "" : "hidden")}>
-                                    <span className="text-xs font-bold text-white/50 shrink-0">{letter}.</span>
-                                    {optImage && displayText && <span className="text-xs leading-snug"><RichTextInline>{displayText}</RichTextInline></span>}
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  {optImage && <img src={optImage} alt="" className="w-full max-h-28 object-contain rounded-lg mb-2" />}
-                                  <div className="flex justify-between items-start gap-4">
-                                    <div className="flex items-start gap-3 flex-1">
-                                      <span className="font-bold text-white/70 shrink-0">{letter}.</span>
-                                      {displayText && <span className="font-medium text-xs sm:text-sm md:text-base leading-relaxed flex-1">
-                                        <RichTextInline>{displayText}</RichTextInline>
-                                      </span>}
-                                    </div>
-                                  </div>
-                                </>
-                              )}
-
-                              <AnimatePresence>
-                                {selectedOption && !isTestMode && (opt === currentCard?.back || opt === selectedOption) && (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className={cn("overflow-hidden px-3", hasImages ? "mt-0" : "mt-2 pl-8 sm:pl-9")}
-                                  >
-                                    <div className="flex items-center gap-2 mb-1.5 mt-2">
-                                      <div className={cn(
-                                        "w-4 h-4 flex items-center justify-center rounded-full",
-                                        opt === currentCard?.back ? "bg-emerald-500/20" : "bg-red-500/20"
-                                      )}>
-                                        {opt === currentCard?.back ?
-                                          <Check className="w-2.5 h-2.5 text-emerald-500" /> :
-                                          <X className="w-2.5 h-2.5 text-red-500" />
-                                        }
-                                      </div>
-                                      <span className={cn(
-                                        "text-[11px] sm:text-xs font-bold uppercase tracking-wider",
-                                        opt === currentCard?.back ? "text-emerald-500" : "text-red-400"
-                                      )}>
-                                        {statusText}
-                                      </span>
-                                    </div>
-                                    {currentCard?.explanations?.[opt] && (
-                                      <div className="text-[13px] sm:text-[14px] text-white/70 leading-relaxed mb-2 pr-4">
-                                        <RichText>{currentCard.explanations[opt]}</RichText>
-                                      </div>
-                                    )}
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </motion.button>
-                            {hasImages && optImage && (
-                              <button
-                                type="button"
-                                aria-label="Zoom image"
-                                onClick={(e) => { e.stopPropagation(); setMcqZoomSrc(optImage); }}
-                                className="absolute top-2 right-2 z-10 bg-black/50 hover:bg-black/80 text-white rounded-full p-1.5 transition-all opacity-40 group-hover/opt:opacity-100 focus:opacity-100"
-                              >
-                                <ZoomIn className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                      </div>
-                      {currentCard?.hint && (
-                        <div className="w-full mt-2 flex flex-col items-center">
-                          {!showHint ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setShowHint(true); }}
-                              className="text-[10px] sm:text-xs text-brand-muted hover:text-white transition-colors uppercase tracking-[0.2em] font-bold px-4 py-2 border border-brand-muted/20 rounded-lg hover:bg-white/5"
-                            >
-                              Show Hint
-                            </button>
-                          ) : (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="text-xs sm:text-sm text-amber-200 bg-amber-500/10 p-4 rounded-xl border border-amber-500/20 text-left w-full mx-auto shadow-inner"
-                            >
-                              <span className="font-bold uppercase tracking-widest text-[10px] mb-1.5 block text-amber-500">Hint</span>
-                              <RichText>{currentCard.hint}</RichText>
-                            </motion.div>
-                          )}
-                        </div>
-                      )}
-                      {selectedOption && !isTestMode && currentCard?.explanation && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-3 p-4 rounded-2xl bg-white/5 border border-white/10 text-left w-full"
-                        >
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                          <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
-                        </motion.div>
-                      )}
-                      {/* Community answers — MCQ/sequencing wrong answer */}
-                      {!isTestMode && showAskButton && cardAnswers.length > 0 && (
-                        <div className="flex flex-col gap-2 w-full mt-2">
-                          {cardAnswers.map((answer, i) => (
-                            <motion.div
-                              key={answer.id}
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: i * 0.08 }}
-                              className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
-                            >
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                              <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
-                            </motion.div>
-                          ))}
-                          {renderAcceptPrompt()}
-                        </div>
-                      )}
-                      {/* Ask the Community button — MCQ wrong answer */}
-                      {!isTestMode && showAskButton && !questionJustAsked && (
-                        <motion.button
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          onClick={(e) => { e.stopPropagation(); cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true); }}
-                          className="w-full mt-2 flex items-center justify-center gap-2 border border-orange-500/25 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
-                        >
-                          <Flame className="w-3.5 h-3.5" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
-                        </motion.button>
-                      )}
-                      {!isTestMode && questionJustAsked && (
-                        <p className="text-center text-[10px] text-orange-400/60 font-bold uppercase tracking-widest mt-2">🔥 Question posted!</p>
-                      )}
-                    </div>
+                    <MCQSingleCardRenderer
+                      isFlipped={isFlipped}
+                      isTestMode={!!isTestMode}
+                      currentCard={currentCard}
+                      shuffledOptions={shuffledOptions}
+                      shuffledOptionImages={shuffledOptionImages}
+                      selectedOption={selectedOption}
+                      mcqZoomSrc={mcqZoomSrc}
+                      showHint={showHint}
+                      showAskButton={showAskButton}
+                      cardAnswers={cardAnswers}
+                      cardQuestion={cardQuestion}
+                      questionJustAsked={questionJustAsked}
+                      onOptionSelect={handleOptionSelect}
+                      onSetMcqZoomSrc={setMcqZoomSrc}
+                      onSetShowHint={setShowHint}
+                      onViewQuestion={cardQuestion && onViewQuestion ? () => onViewQuestion(cardQuestion) : undefined}
+                      onAskQuestion={() => setAskModalOpen(true)}
+                      renderAcceptPrompt={renderAcceptPrompt}
+                    />
                   ) : null}
 
                   {/* Post-reveal answer section — flashcard */}
                   {(!currentCard?.type || currentCard?.type === 'flashcard') && isFlipped && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="w-full mt-6 pt-6 border-t border-white/10 flex flex-col items-center gap-4"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {currentCard?.backImageUrl && (
-                        <div className="w-full">
-                          {isOnline ? (
-                            <>
-                              <LightboxImage
-                                src={currentCard.backImageUrl}
-                                className="w-full max-h-48 object-contain rounded-xl"
-                              />
-                              {currentCard.backImageCredit && (
-                                <p className="text-[10px] text-brand-muted/70 italic mt-1 text-center">
-                                  {currentCard.backImageCredit}
-                                </p>
-                              )}
-                            </>
-                          ) : (
-                            <OfflineImageNotice />
-                          )}
-                        </div>
-                      )}
-                      <h2 className="text-xl sm:text-2xl md:text-3xl font-normal leading-snug tracking-tight text-white">
-                        <RichText>{currentCard?.back}</RichText>
-                      </h2>
-                      {(settings?.writtenRecallMode || isTestMode) && (
-                        <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Your recall</span>
-                          {writtenRecallText.trim() ? (
-                            <p className="text-sm text-white/70 leading-relaxed italic whitespace-pre-wrap">{writtenRecallText.trim()}</p>
-                          ) : (
-                            <p className="text-sm text-brand-muted/40 leading-relaxed">Nothing written</p>
-                          )}
-                        </div>
-                      )}
-                      {!isTestMode && currentCard?.explanation && (
-                        <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-left">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted block mb-1.5">Why</span>
-                          <div className="text-sm text-white/70 leading-relaxed"><RichText>{currentCard.explanation}</RichText></div>
-                        </div>
-                      )}
-                      {!isTestMode && cardAnswers.length > 0 && (
-                        <div className="w-full flex flex-col gap-2">
-                          {cardAnswers.map((answer, i) => (
-                            <motion.div
-                              key={answer.id}
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: i * 0.08 }}
-                              className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 text-left"
-                            >
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400 block mb-1">Crew tip from {answer.helperName}</span>
-                              <div className="text-sm text-white/70"><RichText>{answer.bodyText}</RichText></div>
-                            </motion.div>
-                          ))}
-                          {renderAcceptPrompt()}
-                        </div>
-                      )}
-                      <div className="w-full pt-4 border-t border-white/5">
-                        <p className="text-[9px] uppercase tracking-[0.2em] text-brand-muted/50 font-bold mb-3">
-                          Did you get it correct?
-                        </p>
-                        <div className={`grid gap-2 ${isTestMode ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(false, e); }}
-                            className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                          >
-                            <X className="w-4 h-4" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">No</span>
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleFlashcardGrade(true, e); }}
-                            className="bg-white/5 border border-white/5 hover:bg-emerald-500/15 hover:border-emerald-500/30 hover:text-emerald-400 text-white h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                          >
-                            <Check className="w-4 h-4" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Yes</span>
-                          </button>
-                          {!isTestMode && (
-                            <div className="flex flex-col gap-1.5">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleFlashcardEasy(e); }}
-                                className="bg-white/5 border border-white/5 hover:bg-yellow-500/15 hover:border-yellow-500/30 hover:text-yellow-400 text-brand-muted h-12 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                                title="This is pretty easy; show me less frequently"
-                              >
-                                <Zap className="w-4 h-4" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest">Easy</span>
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleFlashcardHard(); }}
-                                className="bg-white/5 border border-white/5 hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-400 text-brand-muted h-10 rounded-xl flex items-center justify-center gap-1.5 transition-all"
-                                title="This was tough — show me sooner"
-                              >
-                                <TrendingDown className="w-4 h-4" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest">Hard</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        {!isTestMode && (!questionJustAsked ? (
-                          <motion.button
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.4 }}
-                            onClick={() => cardQuestion && onViewQuestion ? onViewQuestion(cardQuestion) : setAskModalOpen(true)}
-                            className="w-full mt-3 flex items-center justify-center gap-2 text-orange-400/50 hover:text-orange-400 transition-colors text-[10px] font-bold uppercase tracking-widest py-2"
-                          >
-                            <Flame className="w-3 h-3" /> {cardQuestion ? 'View Community Thread' : 'Ask the Community'}
-                          </motion.button>
-                        ) : (
-                          <p className="text-center text-[10px] text-orange-400/50 font-bold uppercase tracking-widest mt-3">🔥 Question posted!</p>
-                        ))}
-                      </div>
-                    </motion.div>
+                    <FlashcardPostFlip
+                      currentCard={currentCard}
+                      isTestMode={!!isTestMode}
+                      isOnline={!!isOnline}
+                      settings={settings}
+                      writtenRecallText={writtenRecallText}
+                      cardAnswers={cardAnswers}
+                      cardQuestion={cardQuestion}
+                      questionJustAsked={questionJustAsked}
+                      onGrade={handleFlashcardGrade}
+                      onEasy={handleFlashcardEasy}
+                      onHard={handleFlashcardHard}
+                      onViewQuestion={cardQuestion && onViewQuestion ? () => onViewQuestion(cardQuestion) : undefined}
+                      onAskQuestion={() => setAskModalOpen(true)}
+                      renderAcceptPrompt={renderAcceptPrompt}
+                    />
                   )}
                 </div>
               </div>
@@ -3356,72 +2390,29 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         </div>
 
         {/* History navigation bar */}
-        {(currentIndex > 0 || isViewingHistory || isTestMode) ? (
-          <div className="flex items-center justify-between w-full mt-5 px-1">
-            <button
-              onClick={() => {
-                if (isTestMode) { jumpToCard(viewIndex - 1); }
-                else { setDirection(-1); setViewIndex(prev => Math.max(0, prev - 1)); }
-              }}
-              disabled={viewIndex === 0}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all",
-                viewIndex === 0 ? "opacity-25 cursor-not-allowed border-white/5 text-brand-muted" : "glass border-white/10 text-white hover:border-white/20 hover:bg-white/5"
-              )}
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>Prev</span>
-            </button>
-
-            {isViewingHistory ? (
-              <button
-                onClick={() => { setDirection(1); setViewIndex(currentIndex); }}
-                className="text-[9px] uppercase tracking-widest font-bold text-amber-400/80 hover:text-amber-400 transition-colors flex items-center gap-1"
-              >
-                <span>Back to current</span>
-              </button>
-            ) : !isTestMode ? (
-              <button
-                onClick={skipCard}
-                className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest font-bold text-brand-muted/40 hover:text-brand-muted/70 transition-colors"
-              >
-                <SkipForward className="w-3 h-3" />
-                <span>Skip</span>
-              </button>
-            ) : (
-              <span className="text-[9px] uppercase tracking-widest font-bold text-brand-muted/30">
-                {currentIndex + 1} / {shuffledCards.length}
-              </span>
-            )}
-
-            <div className="relative group/next">
-              <button
-                onClick={() => {
-                  if (isTestMode) {
-                    if (viewIndex === currentIndex) { skipCard(); }
-                    else { jumpToCard(viewIndex + 1); }
-                  } else {
-                    setDirection(1); setViewIndex(prev => Math.min(currentIndex, prev + 1));
-                  }
-                }}
-                disabled={!isTestMode && viewIndex >= currentIndex}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all",
-                  !isTestMode && viewIndex >= currentIndex ? "opacity-25 cursor-not-allowed border-white/5 text-brand-muted" : "glass border-white/10 text-white hover:border-white/20 hover:bg-white/5"
-                )}
-              >
-                <span>Next</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-              {!isTestMode && viewIndex >= currentIndex && (
-                <div className="absolute bottom-full right-0 mb-2 w-44 px-3 py-2 rounded-xl bg-brand-surface border border-white/10 text-[10px] text-brand-muted leading-snug shadow-lg pointer-events-none opacity-0 group-hover/next:opacity-100 transition-opacity duration-150 z-50">
-                  Answer this card first, or use Skip to move on.
-                  <div className="absolute top-full right-3 border-4 border-transparent border-t-white/10" />
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
+        {(currentIndex > 0 || isViewingHistory || isTestMode) && (
+          <SessionHistoryNav
+            viewIndex={viewIndex}
+            currentIndex={currentIndex}
+            isViewingHistory={isViewingHistory}
+            isTestMode={!!isTestMode}
+            shuffledCardsLength={shuffledCards.length}
+            onPrev={() => {
+              if (isTestMode) { jumpToCard(viewIndex - 1); }
+              else { setDirection(-1); setViewIndex(prev => Math.max(0, prev - 1)); }
+            }}
+            onNext={() => {
+              if (isTestMode) {
+                if (viewIndex === currentIndex) { skipCard(); }
+                else { jumpToCard(viewIndex + 1); }
+              } else {
+                setDirection(1); setViewIndex(prev => Math.min(currentIndex, prev + 1));
+              }
+            }}
+            onSkip={skipCard}
+            onBackToCurrent={() => { setDirection(1); setViewIndex(currentIndex); }}
+          />
+        )}
 
         {(currentCard?.type === 'mcq' || currentCard?.type === 'multi-select' || currentCard?.type === 'sequencing' || currentCard?.type === 'fill-in-the-blank' || currentCard?.type === 'hotspot') && !isViewingHistory && (
           <div className="w-full mt-8 sm:mt-12 flex justify-center min-h-[64px] relative z-[60]">
@@ -3513,69 +2504,15 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         )}
 
         {/* Live Session Tracker */}
-        {!isTestMode && (settings?.sessionDisplay ?? 'stats') === 'focused' ? null : !isTestMode && <div className="w-full mt-12 px-4 md:px-0">
-          <div className="mx-auto grid gap-2 md:gap-4 pointer-events-auto max-w-xl grid-cols-3">
-            {/* Streak Counter */}
-            <motion.div
-              animate={isNewRecord ? {
-                scale: [1, 1.06, 1],
-                backgroundColor: 'rgba(234, 179, 8, 0.28)',
-                boxShadow: ['0 0 8px rgba(234, 179, 8, 0.3)', '0 0 28px rgba(234, 179, 8, 0.75)', '0 0 8px rgba(234, 179, 8, 0.3)'],
-              } : {
-                scale: streak > 0 ? [1, 1.1, 1] : 1,
-                backgroundColor: streak >= 3 ? 'rgba(234, 179, 8, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                boxShadow: '0 0 0px rgba(0,0,0,0)'
-              }}
-              transition={isNewRecord ? { duration: 0.5, repeat: Infinity, repeatType: 'loop' } : { duration: 0.3 }}
-              className={cn(
-                "rounded-2xl p-2 md:p-4 border shadow-2xl backdrop-blur-md flex flex-col items-center justify-center gap-1",
-                isNewRecord ? "border-amber-400/70" : streak >= 3 ? "border-amber-500/30" : "border-white/10"
-              )}
-            >
-              <div className="flex items-center gap-1.5 md:gap-2">
-                <motion.div
-                  animate={isNewRecord ? { scale: [1, 1.5, 0.8, 1.4, 1] } : {}}
-                  transition={isNewRecord ? { duration: 0.5, repeat: Infinity } : {}}
-                >
-                  <Zap className={cn("w-3 h-3 md:w-4 md:h-4", isNewRecord || streak >= 3 ? "text-amber-400 fill-amber-400" : "text-brand-muted")} />
-                </motion.div>
-                <span className="text-xs md:text-sm font-black text-white">{streak}</span>
-              </div>
-              <span className={cn(
-                "text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-center leading-none",
-                isNewRecord ? "text-amber-400" : "text-brand-muted"
-              )}>
-                {isNewRecord ? "New Record!" : "Streak"}
-              </span>
-            </motion.div>
-
-            {/* Correct */}
-            <div className="bg-emerald-500/10 rounded-2xl p-2 md:p-4 border border-emerald-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-              <motion.span
-                key={sessionStats.mastered + sessionStats.learning}
-                initial={{ scale: 1.5, color: '#10b981' }}
-                animate={{ scale: 1, color: '#ffffff' }}
-                className="text-xs md:text-sm font-black"
-              >
-                {liveCorrect}
-              </motion.span>
-              <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-emerald-500/80 text-center leading-none">Correct</span>
-            </div>
-
-            {/* Incorrect */}
-            <div className="bg-red-500/10 rounded-2xl p-2 md:p-4 border border-red-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
-              <motion.span
-                key={sessionStats.struggling}
-                initial={{ scale: 1.5, color: '#ef4444' }}
-                animate={{ scale: 1, color: '#ffffff' }}
-                className="text-xs md:text-sm font-black"
-              >
-                {liveIncorrect}
-              </motion.span>
-              <span className="text-[7px] md:text-[10px] font-bold uppercase tracking-widest text-red-500/80 text-center leading-none">Incorrect</span>
-            </div>
-          </div>
-        </div>}
+        {!isTestMode && (settings?.sessionDisplay ?? 'stats') !== 'focused' && (
+          <SessionStatsBar
+            streak={streak}
+            liveCorrect={liveCorrect}
+            liveIncorrect={liveIncorrect}
+            isNewRecord={isNewRecord}
+            sessionStats={sessionStats}
+          />
+        )}
       </div>
 
       <AskQuestionModal

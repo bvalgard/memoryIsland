@@ -1316,7 +1316,7 @@ export function useUserProgress() {
     }
   };
 
-  const addIsland = async (name: string, archipelagoId?: string) => {
+  const addIsland = async (name: string, archipelagoId?: string): Promise<string | undefined> => {
     if (!user) return;
     const islandId = randomId();
     try {
@@ -1330,6 +1330,7 @@ export function useUserProgress() {
         isPublic: false,
         approvalStatus: 'draft',
       }, user.uid, user.email));
+      return islandId;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `islands/${islandId}`);
     }
