@@ -25,7 +25,7 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
     voteAnswer, acceptAnswer,
     postAnswer, postComment, loadComments,
     updateVisibility, deleteQuestion,
-    generateAIHintIfNeeded,
+    generateAIHintIfNeeded, acceptPollyAnswer,
   } = useQuestions();
 
   const [activeTab, setActiveTab] = useState<FeedTab>(initialTab);
@@ -133,6 +133,7 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
             onPostAnswer={postAnswer}
             onPostComment={postComment}
             onLoadComments={loadComments}
+            onAcceptPolly={acceptPollyAnswer}
           />
         </div>
       </div>
@@ -276,7 +277,7 @@ export default function QuestionsBoard({ onClose, currentUserId, ownedIslandIds,
                   </div>
                   {q.aiHint && (
                     <div className="mt-2 pt-2 border-t border-white/5 text-left pointer-events-none">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">AI Memory Hook</p>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 mb-0.5">🦜 Polly · AI</p>
                       <p className="text-[11px] text-amber-100/50 leading-snug italic">{q.aiHint}</p>
                     </div>
                   )}

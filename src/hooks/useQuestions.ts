@@ -456,18 +456,30 @@ export function useQuestions() {
     if (ageMs < 24 * 60 * 60 * 1000) return;
     if (question.aiHint) return;
 
-    const apiKey = (process.env as Record<string, string>).GEMINI_API_KEY;
-    if (!apiKey) return;
+    const workerUrl = import.meta.env.VITE_UPLOAD_WORKER_URL;
+    if (!workerUrl) return;
+
+    const user = auth.currentUser;
+    if (!user) return;
 
     try {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `You are a memory coach. Write a short, vivid memory hook (1-2 sentences) to help someone remember:\n\nConcept: ${question.frontText}\nAnswer: ${question.backText}\n\nRespond with only the memory hook.`;
-      const result = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt,
+      const token = await user.getIdToken();
+      const res = await fetch(`${workerUrl}/ai-answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          frontText: question.frontText,
+          backText: question.backText,
+          cardType: question.cardType,
+          note: question.note ?? '',
+        }),
       });
-      const hint = result.text?.trim();
+      if (!res.ok) return;
+      const { text } = await res.json();
+      const hint = text?.trim();
       if (!hint) return;
 
       await updateDoc(doc(db, 'questions', question.id), {
@@ -478,8 +490,18 @@ export function useQuestions() {
         prev.map(q => q.id === question.id ? { ...q, aiHint: hint, aiHintGeneratedAt: now } : q)
       );
     } catch (err) {
-      console.warn('[AI hint] generation failed:', err);
+      console.warn('[Polly] generation failed:', err);
     }
+  };
+
+  const acceptPollyAnswer = async (questionId: string): Promise<void> => {
+    await updateDoc(doc(db, 'questions', questionId), {
+      status: 'answered',
+      acceptedAnswerId: null,
+    });
+    setMyQuestions(prev =>
+      prev.map(q => q.id === questionId ? { ...q, status: 'answered' as const } : q)
+    );
   };
 
   return {
@@ -506,5 +528,6 @@ export function useQuestions() {
     closeQuestionForCard,
     fetchMyReputation,
     generateAIHintIfNeeded,
+    acceptPollyAnswer,
   };
 }

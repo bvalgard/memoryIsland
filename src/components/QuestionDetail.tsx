@@ -15,6 +15,7 @@ interface QuestionDetailProps {
   onPostAnswer: (questionId: string, bodyText: string) => Promise<string | null>;
   onPostComment: (questionId: string, answerId: string, bodyText: string) => Promise<void>;
   onLoadComments: (questionId: string, answerId: string) => Promise<void>;
+  onAcceptPolly?: (questionId: string) => Promise<void>;
 }
 
 export default function QuestionDetail({
@@ -29,6 +30,7 @@ export default function QuestionDetail({
   onPostAnswer,
   onPostComment,
   onLoadComments,
+  onAcceptPolly,
 }: QuestionDetailProps) {
   const [answerText, setAnswerText] = useState('');
   const [postingAnswer, setPostingAnswer] = useState(false);
@@ -40,6 +42,7 @@ export default function QuestionDetail({
   const [voting, setVoting] = useState<Record<string, boolean>>({});
   const [accepting, setAccepting] = useState(false);
   const [selectingAnswer, setSelectingAnswer] = useState(false);
+  const [acceptingPolly, setAcceptingPolly] = useState(false);
 
   const isAsker = currentUserId === question.askerId;
 
@@ -199,16 +202,43 @@ export default function QuestionDetail({
         </div>
       )}
 
-      {/* AI hint — shown when no crew answers yet and hint exists */}
-      {question.aiHint && question.answerCount === 0 && (
-        <div className="shrink-0 mb-4 p-3 rounded-xl bg-amber-500/8 border border-amber-500/20">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 mb-1">AI Memory Hook — no crew answers yet</p>
-          <p className="text-xs text-amber-100/60 leading-relaxed italic">{question.aiHint}</p>
-        </div>
-      )}
 
       {/* Answers */}
       <div className="flex-1 overflow-y-auto min-h-0 space-y-3 pr-1">
+        {/* Polly's AI answer — shown when aiHint exists and question is still open or was answered by Polly */}
+        {question.aiHint && question.status !== 'expired' && (
+          <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
+            <div className="flex gap-3">
+              <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-base select-none">
+                  🦜
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Polly</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/50 bg-amber-500/10 px-1.5 py-0.5 rounded-md">AI</span>
+                  <span className="text-[9px] text-white/25 uppercase tracking-widest">· stepped in after 24h</span>
+                </div>
+                <p className="text-sm text-amber-100/75 leading-relaxed">{question.aiHint}</p>
+                {isAsker && question.status === 'open' && onAcceptPolly && (
+                  <button
+                    disabled={acceptingPolly}
+                    onClick={async () => {
+                      setAcceptingPolly(true);
+                      await onAcceptPolly(question.id);
+                      setAcceptingPolly(false);
+                    }}
+                    className="mt-3 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-40"
+                  >
+                    <Check className="w-3 h-3" /> This solved it
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {answersLoading && answers.length === 0 && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-4 h-4 text-white/30 animate-spin" />

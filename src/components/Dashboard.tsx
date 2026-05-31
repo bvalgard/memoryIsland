@@ -40,6 +40,7 @@ import SettingsPanel from './dashboard/modals/SettingsPanel';
 import SocialPanel from './dashboard/modals/SocialPanel';
 import DiscoverPanel from './dashboard/modals/DiscoverPanel';
 import StatsPanel from './dashboard/modals/StatsPanel';
+import OnboardingModal from './OnboardingModal';
 
 export default function Dashboard() {
   const user = auth.currentUser;
@@ -103,6 +104,7 @@ export default function Dashboard() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Test Mode state
   const [isTestStudying, setIsTestStudying] = useState(false);
@@ -575,6 +577,13 @@ export default function Dashboard() {
     && (progress?.stats?.totalStudySessions ?? 0) === 0
     && currentIslands.length === 0;
 
+  // Show onboarding once for brand-new users
+  useEffect(() => {
+    if (isNewUser && localStorage.getItem('mi_onboarding_seen') !== 'true') {
+      setShowOnboarding(true);
+    }
+  }, [isNewUser]);
+
   // Archived items for the Archive modal
   const archivedArchipelagos = (progress?.archipelagos || []).filter(a => !a.isImported && !!a.isArchived);
   const archivedIslands = (progress?.islands || []).filter(i => !i.isImported && !!i.isArchived);
@@ -806,6 +815,19 @@ export default function Dashboard() {
   }, [isNotificationsOpen, notifications]);
 
   const handleSignOut = () => signOut(auth);
+
+  const handleOnboardingClose = () => {
+    localStorage.setItem('mi_onboarding_seen', 'true');
+    setShowOnboarding(false);
+  };
+  const handleOnboardingCreateIsland = () => {
+    handleOnboardingClose();
+    setIsArchipelagoModalOpen(true);
+  };
+  const handleOnboardingDiscover = () => {
+    handleOnboardingClose();
+    setActiveModal('discover');
+  };
 
   const handleViewQuestion = (question: import('../hooks/useQuestions').Question) => {
     setDistressInitialQuestion(question);
@@ -1949,6 +1971,7 @@ export default function Dashboard() {
                     const filteredArchipelagos = ownedArchipelagos.filter(a =>
                       a.name.toLowerCase().includes(searchQuery.toLowerCase())
                     );
+                    const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
                     return filteredArchipelagos.length > 0 ? (
                       <>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -2041,21 +2064,26 @@ export default function Dashboard() {
                         <div className="w-full rounded-[40px] glass flex flex-col items-center justify-center relative overflow-hidden py-16 px-8">
                           <div className="absolute top-[-60px] right-[-60px] w-[280px] h-[280px] bg-brand-primary/5 rounded-full blur-[80px]" />
                           <div className="absolute bottom-[-40px] left-[-40px] w-[200px] h-[200px] bg-indigo-500/5 rounded-full blur-[60px]" />
+                          <div className="relative flex items-end justify-center gap-3 mb-10">
+                            <img src={`${basePath}/struggling.jpeg`} alt="" className="w-[88px] h-[88px] rounded-[20px] object-cover opacity-40 -rotate-6 translate-y-2" />
+                            <img src={`${basePath}/learning.jpeg`} alt="" className="w-[120px] h-[120px] rounded-[24px] object-cover z-10 shadow-2xl" />
+                            <img src={`${basePath}/mastered.jpeg`} alt="" className="w-[88px] h-[88px] rounded-[20px] object-cover opacity-40 rotate-6 translate-y-2" />
+                          </div>
                           <div className="text-center relative z-10 max-w-sm">
-                            <h2 className="text-2xl font-bold text-white mb-3">Start your first collection</h2>
+                            <h2 className="text-2xl font-bold text-white mb-3">Create your first Island</h2>
                             <p className="text-brand-muted text-sm mb-8 leading-relaxed">
-                              In Memory Island, a <span className="text-white/70 font-medium">collection</span> (called an Archipelago) holds all your study decks. Create one to get started.
+                              Add cards, study daily, and watch your mastery grow — from struggling all the way to mastered.
                             </p>
                             <button
                               onClick={() => setIsArchipelagoModalOpen(true)}
                               className="flex items-center gap-2 bg-white text-black px-6 py-3 rounded-2xl font-bold text-sm hover:bg-white/90 transition-all shadow-[0_10px_30px_rgba(255,255,255,0.15)] mx-auto mb-4"
                             >
                               <Plus className="w-4 h-4" />
-                              Create your first collection
+                              Create your first Island
                             </button>
                             <button
                               onClick={() => setActiveModal('ankiImport')}
-                              className="text-brand-muted/60 hover:text-brand-muted text-sm transition-colors underline underline-offset-4"
+                              className="text-brand-muted/60 hover:text-brand-muted text-sm transition-colors"
                             >
                               Or import an Anki deck
                             </button>
@@ -2613,6 +2641,16 @@ export default function Dashboard() {
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog(d => ({ ...d, open: false }))}
       />
+
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingModal
+            onClose={handleOnboardingClose}
+            onCreateIsland={handleOnboardingCreateIsland}
+            onDiscover={handleOnboardingDiscover}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

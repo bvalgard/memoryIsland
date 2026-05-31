@@ -131,6 +131,59 @@ async function handleDelete(request, env) {
   return json({ ok: true });
 }
 
+async function handleAIAnswer(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+  try {
+    await verifyFirebaseToken(token);
+  } catch (e) {
+    return json({ error: `Unauthorized: ${e.message}` }, 401);
+  }
+
+  if (!env.GEMINI_API_KEY) {
+    return json({ error: 'AI generation is not configured.' }, 500);
+  }
+
+  const body = await request.json();
+  const { frontText, backText, cardType, note } = body;
+  if (!frontText || typeof frontText !== 'string') {
+    return json({ error: 'Missing frontText' }, 400);
+  }
+
+  const noteSection = note ? `\nWhat the learner found confusing: ${note}` : '';
+  const prompt = `You are Polly, a friendly AI memory coach for a spaced-repetition flashcard app called Memory Island. A learner got stuck on a card and no crew member answered within 24 hours, so you're stepping in to help.
+
+Card front: ${frontText}
+Card answer: ${backText || '(not provided)'}
+Card type: ${cardType || 'flashcard'}${noteSection}
+
+Write a short, helpful response (2-4 sentences) that:
+1. Gives a vivid memory trick, mnemonic, or analogy to help them remember the answer
+2. Briefly explains WHY the answer is correct if it's not obvious
+3. Keeps a warm, encouraging tone
+
+Respond with only the helpful text — no greeting, no sign-off, no "Here's a tip:" prefix.`;
+
+  const geminiRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    }
+  );
+
+  if (!geminiRes.ok) {
+    const errBody = await geminiRes.json().catch(() => ({}));
+    return json({ error: errBody?.error?.message ?? 'Gemini request failed' }, geminiRes.status);
+  }
+
+  const data = await geminiRes.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  return json({ text });
+}
+
 async function handleGenerateCards(request, env) {
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -180,6 +233,7 @@ export default {
 
     try {
       if (request.method === 'POST' && pathname === '/generate-cards') return await handleGenerateCards(request, env);
+      if (request.method === 'POST' && pathname === '/ai-answer') return await handleAIAnswer(request, env);
       if (request.method === 'POST') return await handleUpload(request, env);
       if (request.method === 'DELETE') return await handleDelete(request, env);
       return json({ error: 'Method not allowed' }, 405);
