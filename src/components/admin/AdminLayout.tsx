@@ -1,4 +1,4 @@
-import { BarChart3, ShieldCheck, Settings2, Users, Waves } from 'lucide-react';
+import { BarChart3, ShieldCheck, Settings2, Users, Waves, Trophy } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { auth } from '../../firebase';
 import { cn } from '../../lib/utils';
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/admin', label: 'Overview', icon: BarChart3, end: true },
   { to: '/admin/moderation', label: 'Moderation', icon: ShieldCheck },
   { to: '/admin/users', label: 'Users', icon: Users },
+  { to: '/admin/leaderboard', label: 'Leaderboard', icon: Trophy },
   { to: '/admin/system', label: 'System', icon: Settings2 },
 ];
 

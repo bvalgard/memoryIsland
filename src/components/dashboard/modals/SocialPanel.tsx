@@ -3,6 +3,18 @@ import { X, Users, Search, AlertCircle, Check } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { cn } from '../../../lib/utils';
 
+function relativeStudyDate(dateStr?: string): string {
+  if (!dateStr) return 'No recent activity';
+  const today = new Date();
+  const studied = new Date(dateStr);
+  const diffDays = Math.floor((today.getTime() - studied.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 14) return '1 week ago';
+  return `${Math.floor(diffDays / 7)} weeks ago`;
+}
+
 interface SocialPanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -70,15 +82,6 @@ export default function SocialPanel({
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-6">
                 <button
-                  onClick={() => setDiscoveryTab('explorers')}
-                  className={cn(
-                    "text-[10px] uppercase tracking-widest font-black transition-all",
-                    discoveryTab === 'explorers' ? "text-brand-primary" : "text-brand-muted hover:text-white"
-                  )}
-                >
-                  Find Explorers
-                </button>
-                <button
                   onClick={() => setDiscoveryTab('archipelagos')}
                   className={cn(
                     "text-[10px] uppercase tracking-widest font-black transition-all",
@@ -98,6 +101,15 @@ export default function SocialPanel({
                   {friendRequests.length > 0 && (
                     <span className="absolute -top-1 -right-2 w-1.5 h-1.5 bg-brand-primary rounded-full" />
                   )}
+                </button>
+                <button
+                  onClick={() => setDiscoveryTab('explorers')}
+                  className={cn(
+                    "text-[10px] uppercase tracking-widest font-black transition-all",
+                    discoveryTab === 'explorers' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+                  )}
+                >
+                  Find Explorers
                 </button>
               </div>
             </div>
@@ -148,9 +160,10 @@ export default function SocialPanel({
                           <div>
                             <h4 className="font-bold text-lg">{profile.displayName}</h4>
                             <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
-                              <span>{profile.stats?.dailyReviewed || 0} Studied</span>
-                              <span className="w-1 h-1 bg-white/20 rounded-full" />
-                              <span>{profile.stats?.dailyStreak || 0} Streak</span>
+                              {profile.lastStudiedIslandName
+                                ? <><span className="text-white/60">{profile.lastStudiedIslandName}</span><span className="w-1 h-1 bg-white/20 rounded-full" /></>
+                                : null}
+                              <span>{relativeStudyDate(profile.lastStudyDate)}</span>
                             </div>
                           </div>
                         </div>
@@ -241,9 +254,10 @@ export default function SocialPanel({
                         <div>
                           <h4 className="font-bold text-lg">{profile.displayName}</h4>
                           <div className="flex items-center gap-3 text-[10px] text-brand-muted uppercase tracking-widest font-black">
-                            <span>{profile.stats?.dailyReviewed || 0} Studied</span>
-                            <span className="w-1 h-1 bg-white/20 rounded-full" />
-                            <span>{profile.stats?.dailyStreak || 0} Streak</span>
+                            {profile.lastStudiedIslandName
+                              ? <><span className="text-white/60">{profile.lastStudiedIslandName}</span><span className="w-1 h-1 bg-white/20 rounded-full" /></>
+                              : null}
+                            <span>{relativeStudyDate(profile.lastStudyDate)}</span>
                           </div>
                         </div>
                       </div>

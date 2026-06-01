@@ -572,6 +572,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       cardCount: Object.keys(cardUpdates).length,
       correctCount: Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length,
       sessionStartHour: new Date(sessionStartTime.current).getHours(),
+      studyMode: mode,
     };
     onFinish(attachCardIdentities(cardUpdates), sessionMaxStreak, meta);
   // Only re-run when sessionComplete flips — other deps are stable refs
@@ -591,6 +592,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     sessionStartHour: new Date(sessionStartTime.current).getHours(),
     calibrationCorrect: sessionCalibration.correct,
     calibrationTotal: sessionCalibration.total,
+    studyMode: mode,
   });
 
   const chartingCount = island.cards.filter(c => c.status === 'charting' || c.needsWork).length;

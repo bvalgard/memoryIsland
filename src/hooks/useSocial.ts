@@ -20,6 +20,8 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   photoURL?: string;
+  lastStudyDate?: string;
+  lastStudiedIslandName?: string;
   stats: {
     dailyReviewed: number;
     dailyMastered: number;
@@ -50,6 +52,8 @@ function normalizeProfile(data: Partial<UserProfile>, fallbackUid: string): User
     uid: data.uid || fallbackUid,
     displayName: data.displayName || 'Explorer',
     photoURL: data.photoURL || undefined,
+    lastStudyDate: data.lastStudyDate,
+    lastStudiedIslandName: data.lastStudiedIslandName,
     stats: {
       ...defaultStats,
       ...(data.stats || {}),

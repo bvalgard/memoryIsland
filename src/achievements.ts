@@ -5,6 +5,8 @@ export interface SessionMeta {
   sessionStartHour: number;
   calibrationCorrect?: number;
   calibrationTotal?: number;
+  studyMode?: string;
+  archipelagoId?: string;
 }
 
 export type AchievementCategory = 'resilience' | 'motivating' | 'quirky';
@@ -21,6 +23,14 @@ export interface Achievement {
 
 export const ACHIEVEMENTS: Achievement[] = [
   // Resilience
+  {
+    id: 'stuck-like-a-barnacle',
+    name: 'Stuck Like a Barnacle',
+    description: 'You forgot this card three times, but through pure grit, you finally mastered it. This concept is now officially stuck like a barnacle to your long-term memory. Nothing is washing it away now!',
+    category: 'resilience',
+    hidden: false,
+    icon: '🪨',
+  },
   {
     id: 'lost-in-the-fog',
     name: 'Lost in the Fog',
@@ -103,6 +113,14 @@ export const ACHIEVEMENTS: Achievement[] = [
     icon: '👑',
   },
   {
+    id: 'land-ho',
+    name: 'Land Ho!',
+    description: 'Land ho! Drop the anchor and lower the sails. You have successfully navigated every single wave of this massive subject and guided your ship safely to shore. Every concept in this Archipelago is locked into your long-term memory.',
+    category: 'motivating',
+    hidden: false,
+    icon: '⛰️',
+  },
+  {
     id: 'horizon-chaser',
     name: 'The Horizon Chaser',
     description: 'Studied 7 days in a row, reviewing at least 10 cards each day.',
@@ -158,6 +176,97 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: 'quirky',
     hidden: true,
     icon: '🪵',
+  },
+  // Voyage milestones
+  {
+    id: 'the-helmsman',
+    name: 'The Helmsman',
+    description: '50 voyages completed. Your hand on the wheel is confident, and your course is true.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🚢',
+  },
+  {
+    id: 'the-navigator',
+    name: 'The Navigator',
+    description: '100 voyages completed. You can read the currents of your memory and chart a path through the stormiest data.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🧭',
+  },
+  {
+    id: 'the-captain',
+    name: 'The Captain',
+    description: '500 voyages completed. Absolute command. You don\'t just sail the sea — you rule your intellectual horizon.',
+    category: 'motivating',
+    hidden: false,
+    icon: '⚓',
+  },
+  {
+    id: 'the-fleet-admiral',
+    name: 'The Fleet Admiral',
+    description: '1,000 voyages completed. Legendary status. Entire empires of knowledge bow to your command.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🎖️',
+  },
+  // Exploration & habit achievements
+  {
+    id: 'deep-water-navigator',
+    name: 'Deep Water Navigator',
+    description: 'Crossing between island chains requires true navigation skills. You completed study sessions across three different archipelagos in a single day.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🌐',
+  },
+  {
+    id: 'return-voyage',
+    name: 'The Return Voyage',
+    description: 'Every island deserves a return visit. You went back to waters you hadn\'t sailed in over 45 days and finished the session.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🔭',
+  },
+  {
+    id: 'steady-winds',
+    name: 'Steady Winds',
+    description: 'Not a streak — a habit. You studied on 25 of the last 30 days.',
+    category: 'motivating',
+    hidden: false,
+    icon: '🌬️',
+  },
+  {
+    id: 'illuminated-manuscript',
+    name: 'The Illuminated Manuscript',
+    description: 'You\'ve built a library of knowledge, not just questions. 50 of your cards carry a \'Why\' explanation.',
+    category: 'motivating',
+    hidden: false,
+    icon: '📜',
+  },
+  // Quirky (hidden) challenge achievements
+  {
+    id: 'calm-seas-clear-mind',
+    name: 'Calm Seas, Clear Mind',
+    description: 'Look at that pristine horizon. Not a single storm cloud in sight. Go touch some grass, pull up a beach chair, and do absolutely nothing today. You\'ve earned it.',
+    category: 'quirky',
+    hidden: true,
+    icon: '🏖️',
+  },
+  {
+    id: 'into-the-fog',
+    name: 'Into the Fog',
+    description: 'You chose the hardest waters on purpose. A full session studying only your Charting cards.',
+    category: 'quirky',
+    hidden: true,
+    icon: '🌁',
+  },
+  {
+    id: 'the-hard-way',
+    name: 'The Hard Way',
+    description: 'You studied an entire island using only fill-in-the-blank questions.',
+    category: 'quirky',
+    hidden: true,
+    icon: '✍️',
   },
   // SOS Flare — peer rescue rewards
   {

@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { X, BarChart2, Map, Zap, Activity, AlertCircle, Trophy, Award } from 'lucide-react';
-import { Card, UserProgress } from '../../../hooks/useUserProgress';
+import { Card, UserProgress, UserStats } from '../../../hooks/useUserProgress';
 import { cn } from '../../../lib/utils';
+import ActivityHeatmap from '../../ActivityHeatmap';
 
 interface BlindSpotData {
   quadrants: {
@@ -32,12 +33,14 @@ interface StatsPanelProps {
   setBlindSpotOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   knowledgeGapOpen: boolean;
   setKnowledgeGapOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  userStats?: UserStats | null;
 }
 
 export default function StatsPanel({
   isOpen, onClose, allCards, globalMasteredCount, globalSailingCount, globalChartingCount,
   trackingMode, progress, forgettingCount, bestStudyHour, weakSpotCards, blindSpotData,
   formatStudyHour, blindSpotOpen, setBlindSpotOpen, knowledgeGapOpen, setKnowledgeGapOpen,
+  userStats,
 }: StatsPanelProps) {
   return (
     <AnimatePresence>
@@ -74,6 +77,16 @@ export default function StatsPanel({
             </div>
 
             <div className="overflow-y-auto custom-scrollbar flex-1 pr-4 -mr-4">
+              {userStats && (
+                <div className="mb-12">
+                  <ActivityHeatmap
+                    dailyActivityMap={userStats.dailyActivityMap ?? {}}
+                    dailyStreak={userStats.dailyStreak}
+                    longestDailyStreak={userStats.longestDailyStreak}
+                    lastStudyDate={userStats.lastStudyDate}
+                  />
+                </div>
+              )}
               {/* Global Stats */}
               <div className="mb-12">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">

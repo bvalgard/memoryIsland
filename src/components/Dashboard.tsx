@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import SocialLeaderboard from './SocialLeaderboard';
-import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Trophy, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload, Navigation2, Archive, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Search, Bell, Plus, AlertCircle, X, Globe, Download, Check, Map, Play, BarChart2, Zap, Activity, Award, Trash2, Calendar, RefreshCw, Compass, Pencil, Radio, CloudDownload, CloudOff, RotateCcw, GraduationCap, Upload, Navigation2, Archive, MoreHorizontal } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, query, where, limit, onSnapshot } from 'firebase/firestore';
@@ -103,7 +102,7 @@ export default function Dashboard() {
   const [moveIslandId, setMoveIslandId] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null>(null);
+  const [activeModal, setActiveModal] = useState<'users' | 'settings' | 'stats' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Test Mode state
@@ -189,7 +188,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (progress && !appLoadCheckDone.current) {
       appLoadCheckDone.current = true;
-      checkAndAwardAchievements({ progress, trigger: 'app-load' })
+      const now = Date.now();
+      const graceMs = (progress.settings?.graceWindowMinutes ?? 0) * 60_000;
+      const totalDueCards = (progress.islands || []).flatMap(i => getActiveTierCards(i.cards))
+        .filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs).length;
+      checkAndAwardAchievements({ progress, trigger: 'app-load', totalDueCards })
         .then(unlocked => { if (unlocked.length) enqueueToasts(unlocked); });
     }
   }, [progress]);
@@ -252,20 +255,16 @@ export default function Dashboard() {
     }
   }, [selectedArchipelagoId]);
 
-  // Questions — fetch my questions once on mount for bell notifications, plus reputation
-  const { fetchMyQuestions, myQuestions, fetchMyReputation, closeQuestionForCard } = useQuestions();
-  const [myReputation, setMyReputation] = useState<{ totalAnswers: number; totalAccepted: number; totalVotesReceived: number } | null>(null);
+  // Questions — fetch my questions once on mount for bell notifications
+  const { fetchMyQuestions, myQuestions, closeQuestionForCard } = useQuestions();
   useEffect(() => {
     if (user?.uid) fetchMyQuestions(user.uid);
   }, [user?.uid]);
-  useEffect(() => {
-    if (user?.uid) fetchMyReputation().then(rep => { if (rep) setMyReputation(rep); });
-  }, [user?.uid]);
 
   // Discovery State
-  const { searchUsers, sendFriendRequest, acceptFriendRequest, removeFriend, friends, sentRequests, friendRequests, error: socialError, fetchProfilesByUids, profiles: socialProfiles, loading: socialLoading, loadLeaderboard } = useSocial();
+  const { searchUsers, sendFriendRequest, acceptFriendRequest, removeFriend, friends, sentRequests, friendRequests, error: socialError, fetchProfilesByUids } = useSocial();
   const [discoverySearch, setDiscoverySearch] = useState('');
-  const [discoveryTab, setDiscoveryTab] = useState<'islands' | 'archipelagos' | 'explorers'>('islands');
+  const [discoveryTab, setDiscoveryTab] = useState<'islands' | 'archipelagos' | 'explorers'>('archipelagos');
   const [discoveryExplorers, setDiscoveryExplorers] = useState<any[]>([]);
   const [discoveryInboundRequests, setDiscoveryInboundRequests] = useState<any[]>([]);
   const [discoveryFriends, setDiscoveryFriends] = useState<any[]>([]);
@@ -870,7 +869,14 @@ export default function Dashboard() {
     selectedIslandId === 'multi-select' ? multiSelectIsland :
     currentIslands.find(i => i.id === selectedIslandId);
 
+  const getSessionArchipelagoId = (): string | undefined => {
+    if (selectedIslandId === 'archipelago') return selectedArchipelagoId ?? undefined;
+    if (selectedIslandId === 'multi-select') return undefined;
+    return progress?.islands.find(i => i.id === selectedIslandId)?.archipelagoId ?? undefined;
+  };
+
   const handleFinishStudy = async (cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
+    const enrichedMeta = sessionMeta ? { ...sessionMeta, archipelagoId: getSessionArchipelagoId() } : sessionMeta;
     if (!isOnline) {
       // Queue results for sync when back online
       await queueSession({
@@ -878,7 +884,7 @@ export default function Dashboard() {
         isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select',
         cardUpdates,
         sessionMaxStreak: maxStreak,
-        sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 },
+        sessionMeta: enrichedMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 },
         timestamp: Date.now(),
       });
       setOfflineQueuedToast(true);
@@ -891,15 +897,15 @@ export default function Dashboard() {
     }
 
     if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') {
-      await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
+      await processArchipelagoResults(cardUpdates, maxStreak, enrichedMeta);
     } else if (selectedIslandId) {
-      await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
+      await processSessionResults(selectedIslandId, cardUpdates, maxStreak, enrichedMeta);
     }
-    if (progress && sessionMeta) {
+    if (progress && enrichedMeta) {
       const unlocked = await checkAndAwardAchievements({
         progress,
         cardUpdates,
-        sessionMeta,
+        sessionMeta: enrichedMeta,
         trigger: 'session-complete',
         islandId: selectedIslandId || undefined,
       });
@@ -1311,27 +1317,6 @@ export default function Dashboard() {
         onOpenArchive={() => setActiveModal('archive')}
       />
 
-      <AnimatePresence>
-        {activeModal === 'leaderboard' && (
-          <SocialLeaderboard
-            onClose={() => setActiveModal(null)}
-            profiles={socialProfiles}
-            friends={friends}
-            friendRequests={friendRequests}
-            sentRequests={sentRequests}
-            loading={socialLoading}
-            error={socialError}
-            loadLeaderboard={loadLeaderboard}
-            fetchProfilesByUids={fetchProfilesByUids}
-            sendFriendRequest={sendFriendRequest}
-            acceptFriendRequest={acceptFriendRequest}
-            removeFriend={removeFriend}
-            myReputation={myReputation}
-            userStats={progress?.stats}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Trophy Room Modal */}
       <AnimatePresence>
         {activeModal === 'trophies' && (
@@ -1465,6 +1450,7 @@ export default function Dashboard() {
         setBlindSpotOpen={setBlindSpotOpen}
         knowledgeGapOpen={knowledgeGapOpen}
         setKnowledgeGapOpen={setKnowledgeGapOpen}
+        userStats={progress?.stats}
       />
 
       {/* Archive Modal */}
@@ -1666,15 +1652,16 @@ export default function Dashboard() {
                     }
                   }}
                   onManage={async (cardUpdates, maxStreak, sessionMeta) => {
+                    const enrichedMeta = sessionMeta ? { ...sessionMeta, archipelagoId: getSessionArchipelagoId() } : sessionMeta;
                     if (!isOnline) {
-                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: enrichedMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
-                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
-                      if (progress && sessionMeta) {
-                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, enrichedMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, enrichedMeta);
+                      if (progress && enrichedMeta) {
+                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta: enrichedMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
                         if (unlocked.length) enqueueToasts(unlocked);
                       }
                     }
@@ -1683,15 +1670,16 @@ export default function Dashboard() {
                     setFrozenStudySelection(null);
                   }}
                   onBackToMap={async (cardUpdates, maxStreak, sessionMeta) => {
+                    const enrichedMeta = sessionMeta ? { ...sessionMeta, archipelagoId: getSessionArchipelagoId() } : sessionMeta;
                     if (!isOnline) {
-                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: enrichedMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
-                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
-                      if (progress && sessionMeta) {
-                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, enrichedMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, enrichedMeta);
+                      if (progress && enrichedMeta) {
+                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta: enrichedMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
                         if (unlocked.length) enqueueToasts(unlocked);
                       }
                     }
@@ -1701,15 +1689,16 @@ export default function Dashboard() {
                     setFrozenStudySelection(null);
                   }}
                   onSwitchMode={async (newMode, cardUpdates, maxStreak, sessionMeta) => {
+                    const enrichedMeta = sessionMeta ? { ...sessionMeta, archipelagoId: getSessionArchipelagoId() } : sessionMeta;
                     if (!isOnline) {
-                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
+                      await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: enrichedMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
-                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
-                      if (progress && sessionMeta) {
-                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-complete', islandId: selectedIslandId || undefined });
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, enrichedMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, enrichedMeta);
+                      if (progress && enrichedMeta) {
+                        const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta: enrichedMeta, trigger: 'session-complete', islandId: selectedIslandId || undefined });
                         if (unlocked.length) enqueueToasts(unlocked);
                       }
                     }

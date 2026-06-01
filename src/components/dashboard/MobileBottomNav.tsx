@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Users, Settings, LogOut, Bell, BarChart2, Trophy, Award, Radio, Compass, GraduationCap, Archive, Plus, ScanLine, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Bell, BarChart2, Award, Radio, Compass, GraduationCap, Archive, Plus, ScanLine, MoreHorizontal } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { cn } from '../../lib/utils';
 import NotificationsPanel from '../NotificationsPanel';
 
-type ActiveModal = 'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null;
+type ActiveModal = 'users' | 'settings' | 'stats' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null;
 
 interface MobileBottomNavProps {
   user: User | null;
@@ -34,7 +34,6 @@ interface MobileBottomNavProps {
 const overflowItems = [
   { label: 'Friends', icon: Users, modal: 'users' as ActiveModal },
   { label: 'Stats', icon: BarChart2, modal: 'stats' as ActiveModal },
-  { label: 'Leaderboard', icon: Trophy, modal: 'leaderboard' as ActiveModal },
   { label: 'Achievements', icon: Award, modal: 'trophies' as ActiveModal },
   { label: 'Duplicates', icon: ScanLine, modal: 'duplicateScan' as ActiveModal },
   { label: 'Archive', icon: Archive, modal: 'archive' as ActiveModal },

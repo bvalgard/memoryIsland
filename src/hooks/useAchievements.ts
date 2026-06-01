@@ -10,6 +10,7 @@ interface CheckContext {
   trigger: 'session-complete' | 'session-abandon' | 'island-shared' | 'card-created' | 'app-load' | 'flare-resolved';
   islandId?: string;
   totalRescues?: number;
+  totalDueCards?: number;
 }
 
 export function useAchievements() {
@@ -46,6 +47,16 @@ export function useAchievements() {
         return !!card && (card.demotionCount || 0) >= 3;
       });
       if (masteredWithDemotions) tryUnlock('against-the-current');
+
+      // stuck-like-a-barnacle: mastered with 3+ prior demotions AND SRS interval >= 14 days
+      const allCardsFlatForBarnacle = ctx.progress.islands.flatMap(i => i.cards);
+      const barnacled = Object.entries(ctx.cardUpdates).some(([front, update]) => {
+        if (update.status !== 'mastered') return false;
+        if ((update.srsInterval ?? 0) < 14) return false;
+        const card = allCardsFlatForBarnacle.find(c => c.front === front);
+        return !!card && (card.demotionCount || 0) >= 3;
+      });
+      if (barnacled) tryUnlock('stuck-like-a-barnacle');
     }
 
     // bermuda-triangle: apply cardUpdates as an overlay to avoid snapshot race
@@ -97,10 +108,30 @@ export function useAchievements() {
     // --- MOTIVATING: passive island state ---
     {
       const allIslands = ctx.progress.islands;
+      const updatesByFront = ctx.cardUpdates || {};
+
       const sovereign = allIslands.find(
         i => i.cards.length >= 50 && i.cards.every(c => c.status === 'mastered')
       );
       if (sovereign) tryUnlock('archipelago-sovereign');
+
+      // land-ho: every card across an entire archipelago is mastered (50+ cards total)
+      const islandsByArch = new Map<string, typeof allIslands[0][]>();
+      for (const island of allIslands) {
+        if (!island.archipelagoId) continue;
+        const arr = islandsByArch.get(island.archipelagoId) ?? [];
+        arr.push(island);
+        islandsByArch.set(island.archipelagoId, arr);
+      }
+      for (const [, islands] of islandsByArch) {
+        const archCards = islands.flatMap(i => i.cards);
+        if (archCards.length < 50) continue;
+        const allMastered = archCards.every(c => {
+          const upd = updatesByFront[c.front];
+          return upd ? upd.status === 'mastered' : c.status === 'mastered';
+        });
+        if (allMastered) { tryUnlock('land-ho'); break; }
+      }
 
       const viral = allIslands.find(
         i => i.approvalStatus === 'approved' && (i.downloads || 0) >= 10
@@ -125,11 +156,89 @@ export function useAchievements() {
       if (Object.keys(ctx.cardUpdates).length < 5) tryUnlock('shipwrecked');
     }
 
+    // --- VOYAGE MILESTONES ---
+    if (ctx.trigger === 'session-complete' && stats) {
+      const newTotal = stats.totalStudySessions + 1;
+      if (newTotal >= 50) tryUnlock('the-helmsman');
+      if (newTotal >= 100) tryUnlock('the-navigator');
+      if (newTotal >= 500) tryUnlock('the-captain');
+      if (newTotal >= 1000) tryUnlock('the-fleet-admiral');
+    }
+
+    // --- DEEP WATER NAVIGATOR: 3 different archipelagos in one day ---
+    if (ctx.trigger === 'session-complete' && stats && ctx.sessionMeta?.archipelagoId) {
+      const todayKey = new Date().toISOString().split('T')[0];
+      const prevSet = new Set(stats.dailyArchipelagoMap?.[todayKey] ?? []);
+      prevSet.add(ctx.sessionMeta.archipelagoId);
+      if (prevSet.size >= 3) tryUnlock('deep-water-navigator');
+    }
+
+    // --- RETURN VOYAGE: island not studied in 45+ days ---
+    if (ctx.trigger === 'session-complete' && ctx.islandId && ctx.islandId !== 'archipelago' && ctx.islandId !== 'multi-select') {
+      const island = ctx.progress.islands.find(i => i.id === ctx.islandId);
+      if (island) {
+        const reviewedTimestamps = island.cards.map(c => c.lastReviewed).filter((t): t is number => !!t);
+        if (reviewedTimestamps.length > 0) {
+          const mostRecent = Math.max(...reviewedTimestamps);
+          const days45Ms = 45 * 24 * 60 * 60 * 1000;
+          if (Date.now() - mostRecent >= days45Ms) tryUnlock('return-voyage');
+        }
+      }
+    }
+
+    // --- STEADY WINDS: active 25 of last 30 days ---
+    if (ctx.trigger === 'session-complete' && ctx.sessionMeta && stats) {
+      const { cardCount } = ctx.sessionMeta;
+      const activityMap = stats.dailyActivityMap ?? {};
+      const today = new Date();
+      const todayKey = today.toISOString().split('T')[0];
+      const activityWithToday = { ...activityMap, [todayKey]: (activityMap[todayKey] ?? 0) + cardCount };
+      let daysActive = 0;
+      for (let d = 0; d < 30; d++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - d);
+        const key = date.toISOString().split('T')[0];
+        if ((activityWithToday[key] ?? 0) > 0) daysActive++;
+      }
+      if (daysActive >= 25) tryUnlock('steady-winds');
+    }
+
+    // --- ILLUMINATED MANUSCRIPT: 50 cards with 'Why' explanations ---
+    {
+      const allCards = ctx.progress.islands.flatMap(i => i.cards);
+      const withExplanation = allCards.filter(c => c.explanation && c.explanation.trim().length > 0);
+      if (withExplanation.length >= 50) tryUnlock('illuminated-manuscript');
+    }
+
+    // --- INTO THE FOG: full session in charting mode ---
+    if (ctx.trigger === 'session-complete' && ctx.sessionMeta?.studyMode === 'charting' && (ctx.sessionMeta.cardCount ?? 0) > 0) {
+      tryUnlock('into-the-fog');
+    }
+
+    // --- THE HARD WAY: entire island session using only fill-in-the-blank ---
+    if (ctx.trigger === 'session-complete' && ctx.islandId && ctx.islandId !== 'archipelago' && ctx.islandId !== 'multi-select' && ctx.cardUpdates) {
+      const island = ctx.progress.islands.find(i => i.id === ctx.islandId);
+      if (island) {
+        const updatedFronts = new Set(Object.keys(ctx.cardUpdates));
+        const reviewedCards = island.cards.filter(c => updatedFronts.has(c.front));
+        if (reviewedCards.length >= 5 && reviewedCards.every(c => c.type === 'fill-in-the-blank')) {
+          tryUnlock('the-hard-way');
+        }
+      }
+    }
+
     // --- PEER RESCUE ---
     if (ctx.trigger === 'flare-resolved') {
       const rescues = ctx.totalRescues ?? 0;
       if (rescues >= 1) tryUnlock('life-saver');
       if (rescues >= 10) tryUnlock('coast-guard');
+    }
+
+    // --- CALM SEAS, CLEAR MIND: weekend + zero cards due ---
+    if (ctx.trigger === 'app-load' && ctx.totalDueCards === 0) {
+      const day = new Date().getDay();
+      const totalCards = ctx.progress.islands.flatMap(i => i.cards).length;
+      if ((day === 0 || day === 6) && totalCards > 0) tryUnlock('calm-seas-clear-mind');
     }
 
     // On app load, check helper achievements via reputation doc (retroactive unlock)

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Users, Settings, LogOut, Bell, BarChart2, Trophy, Award, Radio, Compass, GraduationCap, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, LogOut, Bell, BarChart2, Award, Radio, Compass, GraduationCap, MoreHorizontal } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { cn } from '../../lib/utils';
 import NotificationsPanel from '../NotificationsPanel';
@@ -18,8 +18,8 @@ interface DesktopSidebarProps {
   unreadDiscoverCount: number;
   selectedIslandId: string | null;
   setSelectedIslandId: (id: string | null) => void;
-  activeModal: 'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null;
-  setActiveModal: (m: 'users' | 'settings' | 'stats' | 'leaderboard' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null) => void;
+  activeModal: 'users' | 'settings' | 'stats' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null;
+  setActiveModal: (m: 'users' | 'settings' | 'stats' | 'trophies' | 'distress' | 'discover' | 'testMode' | 'ankiImport' | 'archive' | 'duplicateScan' | null) => void;
   isNewUser: boolean;
   onSignOut: () => void;
   onNotificationSelect: (id: string) => void;
@@ -155,13 +155,6 @@ export default function DesktopSidebar({
             >
               <BarChart2 className="w-5 h-5" />
               <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Stats</span>
-            </button>
-            <button
-              onClick={() => setActiveModal('leaderboard')}
-              className="text-brand-muted hover:text-white transition-all flex flex-col items-center gap-1"
-            >
-              <Trophy className="w-5 h-5" />
-              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Leaderboard</span>
             </button>
             <button
               onClick={() => setActiveModal('trophies')}

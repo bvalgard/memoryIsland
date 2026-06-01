@@ -10,6 +10,7 @@ import AdminOverviewPage from './components/admin/AdminOverviewPage';
 import AdminModerationPage from './components/admin/AdminModerationPage';
 import AdminUsersPage from './components/admin/AdminUsersPage';
 import AdminSystemPage from './components/admin/AdminSystemPage';
+import AdminLeaderboardPage from './components/admin/AdminLeaderboardPage';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 export default function App() {
@@ -57,6 +58,7 @@ export default function App() {
             <Route index element={<AdminOverviewPage />} />
             <Route path="moderation" element={<AdminModerationPage />} />
             <Route path="users" element={<AdminUsersPage />} />
+            <Route path="leaderboard" element={<AdminLeaderboardPage />} />
             <Route path="system" element={<AdminSystemPage />} />
           </Route>
         </Route>

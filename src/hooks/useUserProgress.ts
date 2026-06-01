@@ -169,6 +169,8 @@ export interface UserStats {
   calibrationTotal?: number;
   studyHourStats?: Record<string, { sessions: number; correct: number; total: number }>;
   dailyActivityMap?: Record<string, number>;
+  dailyArchipelagoMap?: Record<string, string[]>;
+  lastStudiedIslandName?: string;
 }
 
 export interface UserSettings {
@@ -1033,6 +1035,8 @@ export function useUserProgress() {
           photoURL: user.photoURL || null,
           stats: mergedStats,
           showOnGlobalLeaderboard: progress.settings?.showOnGlobalLeaderboard ?? true,
+          lastStudyDate: mergedStats.lastStudyDate,
+          ...(mergedStats.lastStudiedIslandName ? { lastStudiedIslandName: mergedStats.lastStudiedIslandName } : {}),
           lastActive: serverTimestamp(),
         },
         { merge: true }
@@ -1462,7 +1466,7 @@ export function useUserProgress() {
     }
   };
 
-  const handleStudyStatsUpdate = async (cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+  const handleStudyStatsUpdate = async (cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta, islandName?: string) => {
     if (!progress?.stats) return;
     const reviewedCount = Object.keys(cardUpdates).length;
     const masteredCount = Object.values(cardUpdates).filter((entry) => entry.status === 'mastered').length;
@@ -1495,6 +1499,13 @@ export function useUserProgress() {
       [todayKey]: (prevActivityMap[todayKey] ?? 0) + reviewedCount,
     };
 
+    const prevArchipelagoMap = progress.stats.dailyArchipelagoMap ?? {};
+    const archipelagoId = sessionMeta?.archipelagoId;
+    const updatedArchipelagoMap = archipelagoId ? {
+      ...prevArchipelagoMap,
+      [todayKey]: [...new Set([...(prevArchipelagoMap[todayKey] ?? []), archipelagoId])],
+    } : prevArchipelagoMap;
+
     await updateStats({
       dailyReviewed: newDailyReviewed,
       dailyMastered: newDailyMastered,
@@ -1510,6 +1521,8 @@ export function useUserProgress() {
       } : {}),
       studyHourStats: hourlyUpdate,
       dailyActivityMap: updatedActivityMap,
+      dailyArchipelagoMap: updatedArchipelagoMap,
+      ...(islandName ? { lastStudiedIslandName: islandName } : {}),
     });
   };
 
@@ -1639,7 +1652,7 @@ export function useUserProgress() {
     });
     try {
       await batch.commit();
-      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta);
+      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta, island.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
     }
@@ -1699,7 +1712,7 @@ export function useUserProgress() {
     });
     try {
       await batch.commit();
-      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta);
+      await handleStudyStatsUpdate(cardUpdates, sessionHighestStreak, sessionMeta, island.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `islands/${islandId}`);
     }
