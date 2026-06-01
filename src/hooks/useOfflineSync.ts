@@ -63,13 +63,11 @@ interface UseOfflineSyncOptions {
   progress: UserProgress | null;
   syncOfflineResults: (
     islandId: string,
-    delta: number,
     cardUpdates: CardUpdateRecord,
     sessionMaxStreak?: number,
     sessionMeta?: SessionMeta,
   ) => Promise<void>;
   syncOfflineArchipelagoResults: (
-    delta: number,
     cardUpdates: CardUpdateRecord,
     sessionMaxStreak?: number,
     sessionMeta?: SessionMeta,
@@ -125,9 +123,9 @@ export function useOfflineSync({
           const merged = resolveConflicts(session.cardUpdates, allCards, session.timestamp);
 
           if (session.isArchipelago) {
-            await syncOfflineArchipelagoResults(0, merged, session.sessionMaxStreak, session.sessionMeta);
+            await syncOfflineArchipelagoResults(merged, session.sessionMaxStreak, session.sessionMeta);
           } else {
-            await syncOfflineResults(session.islandId, 0, merged, session.sessionMaxStreak, session.sessionMeta);
+            await syncOfflineResults(session.islandId, merged, session.sessionMaxStreak, session.sessionMeta);
           }
 
           if (session.queueId !== undefined) await clearQueueItem(session.queueId);

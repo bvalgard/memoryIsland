@@ -89,7 +89,6 @@ export default function TestSession({
   };
 
   const handleFinish = (
-    _scoreDelta: number,
     cardUpdates: CardUpdateRecord,
     _maxStreak: number,
     _sessionMeta: SessionMeta

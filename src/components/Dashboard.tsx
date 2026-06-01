@@ -299,7 +299,6 @@ export default function Dashboard() {
     islandId: string;
     islandName: string;
     cardUpdates: CardUpdateRecord;
-    scoreDelta: number;
     sessionMaxStreak: number;
     timestamp: number;
     isArchipelago: boolean;
@@ -324,11 +323,11 @@ export default function Dashboard() {
   }, [draftKey]);
   const saveDraft = (
     islandId: string, islandName: string, cardUpdates: CardUpdateRecord,
-    scoreDelta: number, sessionMaxStreak: number, isArchipelago: boolean,
+    sessionMaxStreak: number, isArchipelago: boolean,
   ) => {
     if (!draftKey) return;
     localStorage.setItem(draftKey, JSON.stringify({
-      islandId, islandName, cardUpdates, scoreDelta, sessionMaxStreak,
+      islandId, islandName, cardUpdates, sessionMaxStreak,
       timestamp: Date.now(), isArchipelago,
     }));
   };
@@ -342,9 +341,9 @@ export default function Dashboard() {
     setIsSavingDraft(true);
     try {
       if (sessionDraft.isArchipelago) {
-        await processArchipelagoResults(sessionDraft.scoreDelta, sessionDraft.cardUpdates, sessionDraft.sessionMaxStreak);
+        await processArchipelagoResults(sessionDraft.cardUpdates, sessionDraft.sessionMaxStreak);
       } else {
-        await processSessionResults(sessionDraft.islandId, sessionDraft.scoreDelta, sessionDraft.cardUpdates, sessionDraft.sessionMaxStreak);
+        await processSessionResults(sessionDraft.islandId, sessionDraft.cardUpdates, sessionDraft.sessionMaxStreak);
       }
       clearDraft();
     } finally {
@@ -869,7 +868,7 @@ export default function Dashboard() {
     selectedIslandId === 'multi-select' ? multiSelectIsland :
     currentIslands.find(i => i.id === selectedIslandId);
 
-  const handleFinishStudy = async (delta: number, cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
+  const handleFinishStudy = async (cardUpdates: CardUpdateRecord, maxStreak: number = 0, sessionMeta?: SessionMeta) => {
     if (!isOnline) {
       // Queue results for sync when back online
       await queueSession({
@@ -890,9 +889,9 @@ export default function Dashboard() {
     }
 
     if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') {
-      await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
+      await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
     } else if (selectedIslandId) {
-      await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+      await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
     }
     if (progress && sessionMeta) {
       const unlocked = await checkAndAwardAchievements({
@@ -1659,19 +1658,19 @@ export default function Dashboard() {
                   isOnline={isOnline}
                   onViewQuestion={handleViewQuestion}
                   onFinish={handleFinishStudy}
-                  onProgressUpdate={(cu, sd, sms) => {
+                  onProgressUpdate={(cu, sms) => {
                     if (selectedIslandId && selectedIsland) {
-                      saveDraft(selectedIslandId, selectedIsland.name, cu, sd, sms, selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select');
+                      saveDraft(selectedIslandId, selectedIsland.name, cu, sms, selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select');
                     }
                   }}
-                  onManage={async (delta, cardUpdates, maxStreak, sessionMeta) => {
+                  onManage={async (cardUpdates, maxStreak, sessionMeta) => {
                     if (!isOnline) {
                       await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
-                      else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
                       if (progress && sessionMeta) {
                         const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
                         if (unlocked.length) enqueueToasts(unlocked);
@@ -1681,14 +1680,14 @@ export default function Dashboard() {
                     setIsStudying(false);
                     setFrozenStudySelection(null);
                   }}
-                  onBackToMap={async (delta, cardUpdates, maxStreak, sessionMeta) => {
+                  onBackToMap={async (cardUpdates, maxStreak, sessionMeta) => {
                     if (!isOnline) {
                       await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
-                      else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
                       if (progress && sessionMeta) {
                         const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-abandon', islandId: selectedIslandId || undefined });
                         if (unlocked.length) enqueueToasts(unlocked);
@@ -1699,14 +1698,14 @@ export default function Dashboard() {
                     setSelectedIslandId(null);
                     setFrozenStudySelection(null);
                   }}
-                  onSwitchMode={async (newMode, delta, cardUpdates, maxStreak, sessionMeta) => {
+                  onSwitchMode={async (newMode, cardUpdates, maxStreak, sessionMeta) => {
                     if (!isOnline) {
                       await queueSession({ islandId: selectedIslandId ?? '', isArchipelago: selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select', cardUpdates, sessionMaxStreak: maxStreak, sessionMeta: sessionMeta ?? { sessionDurationMs: 0, cardCount: 0, correctCount: 0, sessionStartHour: 0 }, timestamp: Date.now() });
                       setOfflineQueuedToast(true);
                       setTimeout(() => setOfflineQueuedToast(false), 5000);
                     } else {
-                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(delta, cardUpdates, maxStreak, sessionMeta);
-                      else if (selectedIslandId) await processSessionResults(selectedIslandId, delta, cardUpdates, maxStreak, sessionMeta);
+                      if (selectedIslandId === 'archipelago' || selectedIslandId === 'multi-select') await processArchipelagoResults(cardUpdates, maxStreak, sessionMeta);
+                      else if (selectedIslandId) await processSessionResults(selectedIslandId, cardUpdates, maxStreak, sessionMeta);
                       if (progress && sessionMeta) {
                         const unlocked = await checkAndAwardAchievements({ progress, cardUpdates, sessionMeta, trigger: 'session-complete', islandId: selectedIslandId || undefined });
                         if (unlocked.length) enqueueToasts(unlocked);

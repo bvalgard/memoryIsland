@@ -13,7 +13,6 @@ interface SessionCompleteProps {
   cardsReviewed: number;
   correctAnswers: number;
   incorrectAnswers: number;
-  scoreDelta: number;
   sessionMaxStreak: number;
   isNewRecord: boolean;
   dueCardsCleared: number;
@@ -25,12 +24,12 @@ interface SessionCompleteProps {
   cardUpdates: CardUpdateRecord;
   maxStreak: number;
   meta: SessionMeta;
-  onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, meta: SessionMeta) => void;
+  onFinish: (cardUpdates: CardUpdateRecord, maxStreak: number, meta: SessionMeta) => void;
   onStartWrongDrill: () => void;
 }
 
 export default function SessionComplete({
-  accuracyPct, cardsReviewed, correctAnswers, incorrectAnswers, scoreDelta,
+  accuracyPct, cardsReviewed, correctAnswers, incorrectAnswers,
   sessionMaxStreak, isNewRecord, dueCardsCleared, dueCardFrontsAtStartSize, mode,
   islandName, archipelagoName, strugglingCards, cardUpdates, maxStreak, meta,
   onFinish, onStartWrongDrill,
@@ -41,8 +40,8 @@ export default function SessionComplete({
       animate={{ opacity: 1, scale: 1 }}
       className="max-w-md mx-auto w-full text-center"
     >
-      {/* 3-col stat grid */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      {/* 2-col stat grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-emerald-500/5 rounded-2xl p-4 border border-emerald-500/20 border-b-2 border-b-emerald-500/40">
           <div className="text-3xl font-black text-emerald-400 mb-1">{accuracyPct}%</div>
           <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Accuracy</div>
@@ -50,10 +49,6 @@ export default function SessionComplete({
         <div className="bg-white/5 rounded-2xl p-4 border border-white/10 border-b-2 border-b-white/20">
           <div className="text-3xl font-black text-white mb-1">{cardsReviewed}</div>
           <div className="text-[10px] font-bold tracking-widest uppercase text-brand-muted">Reviewed</div>
-        </div>
-        <div className="bg-brand-primary/5 rounded-2xl p-4 border border-brand-primary/20 border-b-2 border-b-brand-primary/40">
-          <div className="text-3xl font-black text-brand-primary mb-1">+{scoreDelta}</div>
-          <div className="text-[10px] font-bold tracking-widest uppercase text-brand-primary/80">Score</div>
         </div>
       </div>
 
@@ -125,7 +120,7 @@ export default function SessionComplete({
       )}
 
       <button
-        onClick={() => onFinish(scoreDelta, cardUpdates, maxStreak, meta)}
+        onClick={() => onFinish(cardUpdates, maxStreak, meta)}
         className="w-full btn-primary h-16 text-lg mb-4"
       >
         Return to Map

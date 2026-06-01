@@ -149,12 +149,12 @@ interface StudySessionProps {
   isTestMode?: boolean;
   timeoutPerCardSec?: number;
   totalTimeLimitSec?: number;
-  onFinish: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
-  onManage: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
-  onBackToMap: (scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
-  onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due', scoreDelta: number, cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onFinish: (cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onManage: (cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onBackToMap: (cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onSwitchMode?: (newMode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due', cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onViewQuestion?: (question: Question) => void;
-  onProgressUpdate?: (cardUpdates: CardUpdateRecord, scoreDelta: number, sessionMaxStreak: number) => void;
+  onProgressUpdate?: (cardUpdates: CardUpdateRecord, sessionMaxStreak: number) => void;
 }
 
 export default function StudySession({ island, mode = 'all', settings, allTimeBestStreak = 0, friends = [], islandId = '', archipelagoName, currentUserName = 'Explorer', isOnline = true, isTestMode = false, timeoutPerCardSec, totalTimeLimitSec, onFinish, onManage, onBackToMap, onSwitchMode, onViewQuestion, onProgressUpdate }: StudySessionProps) {
@@ -183,7 +183,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
   const currentIndexRef = useRef(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [direction, setDirection] = useState(0); // 1 for right, -1 for left
-  const [scoreDelta, setScoreDelta] = useState(0);
   const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
   const [shuffledOptionImages, setShuffledOptionImages] = useState<(string | null)[]>([]);
@@ -560,9 +559,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   useEffect(() => {
     if (Object.keys(cardUpdates).length > 0) {
-      onProgressUpdate?.(attachCardIdentities(cardUpdates), scoreDelta, sessionMaxStreak);
+      onProgressUpdate?.(attachCardIdentities(cardUpdates), sessionMaxStreak);
     }
-  }, [cardUpdates, scoreDelta, sessionMaxStreak]);
+  }, [cardUpdates, sessionMaxStreak]);
 
   // Test mode: fire onFinish after render (not during) when session completes
   useEffect(() => {
@@ -574,7 +573,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       correctCount: Object.values<{ sessionCorrect?: number }>(cardUpdates as any).filter(c => (c.sessionCorrect ?? 0) > 0).length,
       sessionStartHour: new Date(sessionStartTime.current).getHours(),
     };
-    onFinish(scoreDelta, attachCardIdentities(cardUpdates), sessionMaxStreak, meta);
+    onFinish(attachCardIdentities(cardUpdates), sessionMaxStreak, meta);
   // Only re-run when sessionComplete flips — other deps are stable refs
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionComplete]);
@@ -880,7 +879,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
       setLiveCorrect(prev => prev + 1);
       if (!usedClues) {
-        setScoreDelta(prev => prev + 1);
         setStreak(prev => {
           const s = prev + 1;
           updateStreakWithRecord(s);
@@ -1013,7 +1011,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setLastAnswerCorrect(isCorrect);
 
     if (isCorrect) {
-      setScoreDelta(prev => prev + 1);
       setStreak(prev => {
         const s = prev + 1;
         updateStreakWithRecord(s);
@@ -1083,7 +1080,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }
 
     if (isCorrect) {
-      setScoreDelta(prev => prev + 1);
+
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
@@ -1150,7 +1147,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setPendingConfidence(null);
     }
 
-    setScoreDelta(prev => prev + 1);
     const newStreak = streak + 1;
     setStreak(newStreak);
     updateStreakWithRecord(newStreak);
@@ -1204,7 +1200,6 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setPendingConfidence(null);
     }
 
-    setScoreDelta(prev => prev + 1);
     const newStreak = streak + 1;
     setStreak(newStreak);
     updateStreakWithRecord(newStreak);
@@ -1402,7 +1397,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setLastAnswerCorrect(isCorrect);
 
     if (isCorrect) {
-      setScoreDelta(prev => prev + 1);
+
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
@@ -1462,7 +1457,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setLastAnswerCorrect(isCorrect);
 
     if (isCorrect) {
-      setScoreDelta(prev => prev + 1);
+
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
@@ -1523,7 +1518,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         window.navigator.vibrate(50);
       }
       triggerSparkle(e);
-      setScoreDelta(prev => prev + 1);
+
       const newStreak = streak + 1;
       setStreak(newStreak);
       updateStreakWithRecord(newStreak);
@@ -1762,7 +1757,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             const newStreak = streak + 1;
             setStreak(newStreak);
             updateStreakWithRecord(newStreak);
-            setScoreDelta(prev => prev + 1);
+      
             setLiveCorrect(prev => prev + 1);
 
             const srsMatchCorrect = withGrace(computeSM2(5, currentCard.srsRepetitions ?? 0, currentCard.srsInterval ?? 1, currentCard.srsEaseFactor ?? 2.5));
@@ -1928,7 +1923,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         cardsReviewed={cardsReviewed}
         correctAnswers={correctAnswers}
         incorrectAnswers={incorrectAnswers}
-        scoreDelta={scoreDelta}
+
         sessionMaxStreak={sessionMaxStreak}
         isNewRecord={isNewRecord}
         dueCardsCleared={dueCardsCleared}
@@ -1983,7 +1978,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             <NavAction
               icon={ArrowLeft}
               label="To Map"
-              onClick={() => onBackToMap(scoreDelta, attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
+              onClick={() => onBackToMap(attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
             />
 
             <div className="hidden sm:flex items-center gap-3 glass px-4 py-2 rounded-full border-white/5 shadow-lg ml-2">
@@ -2006,7 +2001,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             <NavAction
               icon={Database}
               label="Manage Cards"
-              onClick={() => onManage(scoreDelta, attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
+              onClick={() => onManage(attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
             />
 
             <NavAction
@@ -2022,7 +2017,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                 icon={mode === 'all' ? Zap : Library}
                 label={mode === 'all' ? 'Struggling' : 'All Cards'}
                 variant="primary"
-                onClick={() => onSwitchMode(mode === 'all' ? 'struggling' : 'all', scoreDelta, attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
+                onClick={() => onSwitchMode(mode === 'all' ? 'struggling' : 'all', attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
               />
             )}
             <div className="flex items-center gap-2 glass px-3 md:px-4 py-2 rounded-full border-white/5 shadow-lg group relative">

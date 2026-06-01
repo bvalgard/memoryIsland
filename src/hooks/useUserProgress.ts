@@ -1612,7 +1612,7 @@ export function useUserProgress() {
     return payload;
   };
 
-  const processSessionResults = async (islandId: string, delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+  const processSessionResults = async (islandId: string, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress || !user) return;
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
@@ -1645,7 +1645,7 @@ export function useUserProgress() {
     }
   };
 
-  const processArchipelagoResults = async (delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+  const processArchipelagoResults = async (cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress || !user) return;
 
     const uid = user.uid;
@@ -1675,7 +1675,7 @@ export function useUserProgress() {
     }
   };
 
-  const syncOfflineResults = async (islandId: string, delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+  const syncOfflineResults = async (islandId: string, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress || !user) return;
     const island = progress.islands.find((entry) => entry.id === islandId);
     if (!island) return;
@@ -1705,7 +1705,7 @@ export function useUserProgress() {
     }
   };
 
-  const syncOfflineArchipelagoResults = async (delta: number, cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
+  const syncOfflineArchipelagoResults = async (cardUpdates: CardUpdateRecord, sessionHighestStreak = 0, sessionMeta?: SessionMeta) => {
     if (!progress || !user) return;
 
     const uid = user.uid;
