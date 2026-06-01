@@ -298,7 +298,7 @@ const defaultSettings: UserSettings = {
   showOnGlobalLeaderboard: true,
   progressTrackingMode: 'srs',
   sessionDisplay: 'stats',
-  writtenRecallMode: false,
+  writtenRecallMode: true,
   graceWindowMinutes: 0,
 };
 

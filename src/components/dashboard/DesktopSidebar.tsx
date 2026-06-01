@@ -191,7 +191,7 @@ export default function DesktopSidebar({
               )}
             >
               <GraduationCap className="w-5 h-5" />
-              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Exam Voyage</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Mock Exam</span>
             </button>
           </>
         )}

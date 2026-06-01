@@ -77,7 +77,7 @@ function intervalToStatus(intervalDays: number): CardStatus {
 
 function computeSM2Easy(prevReps: number, prevInterval: number, prevEF: number) {
   const result = computeSM2(5, prevReps, prevInterval, prevEF);
-  result.interval = Math.max(result.interval, SRS_THRESHOLDS.mastered);
+  result.interval = Math.max(result.interval, 7);
   result.nextReview = Date.now() + result.interval * 24 * 60 * 60 * 1000;
   return result;
 }
