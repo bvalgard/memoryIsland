@@ -16,7 +16,7 @@ const STEPS = [
     iconColor: 'text-blue-400',
     title: 'The Island Way',
     description:
-      'Each Island is a study deck. Cards travel through three stages — Struggling, Learning, and Mastered — using spaced repetition to show you the right card at exactly the right moment.',
+      'Each Island is a study deck. Cards travel through three stages — Building, Learning, and Mastered — using spaced repetition to show you the right card at exactly the right moment.',
   },
   {
     label: 'Step 2 of 3',

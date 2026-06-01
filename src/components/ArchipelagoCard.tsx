@@ -7,7 +7,7 @@ interface ArchipelagoCardProps {
   archipelago: { id: string; name: string; isCollaborative?: boolean };
   islandCount: number;
   totalCards: number;
-  masteryLevel: 'struggling' | 'learning' | 'mastered';
+  masteryLevel: 'building' | 'learning' | 'mastered';
   imageSrc: string;
   onClick: () => void;
   onLongPress?: () => void;
@@ -18,7 +18,7 @@ export default function ArchipelagoCard({ archipelago, islandCount, totalCards, 
 
   const getMasteryStyles = () => {
     switch (masteryLevel) {
-      case 'struggling':
+      case 'building':
         return 'bg-gradient-to-br from-gray-900 to-purple-900/20 border-gray-800 hover:border-purple-500/50 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)]';
       case 'learning':
         return 'bg-gradient-to-br from-gray-900 to-blue-900/20 border-gray-800 hover:border-blue-500/50 hover:shadow-[0_0_30px_rgba(59,130,246,0.25)]';
@@ -29,7 +29,7 @@ export default function ArchipelagoCard({ archipelago, islandCount, totalCards, 
 
   const getStatusDescription = () => {
     switch (masteryLevel) {
-      case 'struggling': return 'Some islands need attention — struggling cards detected.';
+      case 'building': return 'Some islands need attention — building cards detected.';
       case 'learning': return 'Making progress — keep studying to advance.';
       case 'mastered': return 'Outstanding — all islands fully mastered!';
     }

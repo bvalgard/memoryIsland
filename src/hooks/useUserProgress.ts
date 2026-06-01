@@ -24,7 +24,7 @@ import {
 import { auth, db, isConfigPlaceholder } from '../firebase';
 import { SessionMeta } from '../achievements';
 
-export type CardStatus = 'learning' | 'struggling' | 'mastered';
+export type CardStatus = 'learning' | 'building' | 'mastered';
 export type CardUpdateRecord = Record<string, {
   cardId?: string;
   islandId?: string;
@@ -1522,7 +1522,7 @@ export function useUserProgress() {
     }
     const payload: Record<string, unknown> = {
       status: update.status,
-      needsWork: update.status === 'struggling',
+      needsWork: update.status === 'building',
       lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
       totalAnswers: increment(update.sessionAnswers || 1),
       totalCorrect: increment(update.sessionCorrect || 0),
@@ -1558,7 +1558,7 @@ export function useUserProgress() {
       const prefix = `userProgress.${uid}`;
       const payload: Record<string, unknown> = {
         [`${prefix}.status`]: update.status,
-        [`${prefix}.needsWork`]: update.status === 'struggling',
+        [`${prefix}.needsWork`]: update.status === 'building',
         [`${prefix}.lastReviewed`]: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
         [`${prefix}.totalAnswers`]: increment((update.sessionAnswers || 1)),
         [`${prefix}.totalCorrect`]: increment((update.sessionCorrect || 0)),
@@ -1580,7 +1580,7 @@ export function useUserProgress() {
 
     const payload: Record<string, unknown> = {
       status: update.status,
-      needsWork: update.status === 'struggling',
+      needsWork: update.status === 'building',
       lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
       totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
       totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),

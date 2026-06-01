@@ -15,7 +15,7 @@ import type { SessionMeta } from '../achievements';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
-const STATUS_RANK: Record<CardStatus, number> = { mastered: 2, learning: 1, struggling: 0 };
+const STATUS_RANK: Record<CardStatus, number> = { mastered: 2, learning: 1, building: 0 };
 
 function worseStatus(a: CardStatus | undefined, b: CardStatus | undefined): CardStatus {
   const ra = STATUS_RANK[a ?? 'learning'] ?? 1;

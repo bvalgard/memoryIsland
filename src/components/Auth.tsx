@@ -92,7 +92,7 @@ export default function Auth() {
                 {/* Island Images */}
                 <div className="flex gap-2 mb-8">
                   {[
-                    { src: `${BASE}/struggling.jpeg`, label: 'Struggling' },
+                    { src: `${BASE}/struggling.jpeg`, label: 'Building' },
                     { src: `${BASE}/learning.jpeg`,   label: 'Learning'   },
                     { src: `${BASE}/mastered.jpeg`,   label: 'Mastered'   },
                   ].map(({ src, label }, i) => (
@@ -308,7 +308,7 @@ export default function Auth() {
         {/* Island progression display */}
         <div className="flex gap-4 mb-10">
           {[
-            { src: `${BASE}/struggling.jpeg`, label: 'Struggling', color: 'text-red-400' },
+            { src: `${BASE}/struggling.jpeg`, label: 'Building', color: 'text-red-400' },
             { src: `${BASE}/learning.jpeg`,   label: 'Learning',   color: 'text-amber-400' },
             { src: `${BASE}/mastered.jpeg`,   label: 'Mastered',   color: 'text-emerald-400' },
           ].map(({ src, label, color }, i) => (

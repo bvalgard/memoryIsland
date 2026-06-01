@@ -4,15 +4,15 @@ import { X, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { Island } from '../../hooks/useUserProgress';
 import { cn } from '../../lib/utils';
 
-interface StrugglingCardsModalProps {
+interface BuildingCardsModalProps {
   isOpen: boolean;
   onClose: () => void;
   island: Island;
-  strugglingIndices: number[];
-  strugglingCount: number;
+  buildingIndices: number[];
+  buildingCount: number;
 }
 
-export default function StrugglingCardsModal({ isOpen, onClose, island, strugglingIndices, strugglingCount }: StrugglingCardsModalProps) {
+export default function BuildingCardsModal({ isOpen, onClose, island, buildingIndices, buildingCount }: BuildingCardsModalProps) {
   const [previewCardIdx, setPreviewCardIdx] = useState<number | null>(null);
   const [previewRevealed, setPreviewRevealed] = useState(false);
 
@@ -57,11 +57,11 @@ export default function StrugglingCardsModal({ isOpen, onClose, island, struggli
                 <div>
                   <h3 className="text-base font-black text-white tracking-tight">
                     {previewCardIdx !== null
-                      ? `Card ${strugglingIndices.indexOf(previewCardIdx) + 1} of ${strugglingCount}`
-                      : 'Struggling Cards'}
+                      ? `Card ${buildingIndices.indexOf(previewCardIdx) + 1} of ${buildingCount}`
+                      : 'Building Cards'}
                   </h3>
                   <p className="text-[11px] text-red-400/60 font-medium">
-                    {previewCardIdx !== null ? 'Practice preview' : `${strugglingCount} card${strugglingCount !== 1 ? 's' : ''} need attention`}
+                    {previewCardIdx !== null ? 'Practice preview' : `${buildingCount} card${buildingCount !== 1 ? 's' : ''} need attention`}
                   </p>
                 </div>
               </div>
@@ -86,7 +86,7 @@ export default function StrugglingCardsModal({ isOpen, onClose, island, struggli
                     className="p-5"
                   >
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {strugglingIndices.map((idx) => {
+                      {buildingIndices.map((idx) => {
                         const card = island.cards[idx];
                         const accuracy = card.totalAnswers && card.totalAnswers > 0
                           ? Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)
@@ -125,9 +125,9 @@ export default function StrugglingCardsModal({ isOpen, onClose, island, struggli
                   </motion.div>
                 ) : (() => {
                   const card = island.cards[previewCardIdx];
-                  const posInList = strugglingIndices.indexOf(previewCardIdx);
-                  const prevIdx = posInList > 0 ? strugglingIndices[posInList - 1] : null;
-                  const nextIdx = posInList < strugglingIndices.length - 1 ? strugglingIndices[posInList + 1] : null;
+                  const posInList = buildingIndices.indexOf(previewCardIdx);
+                  const prevIdx = posInList > 0 ? buildingIndices[posInList - 1] : null;
+                  const nextIdx = posInList < buildingIndices.length - 1 ? buildingIndices[posInList + 1] : null;
                   return (
                     <motion.div
                       key={`preview-${previewCardIdx}`}

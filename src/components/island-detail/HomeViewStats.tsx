@@ -20,7 +20,7 @@ function formatRelativeTime(ts: number): string {
 interface HomeViewStatsProps {
   totalCards: number;
   progressPct: number;
-  strugglingCount: number;
+  buildingCount: number;
   learningCount: number;
   masteredCount: number;
   progressTrackingMode: 'srs' | 'status' | 'both';
@@ -30,14 +30,14 @@ interface HomeViewStatsProps {
   lastStudiedTs: number;
   dueCount: number;
   nextDueTs: number;
-  onShowStruggling: () => void;
+  onShowBuilding: () => void;
   onNavigateToEditor: () => void;
 }
 
 export default function HomeViewStats({
-  totalCards, progressPct, strugglingCount, learningCount, masteredCount,
+  totalCards, progressPct, buildingCount, learningCount, masteredCount,
   progressTrackingMode, accuracyStat, islandTotalCorrect, islandTotalAnswers,
-  lastStudiedTs, dueCount, nextDueTs, onShowStruggling, onNavigateToEditor,
+  lastStudiedTs, dueCount, nextDueTs, onShowBuilding, onNavigateToEditor,
 }: HomeViewStatsProps) {
   return (
     <div className="mt-4 space-y-5">
@@ -50,8 +50,8 @@ export default function HomeViewStats({
               <span className="text-[10px] font-bold text-brand-muted">{progressPct}% mastered</span>
             </div>
             <div className="h-3 rounded-full overflow-hidden flex bg-white/5">
-              {strugglingCount > 0 && (
-                <div className="bg-red-500/70 h-full transition-all duration-700" style={{ width: `${(strugglingCount / totalCards) * 100}%` }} />
+              {buildingCount > 0 && (
+                <div className="bg-red-500/70 h-full transition-all duration-700" style={{ width: `${(buildingCount / totalCards) * 100}%` }} />
               )}
               {learningCount > 0 && (
                 <div className="bg-amber-500/70 h-full transition-all duration-700" style={{ width: `${(learningCount / totalCards) * 100}%` }} />
@@ -62,7 +62,7 @@ export default function HomeViewStats({
             </div>
             <div className="flex flex-wrap gap-4 mt-2">
               <span className="flex items-center gap-1.5 text-[11px] text-red-400/80">
-                <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" />{strugglingCount} struggling
+                <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" />{buildingCount} building
               </span>
               <span className="flex items-center gap-1.5 text-[11px] text-amber-400/80">
                 <span className="w-2 h-2 rounded-full bg-amber-500/70 inline-block" />{learningCount} learning
@@ -109,16 +109,16 @@ export default function HomeViewStats({
         </div>
       )}
 
-      {/* Struggling Cards trigger */}
-      {strugglingCount > 0 && (
+      {/* Building Cards trigger */}
+      {buildingCount > 0 && (
         <button
-          onClick={onShowStruggling}
+          onClick={onShowBuilding}
           className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block shrink-0" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-red-400">Struggling Cards</span>
-            <span className="text-[11px] text-red-400/60 font-bold">({strugglingCount})</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-red-400">Building Cards</span>
+            <span className="text-[11px] text-red-400/60 font-bold">({buildingCount})</span>
           </div>
           <ChevronDown className="w-4 h-4 text-red-400/60" />
         </button>

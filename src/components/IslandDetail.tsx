@@ -16,7 +16,7 @@ import { UserProfile } from '../hooks/useSocial';
 import FormatToolbar, { wrapSelection } from './island-detail/FormatToolbar';
 import HomeViewStats from './island-detail/HomeViewStats';
 import CardPreviewModal from './island-detail/CardPreviewModal';
-import StrugglingCardsModal from './island-detail/StrugglingCardsModal';
+import BuildingCardsModal from './island-detail/StrugglingCardsModal';
 import AIGenerationModal from './island-detail/AIGenerationModal';
 
 interface IslandDetailProps {
@@ -30,7 +30,7 @@ interface IslandDetailProps {
   onMoveCard?: (cardIndex: number, targetIslandId: string) => void;
   onAddCards: (cards: Card[]) => void;
   onDeleteIsland?: () => void;
-  onStartStudy: (mode: 'all' | 'struggling' | 'learning' | 'mastered' | 'due') => void;
+  onStartStudy: (mode: 'all' | 'building' | 'learning' | 'mastered' | 'due') => void;
   onShare?: (island: Island, targetUids?: string[]) => void;
   onUnshare?: (island: Island) => void;
   onUpdateIsland?: (updates: Partial<Island>) => void;
@@ -52,7 +52,7 @@ type AiPreviewCard = Card & { _isDuplicate?: boolean; _duplicateLocation?: strin
 export default function IslandDetail({ island, allIslands, archipelagos, onBack, onAddCard, onUpdateCard, onDeleteCard, onMoveCard, onDeleteIsland, onAddCards, onStartStudy, onShare, onUnshare, onUpdateIsland, progressTrackingMode = 'srs', graceWindowMinutes = 0, friends = [], fetchProfilesByUids = async () => [], currentUserId, onAddCollaborator, onRemoveCollaborator, onResetIsland, onArchiveIsland, onDeleteCardById }: IslandDetailProps) {
   const [view, setView] = useState<'home' | 'editor'>('home');
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
-  const [studyMode, setStudyMode] = useState<'all' | 'struggling' | 'learning' | 'mastered' | 'due'>(() => {
+  const [studyMode, setStudyMode] = useState<'all' | 'building' | 'learning' | 'mastered' | 'due'>(() => {
     if (progressTrackingMode === 'srs') {
       const now = Date.now();
       const graceMs = graceWindowMinutes * 60_000;
@@ -61,7 +61,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     }
     return 'all';
   });
-  const [showStrugglingCards, setShowStrugglingCards] = useState(false);
+  const [showBuildingCards, setShowBuildingCards] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showUnshareConfirm, setShowUnshareConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -896,11 +896,11 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
       }
     }
   };
-  const strugglingIndices = island.cards.reduce<number[]>((acc, c, i) => {
-    if (c.status === 'struggling' || c.needsWork) acc.push(i);
+  const buildingIndices = island.cards.reduce<number[]>((acc, c, i) => {
+    if (c.status === 'building' || c.needsWork) acc.push(i);
     return acc;
   }, []);
-  const strugglingCount = strugglingIndices.length;
+  const buildingCount = buildingIndices.length;
   const learningCount = island.cards.filter(c => !c.status || c.status === 'learning').length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
   const graceMs = graceWindowMinutes * 60_000;
@@ -916,9 +916,9 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
     return min;
   }, Infinity);
 
-  let masteryLevel: 'struggling' | 'learning' | 'mastered' = 'learning';
-  if (strugglingCount > 0) {
-    masteryLevel = 'struggling';
+  let masteryLevel: 'building' | 'learning' | 'mastered' = 'learning';
+  if (buildingCount > 0) {
+    masteryLevel = 'building';
   } else if (island.cards.length > 0 && masteredCount === island.cards.length) {
     masteryLevel = 'mastered';
   } else {
@@ -926,7 +926,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
   }
 
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const imageSrc = masteryLevel === 'struggling' ? `${basePath}/struggling.jpeg` : masteryLevel === 'learning' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
+  const imageSrc = masteryLevel === 'building' ? `${basePath}/struggling.jpeg` : masteryLevel === 'learning' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
 
   const displayCards = useMemo(() => {
     const roots: { card: Card, originalIdx: number }[] = [];
@@ -1000,7 +1000,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               className="w-[130%] h-[130%] object-cover"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                if (masteryLevel === 'struggling') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=200&h=200';
+                if (masteryLevel === 'building') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=200&h=200';
                 else if (masteryLevel === 'learning') target.src = 'https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?auto=format&fit=crop&q=80&w=200&h=200';
                 else target.src = 'https://images.unsplash.com/photo-1523363065056-11f8b449174b?auto=format&fit=crop&q=80&w=200&h=200';
               }}
@@ -1476,14 +1476,14 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
                 {progressTrackingMode !== 'srs' && (
                   <>
                     <button
-                      onClick={() => setStudyMode('struggling')}
-                      disabled={strugglingCount === 0}
+                      onClick={() => setStudyMode('building')}
+                      disabled={buildingCount === 0}
                       className={cn(
                         "flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-30 disabled:cursor-not-allowed",
-                        studyMode === 'struggling' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
+                        studyMode === 'building' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
                       )}
                     >
-                      Struggling ({strugglingCount})
+                      Building ({buildingCount})
                     </button>
                     <button
                       onClick={() => setStudyMode('learning')}
@@ -1525,7 +1525,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         <HomeViewStats
           totalCards={totalCards}
           progressPct={progressPct}
-          strugglingCount={strugglingCount}
+          buildingCount={buildingCount}
           learningCount={learningCount}
           masteredCount={masteredCount}
           progressTrackingMode={progressTrackingMode}
@@ -1535,7 +1535,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
           lastStudiedTs={lastStudiedTs}
           dueCount={dueCount}
           nextDueTs={nextDueTs}
-          onShowStruggling={() => setShowStrugglingCards(true)}
+          onShowBuilding={() => setShowBuildingCards(true)}
           onNavigateToEditor={() => setView('editor')}
         />
       )}
@@ -2742,13 +2742,13 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
         </>
       )}
 
-      {/* Struggling Cards Modal */}
-      <StrugglingCardsModal
-        isOpen={showStrugglingCards}
-        onClose={() => setShowStrugglingCards(false)}
+      {/* Building Cards Modal */}
+      <BuildingCardsModal
+        isOpen={showBuildingCards}
+        onClose={() => setShowBuildingCards(false)}
         island={island}
-        strugglingIndices={strugglingIndices}
-        strugglingCount={strugglingCount}
+        buildingIndices={buildingIndices}
+        buildingCount={buildingCount}
       />
 
       <ConfirmDialog
@@ -2797,7 +2797,7 @@ export default function IslandDetail({ island, allIslands, archipelagos, onBack,
               className="w-full h-auto rounded-2xl shadow-2xl"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                if (masteryLevel === 'struggling') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=800';
+                if (masteryLevel === 'building') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=800';
                 else if (masteryLevel === 'learning') target.src = 'https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?auto=format&fit=crop&q=80&w=800';
                 else target.src = 'https://images.unsplash.com/photo-1523363065056-11f8b449174b?auto=format&fit=crop&q=80&w=800';
               }}

@@ -3,7 +3,7 @@ import { X, Flame, CheckCircle2 } from 'lucide-react';
 import { CardUpdateRecord } from '../../hooks/useUserProgress';
 import { SessionMeta } from '../../achievements';
 
-interface StrugglingCard {
+interface BuildingCard {
   name: string;
   islandName?: string;
 }
@@ -20,7 +20,7 @@ interface SessionCompleteProps {
   mode: string;
   islandName: string;
   archipelagoName?: string;
-  strugglingCards: StrugglingCard[];
+  buildingCards: BuildingCard[];
   cardUpdates: CardUpdateRecord;
   maxStreak: number;
   meta: SessionMeta;
@@ -31,7 +31,7 @@ interface SessionCompleteProps {
 export default function SessionComplete({
   accuracyPct, cardsReviewed, correctAnswers, incorrectAnswers,
   sessionMaxStreak, isNewRecord, dueCardsCleared, dueCardFrontsAtStartSize, mode,
-  islandName, archipelagoName, strugglingCards, cardUpdates, maxStreak, meta,
+  islandName, archipelagoName, buildingCards, cardUpdates, maxStreak, meta,
   onFinish, onStartWrongDrill,
 }: SessionCompleteProps) {
   return (
@@ -85,11 +85,11 @@ export default function SessionComplete({
       ) : null}
 
       {/* Cards to revisit */}
-      {strugglingCards.length > 0 && (
+      {buildingCards.length > 0 && (
         <div className="border-l-2 border-red-500/50 pl-3 mb-6 text-left">
           <div className="text-[10px] font-bold tracking-widest uppercase text-red-400 mb-2">Cards to revisit</div>
           <div className="flex flex-col gap-1">
-            {strugglingCards.slice(0, 5).map((card, i) => {
+            {buildingCards.slice(0, 5).map((card, i) => {
               const archLabel = archipelagoName ?? (card.islandName ? islandName : undefined);
               const islandLabel = card.islandName ?? (archipelagoName ? islandName : undefined);
               const locationLabel = archLabel && islandLabel ? `${archLabel} → ${islandLabel}` : islandName;
@@ -103,8 +103,8 @@ export default function SessionComplete({
                 </div>
               );
             })}
-            {strugglingCards.length > 5 && (
-              <div className="text-xs text-brand-muted pl-4.5">+ {strugglingCards.length - 5} more</div>
+            {buildingCards.length > 5 && (
+              <div className="text-xs text-brand-muted pl-4.5">+ {buildingCards.length - 5} more</div>
             )}
           </div>
         </div>

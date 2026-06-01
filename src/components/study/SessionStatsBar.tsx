@@ -7,7 +7,7 @@ interface SessionStatsBarProps {
   liveCorrect: number;
   liveIncorrect: number;
   isNewRecord: boolean;
-  sessionStats: { mastered: number; learning: number; struggling: number };
+  sessionStats: { mastered: number; learning: number; building: number };
 }
 
 export default function SessionStatsBar({ streak, liveCorrect, liveIncorrect, isNewRecord, sessionStats }: SessionStatsBarProps) {
@@ -64,7 +64,7 @@ export default function SessionStatsBar({ streak, liveCorrect, liveIncorrect, is
         {/* Incorrect */}
         <div className="bg-red-500/10 rounded-2xl p-2 md:p-4 border border-red-500/20 backdrop-blur-md flex flex-col items-center justify-center gap-1">
           <motion.span
-            key={sessionStats.struggling}
+            key={sessionStats.building}
             initial={{ scale: 1.5, color: '#ef4444' }}
             animate={{ scale: 1, color: '#ffffff' }}
             className="text-xs md:text-sm font-black"

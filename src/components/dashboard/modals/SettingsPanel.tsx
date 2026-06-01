@@ -3,7 +3,7 @@ import { X, Settings, ScanLine, Archive } from 'lucide-react';
 import { UserSettings } from '../../../hooks/useUserProgress';
 import { cn } from '../../../lib/utils';
 
-type SortOrder = 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-struggling';
+type SortOrder = 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-building';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -164,7 +164,7 @@ export default function SettingsPanel({
                   <option value="alpha-desc">Z to A</option>
                   <option value="creation">Creation Date</option>
                   <option value="next-due">Next Due</option>
-                  <option value="most-struggling">Most Struggling</option>
+                  <option value="most-building">Most Building</option>
                 </select>
               </div>
 

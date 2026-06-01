@@ -20,7 +20,7 @@ interface StatsPanelProps {
   allCards: Card[];
   globalMasteredCount: number;
   globalLearningCount: number;
-  globalStrugglingCount: number;
+  globalBuildingCount: number;
   trackingMode: 'srs' | 'status' | 'both';
   progress: UserProgress | null;
   forgettingCount: number;
@@ -35,7 +35,7 @@ interface StatsPanelProps {
 }
 
 export default function StatsPanel({
-  isOpen, onClose, allCards, globalMasteredCount, globalLearningCount, globalStrugglingCount,
+  isOpen, onClose, allCards, globalMasteredCount, globalLearningCount, globalBuildingCount,
   trackingMode, progress, forgettingCount, bestStudyHour, weakSpotCards, blindSpotData,
   formatStudyHour, blindSpotOpen, setBlindSpotOpen, knowledgeGapOpen, setKnowledgeGapOpen,
 }: StatsPanelProps) {
@@ -94,8 +94,8 @@ export default function StatsPanel({
                     <div className="text-[10px] font-bold tracking-widest uppercase text-amber-500/80">Learning</div>
                   </div>
                   <div className="bg-red-500/5 rounded-2xl p-4 border border-red-500/20 border-b-2 border-b-red-500/40">
-                    <div className="text-3xl font-black text-red-400 mb-1">{globalStrugglingCount}</div>
-                    <div className="text-[10px] font-bold tracking-widest uppercase text-red-500/80">Struggling</div>
+                    <div className="text-3xl font-black text-red-400 mb-1">{globalBuildingCount}</div>
+                    <div className="text-[10px] font-bold tracking-widest uppercase text-red-500/80">Building</div>
                   </div>
                 </div>
               </div>
@@ -354,7 +354,7 @@ export default function StatsPanel({
                 {(progress?.islands || []).map(island => {
                   const mst = island.cards.filter(c => c.status === 'mastered').length;
                   const lrn = island.cards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
-                  const str = island.cards.filter(c => c.status === 'struggling' || c.needsWork).length;
+                  const str = island.cards.filter(c => c.status === 'building' || c.needsWork).length;
                   return (
                     <div key={island.id} className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                       <div className="flex-1">

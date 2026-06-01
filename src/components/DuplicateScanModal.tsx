@@ -34,7 +34,7 @@ const TYPE_COLORS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   mastered: 'text-emerald-400',
   learning: 'text-brand-primary',
-  struggling: 'text-amber-400',
+  building: 'text-amber-400',
 };
 
 export default function DuplicateScanModal({ islands, scope, onClose, onDeleteCard }: DuplicateScanModalProps) {
