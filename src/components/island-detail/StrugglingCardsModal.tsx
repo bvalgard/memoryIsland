@@ -4,15 +4,15 @@ import { X, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { Island } from '../../hooks/useUserProgress';
 import { cn } from '../../lib/utils';
 
-interface BuildingCardsModalProps {
+interface ChartingCardsModalProps {
   isOpen: boolean;
   onClose: () => void;
   island: Island;
-  buildingIndices: number[];
-  buildingCount: number;
+  chartingIndices: number[];
+  chartingCount: number;
 }
 
-export default function BuildingCardsModal({ isOpen, onClose, island, buildingIndices, buildingCount }: BuildingCardsModalProps) {
+export default function ChartingCardsModal({ isOpen, onClose, island, chartingIndices, chartingCount }: ChartingCardsModalProps) {
   const [previewCardIdx, setPreviewCardIdx] = useState<number | null>(null);
   const [previewRevealed, setPreviewRevealed] = useState(false);
 
@@ -57,11 +57,11 @@ export default function BuildingCardsModal({ isOpen, onClose, island, buildingIn
                 <div>
                   <h3 className="text-base font-black text-white tracking-tight">
                     {previewCardIdx !== null
-                      ? `Card ${buildingIndices.indexOf(previewCardIdx) + 1} of ${buildingCount}`
-                      : 'Building Cards'}
+                      ? `Card ${chartingIndices.indexOf(previewCardIdx) + 1} of ${chartingCount}`
+                      : 'Charting Cards'}
                   </h3>
                   <p className="text-[11px] text-red-400/60 font-medium">
-                    {previewCardIdx !== null ? 'Practice preview' : `${buildingCount} card${buildingCount !== 1 ? 's' : ''} need attention`}
+                    {previewCardIdx !== null ? 'Practice preview' : `${chartingCount} card${chartingCount !== 1 ? 's' : ''} need attention`}
                   </p>
                 </div>
               </div>
@@ -86,7 +86,7 @@ export default function BuildingCardsModal({ isOpen, onClose, island, buildingIn
                     className="p-5"
                   >
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {buildingIndices.map((idx) => {
+                      {chartingIndices.map((idx) => {
                         const card = island.cards[idx];
                         const accuracy = card.totalAnswers && card.totalAnswers > 0
                           ? Math.round((card.totalCorrect ?? 0) / card.totalAnswers * 100)
@@ -125,9 +125,9 @@ export default function BuildingCardsModal({ isOpen, onClose, island, buildingIn
                   </motion.div>
                 ) : (() => {
                   const card = island.cards[previewCardIdx];
-                  const posInList = buildingIndices.indexOf(previewCardIdx);
-                  const prevIdx = posInList > 0 ? buildingIndices[posInList - 1] : null;
-                  const nextIdx = posInList < buildingIndices.length - 1 ? buildingIndices[posInList + 1] : null;
+                  const posInList = chartingIndices.indexOf(previewCardIdx);
+                  const prevIdx = posInList > 0 ? chartingIndices[posInList - 1] : null;
+                  const nextIdx = posInList < chartingIndices.length - 1 ? chartingIndices[posInList + 1] : null;
                   return (
                     <motion.div
                       key={`preview-${previewCardIdx}`}

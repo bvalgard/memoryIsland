@@ -52,11 +52,11 @@ export function useAchievements() {
     {
       const allCards = ctx.progress.islands.flatMap(i => i.cards);
       const updatesByFront = ctx.cardUpdates || {};
-      const buildingCount = allCards.filter(c => {
+      const chartingCount = allCards.filter(c => {
         const upd = updatesByFront[c.front];
-        return upd ? upd.status === 'building' : (c.status === 'building' || !!c.needsWork);
+        return upd ? upd.status === 'charting' : (c.status === 'charting' || !!c.needsWork);
       }).length;
-      if (buildingCount >= 20) tryUnlock('bermuda-triangle');
+      if (chartingCount >= 20) tryUnlock('bermuda-triangle');
     }
 
     // --- MOTIVATING: streak & cumulative stats ---

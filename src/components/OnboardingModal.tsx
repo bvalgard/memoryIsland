@@ -16,7 +16,7 @@ const STEPS = [
     iconColor: 'text-blue-400',
     title: 'The Island Way',
     description:
-      'Each Island is a study deck. Cards travel through three stages — Building, Learning, and Mastered — using spaced repetition to show you the right card at exactly the right moment.',
+      'Each Island is a study deck. Cards travel through three stages — Charting, Sailing, and Mastered — using spaced repetition to show you the right card at exactly the right moment.',
   },
   {
     label: 'Step 2 of 3',
@@ -25,7 +25,7 @@ const STEPS = [
     iconColor: 'text-purple-400',
     title: 'AI Card Generation',
     description:
-      'Paste your notes and let AI turn them into flashcards, multiple choice, and fill-in-the-blank questions in seconds. Less time formatting, more time actually learning.',
+      'Paste your notes and let AI turn them into flashcards, multiple choice, and fill-in-the-blank questions in seconds. Less time formatting, more time actually sailing.',
   },
   {
     label: 'Step 3 of 3',
@@ -34,7 +34,7 @@ const STEPS = [
     iconColor: 'text-emerald-400',
     title: 'Discover & Connect',
     description:
-      'Browse public Islands from the community, share your own knowledge, and study alongside friends. Learning is better together.',
+      'Browse public Islands from the community, share your own knowledge, and study alongside friends. Sailing is better together.',
   },
 ] as const;
 

@@ -3,7 +3,7 @@ import { X, Settings, ScanLine, Archive } from 'lucide-react';
 import { UserSettings } from '../../../hooks/useUserProgress';
 import { cn } from '../../../lib/utils';
 
-type SortOrder = 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-building';
+type SortOrder = 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-charting';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -50,7 +50,7 @@ export default function SettingsPanel({
             </div>
             <h2 className="text-2xl font-bold mb-2">Settings</h2>
             <p className="text-brand-muted text-sm leading-relaxed mb-8">
-              Configure your learning environment and account preferences.
+              Configure your sailing environment and account preferences.
             </p>
 
             <div className="space-y-4">
@@ -164,7 +164,7 @@ export default function SettingsPanel({
                   <option value="alpha-desc">Z to A</option>
                   <option value="creation">Creation Date</option>
                   <option value="next-due">Next Due</option>
-                  <option value="most-building">Most Building</option>
+                  <option value="most-charting">Most Charting</option>
                 </select>
               </div>
 

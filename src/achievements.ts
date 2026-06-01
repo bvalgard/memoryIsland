@@ -32,7 +32,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'bermuda-triangle',
     name: 'The Bermuda Triangle',
-    description: 'Over 20 cards are lost in the Building zone at the same time.',
+    description: 'Over 20 cards are lost in the Charting zone at the same time.',
     category: 'resilience',
     hidden: false,
     icon: '🔺',
@@ -40,7 +40,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'against-the-current',
     name: 'Against the Current',
-    description: 'You finally mastered a card that slipped back to Building three separate times.',
+    description: 'You finally mastered a card that slipped back to Charting three separate times.',
     category: 'resilience',
     hidden: false,
     icon: '🌊',
@@ -163,7 +163,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'life-saver',
     name: 'Life Saver',
-    description: 'Your memory trick helped a fellow explorer escape the Building zone.',
+    description: 'Your memory trick helped a fellow explorer escape the Charting zone.',
     category: 'motivating',
     hidden: false,
     icon: '🛟',

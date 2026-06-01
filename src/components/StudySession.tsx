@@ -67,12 +67,12 @@ function computeSM2(
   };
 }
 
-const SRS_THRESHOLDS = { mastered: 14, learning: 3 };
+const SRS_THRESHOLDS = { mastered: 14, sailing: 3 };
 
 function intervalToStatus(intervalDays: number): CardStatus {
   if (intervalDays >= SRS_THRESHOLDS.mastered) return 'mastered';
-  if (intervalDays >= SRS_THRESHOLDS.learning) return 'learning';
-  return 'building';
+  if (intervalDays >= SRS_THRESHOLDS.sailing) return 'sailing';
+  return 'charting';
 }
 
 function computeSM2Easy(prevReps: number, prevInterval: number, prevEF: number) {
@@ -138,7 +138,7 @@ function buildStudyDeck(cards: Card[], sortBy: 'lastReviewed' | 'srsNextReview')
 
 interface StudySessionProps {
   island: Island;
-  mode?: 'all' | 'building' | 'learning' | 'mastered' | 'due';
+  mode?: 'all' | 'charting' | 'sailing' | 'mastered' | 'due';
   settings?: UserSettings;
   allTimeBestStreak?: number;
   friends?: string[];
@@ -152,7 +152,7 @@ interface StudySessionProps {
   onFinish: (cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onManage: (cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onBackToMap: (cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
-  onSwitchMode?: (newMode: 'all' | 'building' | 'learning' | 'mastered' | 'due', cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
+  onSwitchMode?: (newMode: 'all' | 'charting' | 'sailing' | 'mastered' | 'due', cardUpdates: CardUpdateRecord, maxStreak: number, sessionMeta: SessionMeta) => void;
   onViewQuestion?: (question: Question) => void;
   onProgressUpdate?: (cardUpdates: CardUpdateRecord, sessionMaxStreak: number) => void;
 }
@@ -212,8 +212,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
 
   const [sessionStats, setSessionStats] = useState({
     mastered: 0,
-    learning: 0,
-    building: 0
+    sailing: 0,
+    charting: 0
   });
 
   // Confidence calibration state
@@ -415,8 +415,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const now = Date.now();
     const graceMs = (settings?.graceWindowMinutes ?? 0) * 60_000;
     let targetCards = activeTierCards;
-    if (mode === 'building') targetCards = activeTierCards.filter(c => c.status === 'building' || c.needsWork);
-    else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
+    if (mode === 'charting') targetCards = activeTierCards.filter(c => c.status === 'charting' || c.needsWork);
+    else if (mode === 'sailing') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'sailing');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
     else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs);
     targetCards = expandScenarioGroups(targetCards, activeTierCards);
@@ -434,8 +434,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const now = Date.now();
     const graceMs = (settings?.graceWindowMinutes ?? 0) * 60_000;
     let targetCards = activeTierCards;
-    if (mode === 'building') targetCards = activeTierCards.filter(c => c.status === 'building' || c.needsWork);
-    else if (mode === 'learning') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning');
+    if (mode === 'charting') targetCards = activeTierCards.filter(c => c.status === 'charting' || c.needsWork);
+    else if (mode === 'sailing') targetCards = activeTierCards.filter(c => (!c.status && !c.needsWork) || c.status === 'sailing');
     else if (mode === 'mastered') targetCards = activeTierCards.filter(c => c.status === 'mastered');
     else if (mode === 'due') targetCards = activeTierCards.filter(c => !c.srsNextReview || c.srsNextReview <= now + graceMs);
     targetCards = expandScenarioGroups(targetCards, activeTierCards);
@@ -504,7 +504,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       ...prev,
       [currentCard.front]: {
         ...prev[currentCard.front],
-        status: currentCard.status ?? 'building',
+        status: currentCard.status ?? 'charting',
         sessionAnswers: (prev[currentCard.front]?.sessionAnswers ?? 0) + 1,
         sessionCorrect: prev[currentCard.front]?.sessionCorrect ?? 0,
         ...(responseTimeMs !== undefined && { responseTimeMs, responseTimeIsCorrect: false }),
@@ -593,20 +593,20 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     calibrationTotal: sessionCalibration.total,
   });
 
-  const buildingCount = island.cards.filter(c => c.status === 'building' || c.needsWork).length;
+  const chartingCount = island.cards.filter(c => c.status === 'charting' || c.needsWork).length;
   const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
 
-  let masteryLevel: 'building' | 'learning' | 'mastered' = 'learning';
-  if (buildingCount > 0) {
-    masteryLevel = 'building';
+  let masteryLevel: 'charting' | 'sailing' | 'mastered' = 'sailing';
+  if (chartingCount > 0) {
+    masteryLevel = 'charting';
   } else if (island.cards.length > 0 && masteredCount === island.cards.length) {
     masteryLevel = 'mastered';
   } else {
-    masteryLevel = 'learning';
+    masteryLevel = 'sailing';
   }
 
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const imageSrc = masteryLevel === 'building' ? `${basePath}/struggling.jpeg` : masteryLevel === 'learning' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
+  const imageSrc = masteryLevel === 'charting' ? `${basePath}/struggling.jpeg` : masteryLevel === 'sailing' ? `${basePath}/learning.jpeg` : `${basePath}/mastered.jpeg`;
 
   const getTierInfo = (card: Card | undefined) => {
     if (!card) return null;
@@ -828,7 +828,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         parentReactivation = {
           front: parent.front,
           update: {
-            status: 'building',
+            status: 'charting',
             consecutiveCorrect: 0,
             consecutiveIncorrect: 0,
             srsInterval: 1,
@@ -936,8 +936,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       setSessionStats(prev => ({ ...prev, [status]: prev[status as keyof typeof prev] + 1 }));
 
       const isBeingDemotedFib =
-        status === 'building' &&
-        (currentCard.status === 'learning' || currentCard.status === 'mastered');
+        status === 'charting' &&
+        (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
       const { consecutiveCorrect: fibCC2, consecutiveIncorrect: fibCI2, extraCurrentCardFields: fibExtra2, parentReactivation: fibParent2 } = applyAnswerResult(currentCard, false);
 
@@ -1033,8 +1033,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     ));
     const hsStatus = intervalToStatus(srsHs.interval);
     const isBeingDemotedHs =
-      hsStatus === 'building' &&
-      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+      hsStatus === 'charting' &&
+      (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
     setSessionStats(prev => ({ ...prev, [hsStatus]: prev[hsStatus as keyof typeof prev] + 1 }));
 
@@ -1104,8 +1104,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }));
 
     const isBeingDemoted =
-      status === 'building' &&
-      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+      status === 'charting' &&
+      (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
     const { consecutiveCorrect: gradeCC, consecutiveIncorrect: gradeCI, extraCurrentCardFields: gradeExtra, parentReactivation: gradeParent } = applyAnswerResult(currentCard, isCorrect);
 
@@ -1417,8 +1417,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }));
 
     const isBeingDemotedMs =
-      status === 'building' &&
-      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+      status === 'charting' &&
+      (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
     const { consecutiveCorrect: msCC, consecutiveIncorrect: msCI, extraCurrentCardFields: msExtra, parentReactivation: msParent } = applyAnswerResult(currentCard, isCorrect);
 
@@ -1476,8 +1476,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     }));
 
     const isBeingDemotedSeq =
-      status === 'building' &&
-      (currentCard.status === 'learning' || currentCard.status === 'mastered');
+      status === 'charting' &&
+      (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
     const { consecutiveCorrect: seqCC, consecutiveIncorrect: seqCI, extraCurrentCardFields: seqExtra, parentReactivation: seqParent } = applyAnswerResult(currentCard, isCorrect);
 
@@ -1566,8 +1566,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
       }));
 
       const isBeingDemotedMcq =
-        status === 'building' &&
-        (currentCard.status === 'learning' || currentCard.status === 'mastered');
+        status === 'charting' &&
+        (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
       const { consecutiveCorrect: mcqWCC, consecutiveIncorrect: mcqWCI, extraCurrentCardFields: mcqWExtra, parentReactivation: mcqWParent } = applyAnswerResult(currentCard, false);
 
@@ -1802,8 +1802,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             }));
 
             const isBeingDemotedMatch =
-              status === 'building' &&
-              (currentCard.status === 'learning' || currentCard.status === 'mastered');
+              status === 'charting' &&
+              (currentCard.status === 'sailing' || currentCard.status === 'mastered');
 
             const { consecutiveCorrect: matchWCC, consecutiveIncorrect: matchWCI, extraCurrentCardFields: matchWExtra, parentReactivation: matchWParent } = applyAnswerResult(currentCard, false);
 
@@ -1899,7 +1899,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     setLiveCorrect(0);
     setLiveIncorrect(0);
     setSessionMaxStreak(0);
-    setSessionStats({ mastered: 0, learning: 0, building: 0 });
+    setSessionStats({ mastered: 0, sailing: 0, charting: 0 });
     sessionConsecutiveRef.current = new Map();
     firstAttemptRecorded.current = new Set();
     sessionStartTime.current = Date.now();
@@ -1913,7 +1913,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
     const dueCardsCleared = Object.keys(cardUpdates).filter(front => dueCardFrontsAtStart.has(front)).length;
     const meta = buildMeta();
     if (isTestMode) return null;
-    const buildingCards = Object.entries(cardUpdates)
+    const chartingCards = Object.entries(cardUpdates)
       .filter(([, u]) => (u as any).sessionCorrect === 0)
       .map(([front]) => ({ name: front, islandName: cardIslandRef.current[front] }));
 
@@ -1931,7 +1931,7 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
         mode={mode || 'all'}
         islandName={island.name}
         archipelagoName={archipelagoName}
-        buildingCards={buildingCards}
+        chartingCards={chartingCards}
         cardUpdates={attachCardIdentities(cardUpdates)}
         maxStreak={maxStreak}
         meta={meta}
@@ -1989,8 +1989,8 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
-                    if (masteryLevel === 'building') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=200&h=200';
-                    else if (masteryLevel === 'learning') target.src = 'https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?auto=format&fit=crop&q=80&w=200&h=200';
+                    if (masteryLevel === 'charting') target.src = 'https://images.unsplash.com/photo-1505672678657-cc7037095e60?auto=format&fit=crop&q=80&w=200&h=200';
+                    else if (masteryLevel === 'sailing') target.src = 'https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?auto=format&fit=crop&q=80&w=200&h=200';
                     else target.src = 'https://images.unsplash.com/photo-1523363065056-11f8b449174b?auto=format&fit=crop&q=80&w=200&h=200';
                   }}
                 />
@@ -2015,9 +2015,9 @@ export default function StudySession({ island, mode = 'all', settings, allTimeBe
             {onSwitchMode && (
               <NavAction
                 icon={mode === 'all' ? Zap : Library}
-                label={mode === 'all' ? 'Building' : 'All Cards'}
+                label={mode === 'all' ? 'Charting' : 'All Cards'}
                 variant="primary"
-                onClick={() => onSwitchMode(mode === 'all' ? 'building' : 'all', attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
+                onClick={() => onSwitchMode(mode === 'all' ? 'charting' : 'all', attachCardIdentities(mergeReelInBackup(cardUpdates)), maxStreak, buildMeta())}
               />
             )}
             <div className="flex items-center gap-2 glass px-3 md:px-4 py-2 rounded-full border-white/5 shadow-lg group relative">

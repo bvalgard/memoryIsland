@@ -6,7 +6,7 @@ import LightboxImage from './LightboxImage';
 
 interface IslandCardProps {
   island: any;
-  masteryLevel: 'building' | 'learning' | 'mastered';
+  masteryLevel: 'charting' | 'sailing' | 'mastered';
   islandImageSrc: string;
   trackingMode?: string;
   graceWindowMinutes?: number;
@@ -25,9 +25,9 @@ interface IslandCardProps {
 export default function IslandCard({ island, masteryLevel, islandImageSrc, trackingMode, graceWindowMinutes = 0, onClick, isPinned = false, isOnline = true, onPinToggle, isSelectMode = false, isSelected = false, onLongPress, onSelect, onMoveIsland }: IslandCardProps) {
   const getMasteryStyles = () => {
     switch (masteryLevel) {
-      case 'building':
+      case 'charting':
         return 'bg-gradient-to-br from-gray-900 to-purple-900/20 border-gray-800 hover:border-purple-500/50 hover:shadow-[0_0_30px_rgba(168,85,247,0.25)]';
-      case 'learning':
+      case 'sailing':
         return 'bg-gradient-to-br from-gray-900 to-blue-900/20 border-gray-800 hover:border-blue-500/50 hover:shadow-[0_0_30px_rgba(59,130,246,0.25)]';
       case 'mastered':
         return 'bg-gradient-to-br from-gray-900 to-emerald-900/20 border-gray-800 hover:border-emerald-500/50 hover:shadow-[0_0_30px_rgba(16,185,129,0.25)]';
@@ -44,17 +44,17 @@ export default function IslandCard({ island, masteryLevel, islandImageSrc, track
         return min;
       }, Infinity);
       switch (masteryLevel) {
-        case 'building': return "Cards due — some are overdue for review.";
-        case 'learning': return isFinite(nextDueTs) ? `Coming up — next due ${formatTimeUntil(nextDueTs)}.` : "Coming up — cards due soon.";
+        case 'charting': return "Cards due — some are overdue for review.";
+        case 'sailing': return isFinite(nextDueTs) ? `Coming up — next due ${formatTimeUntil(nextDueTs)}.` : "Coming up — cards due soon.";
         case 'mastered': return "All caught up — nothing due for over a week!";
         default: return "";
       }
     }
     switch (masteryLevel) {
-      case 'building':
-        return "Building Island — you have some items in the building category.";
-      case 'learning':
-        return "Learning Island — you're making progress with these cards.";
+      case 'charting':
+        return "Charting Island — you have some items in the charting category.";
+      case 'sailing':
+        return "Sailing Island — you're making progress with these cards.";
       case 'mastered':
         return "Mastered Island — well done, you've mastered this set!";
       default:

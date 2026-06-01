@@ -20,8 +20,8 @@ function formatRelativeTime(ts: number): string {
 interface HomeViewStatsProps {
   totalCards: number;
   progressPct: number;
-  buildingCount: number;
-  learningCount: number;
+  chartingCount: number;
+  sailingCount: number;
   masteredCount: number;
   progressTrackingMode: 'srs' | 'status' | 'both';
   accuracyStat: number | null;
@@ -30,14 +30,14 @@ interface HomeViewStatsProps {
   lastStudiedTs: number;
   dueCount: number;
   nextDueTs: number;
-  onShowBuilding: () => void;
+  onShowCharting: () => void;
   onNavigateToEditor: () => void;
 }
 
 export default function HomeViewStats({
-  totalCards, progressPct, buildingCount, learningCount, masteredCount,
+  totalCards, progressPct, chartingCount, sailingCount, masteredCount,
   progressTrackingMode, accuracyStat, islandTotalCorrect, islandTotalAnswers,
-  lastStudiedTs, dueCount, nextDueTs, onShowBuilding, onNavigateToEditor,
+  lastStudiedTs, dueCount, nextDueTs, onShowCharting, onNavigateToEditor,
 }: HomeViewStatsProps) {
   return (
     <div className="mt-4 space-y-5">
@@ -50,11 +50,11 @@ export default function HomeViewStats({
               <span className="text-[10px] font-bold text-brand-muted">{progressPct}% mastered</span>
             </div>
             <div className="h-3 rounded-full overflow-hidden flex bg-white/5">
-              {buildingCount > 0 && (
-                <div className="bg-red-500/70 h-full transition-all duration-700" style={{ width: `${(buildingCount / totalCards) * 100}%` }} />
+              {chartingCount > 0 && (
+                <div className="bg-red-500/70 h-full transition-all duration-700" style={{ width: `${(chartingCount / totalCards) * 100}%` }} />
               )}
-              {learningCount > 0 && (
-                <div className="bg-amber-500/70 h-full transition-all duration-700" style={{ width: `${(learningCount / totalCards) * 100}%` }} />
+              {sailingCount > 0 && (
+                <div className="bg-amber-500/70 h-full transition-all duration-700" style={{ width: `${(sailingCount / totalCards) * 100}%` }} />
               )}
               {masteredCount > 0 && (
                 <div className="bg-emerald-500/70 h-full transition-all duration-700" style={{ width: `${(masteredCount / totalCards) * 100}%` }} />
@@ -62,10 +62,10 @@ export default function HomeViewStats({
             </div>
             <div className="flex flex-wrap gap-4 mt-2">
               <span className="flex items-center gap-1.5 text-[11px] text-red-400/80">
-                <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" />{buildingCount} building
+                <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" />{chartingCount} charting
               </span>
               <span className="flex items-center gap-1.5 text-[11px] text-amber-400/80">
-                <span className="w-2 h-2 rounded-full bg-amber-500/70 inline-block" />{learningCount} learning
+                <span className="w-2 h-2 rounded-full bg-amber-500/70 inline-block" />{sailingCount} sailing
               </span>
               <span className="flex items-center gap-1.5 text-[11px] text-emerald-400/80">
                 <span className="w-2 h-2 rounded-full bg-emerald-500/70 inline-block" />{masteredCount} mastered
@@ -109,16 +109,16 @@ export default function HomeViewStats({
         </div>
       )}
 
-      {/* Building Cards trigger */}
-      {buildingCount > 0 && (
+      {/* Charting Cards trigger */}
+      {chartingCount > 0 && (
         <button
-          onClick={onShowBuilding}
+          onClick={onShowCharting}
           className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500/70 inline-block shrink-0" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-red-400">Building Cards</span>
-            <span className="text-[11px] text-red-400/60 font-bold">({buildingCount})</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-red-400">Charting Cards</span>
+            <span className="text-[11px] text-red-400/60 font-bold">({chartingCount})</span>
           </div>
           <ChevronDown className="w-4 h-4 text-red-400/60" />
         </button>

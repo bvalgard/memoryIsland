@@ -19,7 +19,7 @@ interface HotspotEditorProps {
  * Supports independent Width/Height radii and a Rotation angle (0–360°).
  * A "Constrain Proportions" lock keeps Width === Height for a perfect circle.
  *
- * When building a multi-question set, `existingZones` shows the already-added
+ * When charting a multi-question set, `existingZones` shows the already-added
  * questions as numbered purple pins so the creator can see all placements at once.
  */
 export function HotspotEditor({ imageUrl, zone, onZoneChange, existingZones }: HotspotEditorProps) {

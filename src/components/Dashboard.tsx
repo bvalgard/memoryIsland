@@ -95,7 +95,7 @@ export default function Dashboard() {
     return localStorage.getItem('selectedArchipelagoId') || null;
   });
   const [isStudying, setIsStudying] = useState(false);
-  const [studyMode, setStudyMode] = useState<'all' | 'building' | 'learning' | 'mastered' | 'due'>('all');
+  const [studyMode, setStudyMode] = useState<'all' | 'charting' | 'sailing' | 'mastered' | 'due'>('all');
   const [studySelection, setStudySelection] = useState<Set<string> | null>(null);
   const [frozenStudySelection, setFrozenStudySelection] = useState<Set<string> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -206,10 +206,10 @@ export default function Dashboard() {
     }
   }, [progress?.settings]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-building'>(() => {
+  const [sortOrder, setSortOrder] = useState<'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-charting'>(() => {
     const stored = localStorage.getItem('islandSortOrder');
-    if (stored === 'most-struggling') return 'most-building';
-    return (stored as 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-building') || 'alpha-asc';
+    if (stored === 'most-struggling' || stored === 'most-building') return 'most-charting';
+    return (stored as 'alpha-asc' | 'alpha-desc' | 'creation' | 'next-due' | 'most-charting') || 'alpha-asc';
   });
 
   useEffect(() => {
@@ -571,10 +571,10 @@ export default function Dashboard() {
         };
         return getDueTime(a) - getDueTime(b);
       }
-      if (sortOrder === 'most-building') {
-        const countBuilding = (island: typeof a) =>
-          island.cards.filter(c => c.status === 'building' || c.needsWork).length;
-        return countBuilding(b) - countBuilding(a);
+      if (sortOrder === 'most-charting') {
+        const countCharting = (island: typeof a) =>
+          island.cards.filter(c => c.status === 'charting' || c.needsWork).length;
+        return countCharting(b) - countCharting(a);
       }
       return 0;
     });
@@ -627,12 +627,12 @@ export default function Dashboard() {
 
   // Adjusted counts for Archipelago
   const graceMs = (progress?.settings?.graceWindowMinutes ?? 0) * 60_000;
-  const globalBuildingCount = allCards.filter(c => c.status === 'building' || c.needsWork).length;
-  const globalLearningCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
+  const globalChartingCount = allCards.filter(c => c.status === 'charting' || c.needsWork).length;
+  const globalSailingCount = allCards.filter(c => (!c.status && !c.needsWork) || c.status === 'sailing').length;
   const globalMasteredCount = allCards.filter(c => c.status === 'mastered').length;
   const globalDueCount = getActiveTierCards(allCards).filter(c => !c.srsNextReview || c.srsNextReview <= Date.now() + graceMs).length;
 
-  // Learning insights computations
+  // Sailing insights computations
   const weakSpotCards = [...allCards]
     .filter(c => (c.demotionCount ?? 0) >= 2 || c.needsWork)
     .sort((a, b) => (b.demotionCount ?? 0) - (a.demotionCount ?? 0))
@@ -1452,8 +1452,8 @@ export default function Dashboard() {
         onClose={() => setActiveModal(null)}
         allCards={allCards}
         globalMasteredCount={globalMasteredCount}
-        globalLearningCount={globalLearningCount}
-        globalBuildingCount={globalBuildingCount}
+        globalSailingCount={globalSailingCount}
+        globalChartingCount={globalChartingCount}
         trackingMode={trackingMode}
         progress={progress}
         forgettingCount={forgettingCount}
@@ -1944,24 +1944,24 @@ export default function Dashboard() {
                           {trackingMode !== 'srs' && (
                             <>
                               <button
-                                onClick={() => setStudyMode('building')}
-                                disabled={globalBuildingCount === 0}
+                                onClick={() => setStudyMode('charting')}
+                                disabled={globalChartingCount === 0}
                                 className={cn(
                                   "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
-                                  studyMode === 'building' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
+                                  studyMode === 'charting' ? "bg-red-500/20 text-red-400 border border-red-500/30" : "text-brand-muted hover:text-red-400"
                                 )}
                               >
-                                Building ({globalBuildingCount})
+                                Charting ({globalChartingCount})
                               </button>
                               <button
-                                onClick={() => setStudyMode('learning')}
-                                disabled={globalLearningCount === 0}
+                                onClick={() => setStudyMode('sailing')}
+                                disabled={globalSailingCount === 0}
                                 className={cn(
                                   "flex-1 sm:flex-none px-4 py-2 rounded-xl transition-colors font-bold text-[10px] tracking-widest uppercase whitespace-nowrap disabled:opacity-20",
-                                  studyMode === 'learning' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-brand-muted hover:text-amber-400"
+                                  studyMode === 'sailing' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-brand-muted hover:text-amber-400"
                                 )}
                               >
-                                Learning ({globalLearningCount})
+                                Sailing ({globalSailingCount})
                               </button>
                               <button
                                 onClick={() => setStudyMode('mastered')}
@@ -2023,33 +2023,33 @@ export default function Dashboard() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                         {filteredArchipelagos.map((archipelago) => {
                           const archIslands = currentIslands.filter(i => i.archipelagoId === archipelago.id);
-                          let masteryLevel: 'building' | 'learning' | 'mastered' = 'learning';
+                          let masteryLevel: 'charting' | 'sailing' | 'mastered' = 'sailing';
 
                           if (trackingMode === 'srs') {
                             const now = Date.now();
                             const sevenDaysMs = now + 7 * 24 * 60 * 60 * 1000;
                             const allArchCards = archIslands.flatMap(i => getActiveTierCards(i.cards));
                             if (allArchCards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now + graceMs)) {
-                              masteryLevel = 'building';
+                              masteryLevel = 'charting';
                             } else if (allArchCards.some((c: any) => c.srsNextReview && c.srsNextReview <= sevenDaysMs)) {
-                              masteryLevel = 'learning';
+                              masteryLevel = 'sailing';
                             } else if (allArchCards.length > 0) {
                               masteryLevel = 'mastered';
                             }
                           } else {
-                            const hasBuilding = archIslands.some(i => i.cards.some(c => c.status === 'building' || c.needsWork));
-                            if (hasBuilding) {
-                              masteryLevel = 'building';
+                            const hasCharting = archIslands.some(i => i.cards.some(c => c.status === 'charting' || c.needsWork));
+                            if (hasCharting) {
+                              masteryLevel = 'charting';
                             } else {
                               const allArchCards = archIslands.flatMap(i => i.cards);
-                              masteryLevel = allArchCards.length > 0 && allArchCards.every(c => c.status === 'mastered') ? 'mastered' : 'learning';
+                              masteryLevel = allArchCards.length > 0 && allArchCards.every(c => c.status === 'mastered') ? 'mastered' : 'sailing';
                             }
                           }
 
                           const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
                           let imageSrc = '';
-                          if (masteryLevel === 'building') imageSrc = `${basePath}/StrugglingArch.jpeg`;
-                          else if (masteryLevel === 'learning') imageSrc = `${basePath}/LearningArch.jpeg`;
+                          if (masteryLevel === 'charting') imageSrc = `${basePath}/StrugglingArch.jpeg`;
+                          else if (masteryLevel === 'sailing') imageSrc = `${basePath}/LearningArch.jpeg`;
                           else imageSrc = `${basePath}/MasteredArch.jpeg`;
 
                           return (
@@ -2118,7 +2118,7 @@ export default function Dashboard() {
                           <div className="text-center relative z-10 max-w-sm">
                             <h2 className="text-2xl font-bold text-white mb-3">Create your first Island</h2>
                             <p className="text-brand-muted text-sm mb-8 leading-relaxed">
-                              Add cards, study daily, and watch your mastery grow — from building all the way to mastered.
+                              Add cards, study daily, and watch your mastery grow — from charting all the way to mastered.
                             </p>
                             <button
                               onClick={() => setIsArchipelagoModalOpen(true)}
@@ -2162,13 +2162,13 @@ export default function Dashboard() {
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                             {archIslands.map(island => {
-                              const sc = island.cards.filter((c: any) => c.status === 'building' || c.needsWork).length;
+                              const sc = island.cards.filter((c: any) => c.status === 'charting' || c.needsWork).length;
                               const mc = island.cards.filter((c: any) => c.status === 'mastered').length;
-                              let ml: 'building' | 'learning' | 'mastered' = 'learning';
-                              if (sc > 0) ml = 'building';
+                              let ml: 'charting' | 'sailing' | 'mastered' = 'sailing';
+                              if (sc > 0) ml = 'charting';
                               else if (island.cards.length > 0 && mc === island.cards.length) ml = 'mastered';
                               const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-                              const imgSrc = ml === 'building' ? `${basePath}/struggling.jpeg` : ml === 'mastered' ? `${basePath}/mastered.jpeg` : `${basePath}/learning.jpeg`;
+                              const imgSrc = ml === 'charting' ? `${basePath}/struggling.jpeg` : ml === 'mastered' ? `${basePath}/mastered.jpeg` : `${basePath}/learning.jpeg`;
                               return (
                                 <IslandCard
                                   key={island.id}
@@ -2202,13 +2202,13 @@ export default function Dashboard() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                           {currentIslands.filter(i => !i.archipelagoId).map(island => {
-                            const sc = island.cards.filter((c: any) => c.status === 'building' || c.needsWork).length;
+                            const sc = island.cards.filter((c: any) => c.status === 'charting' || c.needsWork).length;
                             const mc = island.cards.filter((c: any) => c.status === 'mastered').length;
-                            let ml: 'building' | 'learning' | 'mastered' = 'learning';
-                            if (sc > 0) ml = 'building';
+                            let ml: 'charting' | 'sailing' | 'mastered' = 'sailing';
+                            if (sc > 0) ml = 'charting';
                             else if (island.cards.length > 0 && mc === island.cards.length) ml = 'mastered';
                             const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-                            const imgSrc = ml === 'building' ? `${basePath}/struggling.jpeg` : ml === 'mastered' ? `${basePath}/mastered.jpeg` : `${basePath}/learning.jpeg`;
+                            const imgSrc = ml === 'charting' ? `${basePath}/struggling.jpeg` : ml === 'mastered' ? `${basePath}/mastered.jpeg` : `${basePath}/learning.jpeg`;
                             return (
                               <IslandCard
                                 key={island.id}
@@ -2239,10 +2239,10 @@ export default function Dashboard() {
                   // Archipelago drill-down: show its islands
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                     {filteredIslands.map((island) => {
-                      const buildingCount = island.cards.filter(c => c.status === 'building' || c.needsWork).length;
+                      const chartingCount = island.cards.filter(c => c.status === 'charting' || c.needsWork).length;
                       const masteredCount = island.cards.filter(c => c.status === 'mastered').length;
 
-                      let masteryLevel: 'building' | 'learning' | 'mastered' = 'learning';
+                      let masteryLevel: 'charting' | 'sailing' | 'mastered' = 'sailing';
                       if (trackingMode === 'srs') {
                         const now = Date.now();
                         const sevenDaysMs = now + 7 * 24 * 60 * 60 * 1000;
@@ -2251,16 +2251,16 @@ export default function Dashboard() {
                           const activeTierCards = getActiveTierCards(island.cards);
                           const hasDueOrOverdue = activeTierCards.some((c: any) => !c.srsNextReview || c.srsNextReview <= now + graceMs);
                           if (hasDueOrOverdue) {
-                            masteryLevel = 'building';
+                            masteryLevel = 'charting';
                           } else if (activeTierCards.some((c: any) => c.srsNextReview <= sevenDaysMs)) {
-                            masteryLevel = 'learning';
+                            masteryLevel = 'sailing';
                           } else {
                             masteryLevel = 'mastered';
                           }
                         }
                       } else {
-                        if (buildingCount > 0) {
-                          masteryLevel = 'building';
+                        if (chartingCount > 0) {
+                          masteryLevel = 'charting';
                         } else if (island.cards.length > 0 && masteredCount === island.cards.length) {
                           masteryLevel = 'mastered';
                         }
@@ -2268,8 +2268,8 @@ export default function Dashboard() {
 
                       const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
                       let imageSrc = '';
-                      if (masteryLevel === 'building') imageSrc = `${basePath}/struggling.jpeg`;
-                      else if (masteryLevel === 'learning') imageSrc = `${basePath}/learning.jpeg`;
+                      if (masteryLevel === 'charting') imageSrc = `${basePath}/struggling.jpeg`;
+                      else if (masteryLevel === 'sailing') imageSrc = `${basePath}/learning.jpeg`;
                       else imageSrc = `${basePath}/mastered.jpeg`;
 
                       return (

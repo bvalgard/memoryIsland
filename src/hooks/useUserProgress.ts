@@ -24,7 +24,7 @@ import {
 import { auth, db, isConfigPlaceholder } from '../firebase';
 import { SessionMeta } from '../achievements';
 
-export type CardStatus = 'learning' | 'building' | 'mastered';
+export type CardStatus = 'sailing' | 'charting' | 'mastered';
 export type CardUpdateRecord = Record<string, {
   cardId?: string;
   islandId?: string;
@@ -1522,7 +1522,7 @@ export function useUserProgress() {
     }
     const payload: Record<string, unknown> = {
       status: update.status,
-      needsWork: update.status === 'building',
+      needsWork: update.status === 'charting',
       lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
       totalAnswers: increment(update.sessionAnswers || 1),
       totalCorrect: increment(update.sessionCorrect || 0),
@@ -1558,7 +1558,7 @@ export function useUserProgress() {
       const prefix = `userProgress.${uid}`;
       const payload: Record<string, unknown> = {
         [`${prefix}.status`]: update.status,
-        [`${prefix}.needsWork`]: update.status === 'building',
+        [`${prefix}.needsWork`]: update.status === 'charting',
         [`${prefix}.lastReviewed`]: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
         [`${prefix}.totalAnswers`]: increment((update.sessionAnswers || 1)),
         [`${prefix}.totalCorrect`]: increment((update.sessionCorrect || 0)),
@@ -1580,7 +1580,7 @@ export function useUserProgress() {
 
     const payload: Record<string, unknown> = {
       status: update.status,
-      needsWork: update.status === 'building',
+      needsWork: update.status === 'charting',
       lastReviewed: update.lastReviewed ?? card.lastReviewed ?? Date.now(),
       totalAnswers: (card.totalAnswers || 0) + (update.sessionAnswers || 1),
       totalCorrect: (card.totalCorrect || 0) + (update.sessionCorrect || 0),
@@ -2360,7 +2360,7 @@ export function useUserProgress() {
       if (island.isCollaborative) {
         const prefix = `userProgress.${user.uid}`;
         batch.update(cardRef, {
-          [`${prefix}.status`]: 'learning',
+          [`${prefix}.status`]: 'sailing',
           [`${prefix}.needsWork`]: false,
           [`${prefix}.consecutiveCorrect`]: deleteField(),
           [`${prefix}.lastReviewed`]: deleteField(),
@@ -2374,7 +2374,7 @@ export function useUserProgress() {
         });
       } else {
         batch.update(cardRef, {
-          status: 'learning',
+          status: 'sailing',
           needsWork: false,
           consecutiveCorrect: deleteField(),
           lastReviewed: deleteField(),
@@ -2420,7 +2420,7 @@ export function useUserProgress() {
         if (island.isCollaborative) {
           const prefix = `userProgress.${user.uid}`;
           current.update(cardRef, {
-            [`${prefix}.status`]: 'learning',
+            [`${prefix}.status`]: 'sailing',
             [`${prefix}.needsWork`]: false,
             [`${prefix}.consecutiveCorrect`]: deleteField(),
             [`${prefix}.lastReviewed`]: deleteField(),
@@ -2434,7 +2434,7 @@ export function useUserProgress() {
           });
         } else {
           current.update(cardRef, {
-            status: 'learning',
+            status: 'sailing',
             needsWork: false,
             consecutiveCorrect: deleteField(),
             lastReviewed: deleteField(),

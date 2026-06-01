@@ -19,8 +19,8 @@ interface StatsPanelProps {
   onClose: () => void;
   allCards: Card[];
   globalMasteredCount: number;
-  globalLearningCount: number;
-  globalBuildingCount: number;
+  globalSailingCount: number;
+  globalChartingCount: number;
   trackingMode: 'srs' | 'status' | 'both';
   progress: UserProgress | null;
   forgettingCount: number;
@@ -35,7 +35,7 @@ interface StatsPanelProps {
 }
 
 export default function StatsPanel({
-  isOpen, onClose, allCards, globalMasteredCount, globalLearningCount, globalBuildingCount,
+  isOpen, onClose, allCards, globalMasteredCount, globalSailingCount, globalChartingCount,
   trackingMode, progress, forgettingCount, bestStudyHour, weakSpotCards, blindSpotData,
   formatStudyHour, blindSpotOpen, setBlindSpotOpen, knowledgeGapOpen, setKnowledgeGapOpen,
 }: StatsPanelProps) {
@@ -67,7 +67,7 @@ export default function StatsPanel({
               <div className="w-12 h-12 bg-brand-primary/10 rounded-2xl flex items-center justify-center mb-6">
                 <BarChart2 className="w-6 h-6 text-brand-primary" />
               </div>
-              <h2 className="text-2xl font-bold mb-2">Learning Statistics</h2>
+              <h2 className="text-2xl font-bold mb-2">Sailing Statistics</h2>
               <p className="text-brand-muted text-sm leading-relaxed mb-8">
                 Track your mastery across the entire archipelago.
               </p>
@@ -90,12 +90,12 @@ export default function StatsPanel({
                     <div className="text-[10px] font-bold tracking-widest uppercase text-emerald-500/80">Mastered</div>
                   </div>
                   <div className="bg-amber-500/5 rounded-2xl p-4 border border-amber-500/20 border-b-2 border-b-amber-500/40">
-                    <div className="text-3xl font-black text-amber-400 mb-1">{globalLearningCount}</div>
-                    <div className="text-[10px] font-bold tracking-widest uppercase text-amber-500/80">Learning</div>
+                    <div className="text-3xl font-black text-amber-400 mb-1">{globalSailingCount}</div>
+                    <div className="text-[10px] font-bold tracking-widest uppercase text-amber-500/80">Sailing</div>
                   </div>
                   <div className="bg-red-500/5 rounded-2xl p-4 border border-red-500/20 border-b-2 border-b-red-500/40">
-                    <div className="text-3xl font-black text-red-400 mb-1">{globalBuildingCount}</div>
-                    <div className="text-[10px] font-bold tracking-widest uppercase text-red-500/80">Building</div>
+                    <div className="text-3xl font-black text-red-400 mb-1">{globalChartingCount}</div>
+                    <div className="text-[10px] font-bold tracking-widest uppercase text-red-500/80">Charting</div>
                   </div>
                 </div>
               </div>
@@ -180,13 +180,13 @@ export default function StatsPanel({
                 </div>
               )}
 
-              {/* Learning Insights */}
+              {/* Sailing Insights */}
               {((trackingMode !== 'status' && (forgettingCount > 0 || bestStudyHour != null)) ||
                 (trackingMode !== 'srs' && weakSpotCards.length > 0)) && (
                 <div className="mb-12">
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                     <Activity className="w-5 h-5 text-brand-primary" />
-                    Learning Insights
+                    Sailing Insights
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                     {trackingMode !== 'status' && forgettingCount > 0 && (
@@ -353,8 +353,8 @@ export default function StatsPanel({
               <div className="space-y-4">
                 {(progress?.islands || []).map(island => {
                   const mst = island.cards.filter(c => c.status === 'mastered').length;
-                  const lrn = island.cards.filter(c => (!c.status && !c.needsWork) || c.status === 'learning').length;
-                  const str = island.cards.filter(c => c.status === 'building' || c.needsWork).length;
+                  const lrn = island.cards.filter(c => (!c.status && !c.needsWork) || c.status === 'sailing').length;
+                  const str = island.cards.filter(c => c.status === 'charting' || c.needsWork).length;
                   return (
                     <div key={island.id} className="bg-black/40 rounded-2xl p-5 border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                       <div className="flex-1">

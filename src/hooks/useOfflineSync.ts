@@ -15,12 +15,12 @@ import type { SessionMeta } from '../achievements';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
-const STATUS_RANK: Record<CardStatus, number> = { mastered: 2, learning: 1, building: 0 };
+const STATUS_RANK: Record<CardStatus, number> = { mastered: 2, sailing: 1, charting: 0 };
 
 function worseStatus(a: CardStatus | undefined, b: CardStatus | undefined): CardStatus {
-  const ra = STATUS_RANK[a ?? 'learning'] ?? 1;
-  const rb = STATUS_RANK[b ?? 'learning'] ?? 1;
-  return ra <= rb ? (a ?? 'learning') : (b ?? 'learning');
+  const ra = STATUS_RANK[a ?? 'sailing'] ?? 1;
+  const rb = STATUS_RANK[b ?? 'sailing'] ?? 1;
+  return ra <= rb ? (a ?? 'sailing') : (b ?? 'sailing');
 }
 
 function resolveConflicts(
