@@ -105,7 +105,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'horizon-chaser',
     name: 'The Horizon Chaser',
-    description: 'Completed a study session lasting longer than 45 minutes.',
+    description: 'Studied 7 days in a row, reviewing at least 10 cards each day.',
     category: 'motivating',
     hidden: false,
     icon: '🌅',

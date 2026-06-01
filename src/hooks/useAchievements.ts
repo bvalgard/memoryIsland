@@ -74,7 +74,19 @@ export function useAchievements() {
     if (ctx.trigger === 'session-complete' && ctx.sessionMeta) {
       const { cardCount, correctCount, sessionDurationMs, sessionStartHour } = ctx.sessionMeta;
       if (cardCount >= 20 && correctCount === cardCount) tryUnlock('perfect-voyage');
-      if (sessionDurationMs >= 45 * 60 * 1000) tryUnlock('horizon-chaser');
+      // dailyActivityMap is pre-update in this snapshot, so add today's session manually
+      const activityMap = stats?.dailyActivityMap ?? {};
+      const today = new Date();
+      const todayKey = today.toISOString().split('T')[0];
+      const todayTotal = (activityMap[todayKey] ?? 0) + cardCount;
+      let sevenDayStreak = todayTotal >= 10;
+      for (let d = 1; d < 7 && sevenDayStreak; d++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - d);
+        const key = date.toISOString().split('T')[0];
+        if ((activityMap[key] ?? 0) < 10) sevenDayStreak = false;
+      }
+      if (sevenDayStreak) tryUnlock('horizon-chaser');
       if (sessionStartHour >= 2 && sessionStartHour < 4) tryUnlock('night-watch');
       if (stats && stats.recordReviewed > 0) {
         const newDailyTotal = stats.dailyReviewed + cardCount;
