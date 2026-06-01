@@ -39,10 +39,12 @@ export default function NotificationsPanel({
       )}
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 mb-2">
-        <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-black">Memory Alerts</p>
-        <span className="text-[10px] bg-brand-primary/20 text-brand-primary px-2 py-0.5 rounded-full font-bold">
-          {notifications.length} Alerts
-        </span>
+        <p className="text-[10px] text-brand-muted uppercase tracking-[0.2em] font-black">Notifications</p>
+        {notifications.length > 0 && (
+          <span className="text-[10px] bg-brand-primary/20 text-brand-primary px-2 py-0.5 rounded-full font-bold">
+            {notifications.length} New
+          </span>
+        )}
       </div>
 
       <div className={cn("overflow-y-auto space-y-1 custom-scrollbar", position === 'side' ? "max-h-[300px]" : "max-h-[250px]")}>

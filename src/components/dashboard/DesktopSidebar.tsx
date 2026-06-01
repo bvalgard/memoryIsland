@@ -24,16 +24,17 @@ interface DesktopSidebarProps {
   onSignOut: () => void;
   onNotificationSelect: (id: string) => void;
   setDistressInitialTab: (t: 'all' | 'mine') => void;
+  openDistressCount: number;
 }
 
 export default function DesktopSidebar({
   user, isProfileOpen, setIsProfileOpen, isNotificationsOpen, setIsNotificationsOpen,
   profileRef, notifications, unreadCount, unreadSocialCount, unreadDiscoverCount,
   selectedIslandId, setSelectedIslandId, activeModal, setActiveModal,
-  isNewUser, onSignOut, onNotificationSelect, setDistressInitialTab,
+  isNewUser, onSignOut, onNotificationSelect, setDistressInitialTab, openDistressCount,
 }: DesktopSidebarProps) {
   return (
-    <aside className="w-20 hidden md:flex flex-col items-center py-6 border-r border-brand-border bg-brand-card z-50 shrink-0">
+    <aside className="w-[68px] hidden md:flex flex-col items-center py-6 border-r border-brand-border bg-brand-card z-50 shrink-0">
       <div className="relative mb-8" ref={profileRef}>
         <button
           onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -92,14 +93,15 @@ export default function DesktopSidebar({
         <button
           onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
           className={cn(
-            "relative text-brand-muted hover:text-white transition-all p-2 rounded-xl border border-transparent hover:border-white/5 hover:bg-white/5",
-            isNotificationsOpen && "text-white bg-white/5 border-white/10"
+            "relative flex flex-col items-center gap-1 text-brand-muted hover:text-white transition-all",
+            isNotificationsOpen && "text-white"
           )}
         >
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-primary rounded-full border-2 border-brand-card shadow-[0_0_10px_rgba(66,133,244,0.5)]" />
+            <span className="absolute top-0 right-0 w-2 h-2 bg-brand-primary rounded-full border-2 border-brand-card shadow-[0_0_10px_rgba(66,133,244,0.5)]" />
           )}
+          <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Alerts</span>
         </button>
 
         <AnimatePresence>
@@ -113,103 +115,91 @@ export default function DesktopSidebar({
         </AnimatePresence>
       </div>
 
-      <nav className="flex flex-col gap-8 flex-1">
+      <nav className="flex flex-col gap-5 flex-1">
         <button
           onClick={() => setSelectedIslandId(null)}
-          className={cn("relative group transition-all flex items-center justify-center", selectedIslandId ? "text-brand-muted hover:text-white" : "text-white")}
+          className={cn("transition-all flex flex-col items-center gap-1", selectedIslandId ? "text-brand-muted hover:text-white" : "text-white")}
         >
-          <LayoutDashboard className="w-6 h-6" />
-          <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-            Knowledge Map
-          </div>
+          <LayoutDashboard className="w-5 h-5" />
+          <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Dashboard</span>
         </button>
         <button
           onClick={() => setActiveModal('discover')}
           className={cn(
-            "relative group transition-all flex items-center justify-center",
+            "relative transition-all flex flex-col items-center gap-1",
             activeModal === 'discover' ? "text-brand-primary" : "text-brand-muted hover:text-white"
           )}
         >
-          <Compass className="w-6 h-6" />
+          <Compass className="w-5 h-5" />
           {unreadDiscoverCount > 0 && (
-            <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+            <span className="absolute top-0 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
           )}
-          <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-            Discover
-          </div>
+          <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Discover</span>
         </button>
 
         {!isNewUser && (
           <>
             <button
               onClick={() => setActiveModal('users')}
-              className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              className="relative text-brand-muted hover:text-white transition-all flex flex-col items-center gap-1"
             >
-              <Users className="w-6 h-6" />
+              <Users className="w-5 h-5" />
               {unreadSocialCount > 0 && (
-                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+                <span className="absolute top-0 right-2 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
               )}
-              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                Social
-              </div>
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Social</span>
             </button>
             <button
               onClick={() => setActiveModal('stats')}
-              className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              className="text-brand-muted hover:text-white transition-all flex flex-col items-center gap-1"
             >
-              <BarChart2 className="w-6 h-6" />
-              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                Statistics
-              </div>
+              <BarChart2 className="w-5 h-5" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Stats</span>
             </button>
             <button
               onClick={() => setActiveModal('leaderboard')}
-              className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              className="text-brand-muted hover:text-white transition-all flex flex-col items-center gap-1"
             >
-              <Trophy className="w-6 h-6" />
-              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                Competitions
-              </div>
+              <Trophy className="w-5 h-5" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Leaderboard</span>
             </button>
             <button
               onClick={() => setActiveModal('trophies')}
-              className="relative group text-brand-muted hover:text-white transition-all flex items-center justify-center"
+              className="text-brand-muted hover:text-white transition-all flex flex-col items-center gap-1"
             >
-              <Award className="w-6 h-6" />
-              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                Captain's Quarters
-              </div>
+              <Award className="w-5 h-5" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Trophies</span>
             </button>
             <button
               onClick={() => { setDistressInitialTab('all'); setActiveModal('distress'); }}
-              className="relative group text-orange-400/50 hover:text-orange-400 transition-all flex items-center justify-center"
+              className={cn(
+                "transition-all flex flex-col items-center gap-1 relative",
+                activeModal === 'distress' ? "text-brand-primary" : "text-brand-muted hover:text-white"
+              )}
             >
-              <Radio className="w-6 h-6" />
-              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                Distress Signals
-              </div>
+              <Radio className="w-5 h-5" />
+              {openDistressCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-400 border border-brand-card" />
+              )}
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Questions</span>
             </button>
             <button
               onClick={() => setActiveModal('testMode')}
               className={cn(
-                "relative group transition-all flex items-center justify-center",
+                "transition-all flex flex-col items-center gap-1",
                 activeModal === 'testMode' ? "text-brand-primary" : "text-brand-muted hover:text-white"
               )}
             >
-              <GraduationCap className="w-6 h-6" />
-              <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-                Test Mode
-              </div>
+              <GraduationCap className="w-5 h-5" />
+              <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Exam Voyage</span>
             </button>
           </>
         )}
 
         {isNewUser && (
-          <div className="relative group flex items-center justify-center text-brand-muted/20">
+          <div className="flex flex-col items-center gap-1 text-brand-muted/20">
             <MoreHorizontal className="w-5 h-5" />
-            <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#222] border border-white/5 text-xs text-white/70 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl">
-              More features unlock as you study
-            </div>
+            <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">More</span>
           </div>
         )}
       </nav>

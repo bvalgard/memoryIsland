@@ -65,13 +65,15 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-bg md:p-12 overflow-hidden">
-      {/* Mobile Frame Container */}
-      <motion.div 
+    <div className="min-h-screen flex items-center justify-center bg-brand-bg overflow-hidden">
+      <div className="flex w-full min-h-screen md:min-h-0 items-center justify-center md:justify-start md:pl-[10vw] md:gap-16 lg:gap-24">
+
+      {/* Auth card */}
+      <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full h-full md:w-[375px] md:h-[667px] bg-brand-card md:rounded-[40px] md:border-8 border-[#1a1a1a] shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col"
+        className="relative w-full h-full md:w-[375px] md:h-[667px] md:shrink-0 bg-brand-card md:rounded-[40px] md:border-8 border-[#1a1a1a] shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col"
       >
         {/* Background Gradients */}
         <div className="absolute top-[-100px] left-[-100px] w-[300px] h-[300px] bg-brand-primary/10 rounded-full blur-[80px]" />
@@ -138,7 +140,7 @@ export default function Auth() {
                   
                   {isConfigPlaceholder ? (
                     <button 
-                      onClick={() => window.location.href = '/dashboard'}
+                      onClick={() => window.location.href = `${BASE}/#/dashboard`}
                       className="w-full btn-secondary text-amber-500/80 border-amber-500/20 hover:bg-amber-500/5"
                     >
                       Enter Demo Dashboard
@@ -286,6 +288,66 @@ export default function Auth() {
         {/* iPhone style home indicator */}
         <div className="w-32 h-1 bg-[#333] rounded-full mx-auto mb-2 hidden md:block" />
       </motion.div>
+
+      {/* Right panel — desktop only */}
+      <motion.div
+        initial={{ opacity: 0, x: 40 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        className="hidden md:flex flex-col justify-center max-w-sm lg:max-w-md"
+      >
+        <div className="mb-10">
+          <h2 className="text-4xl lg:text-5xl font-bold tracking-tight leading-tight mb-4">
+            Anchor what<br />you learn.
+          </h2>
+          <p className="text-brand-muted text-base leading-relaxed">
+            Memory Island uses spaced repetition to help knowledge stick — so you stop re-learning what you already studied.
+          </p>
+        </div>
+
+        {/* Island progression display */}
+        <div className="flex gap-4 mb-10">
+          {[
+            { src: `${BASE}/struggling.jpeg`, label: 'Struggling', color: 'text-red-400' },
+            { src: `${BASE}/learning.jpeg`,   label: 'Learning',   color: 'text-amber-400' },
+            { src: `${BASE}/mastered.jpeg`,   label: 'Mastered',   color: 'text-emerald-400' },
+          ].map(({ src, label, color }, i) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 + i * 0.12, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="flex flex-col items-center gap-2"
+            >
+              <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-[20px] overflow-hidden border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+                <img src={src} alt={label} className="w-full h-full object-cover" />
+              </div>
+              <span className={`text-[10px] uppercase tracking-widest font-bold ${color}`}>{label}</span>
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {[
+            'Spaced repetition that adapts to you',
+            'Track mastery across every subject',
+            'Study with friends on shared islands',
+          ].map((item, i) => (
+            <motion.div
+              key={item}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.7 + i * 0.1, duration: 0.5 }}
+              className="flex items-center gap-3 text-sm text-brand-muted"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-brand-primary shrink-0" />
+              {item}
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+
+      </div>
     </div>
   );
 }

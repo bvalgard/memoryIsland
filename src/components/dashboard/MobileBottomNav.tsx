@@ -28,6 +28,7 @@ interface MobileBottomNavProps {
   onNotificationSelect: (id: string) => void;
   setDistressInitialTab: (t: 'all' | 'mine') => void;
   setIsArchipelagoModalOpen: (v: boolean) => void;
+  openDistressCount: number;
 }
 
 const overflowItems = [
@@ -43,7 +44,7 @@ export default function MobileBottomNav({
   user, isProfileOpen, setIsProfileOpen, isNotificationsOpen, setIsNotificationsOpen,
   profileRef, notifRef, notifications, unreadCount, unreadSocialCount, unreadDiscoverCount,
   selectedIslandId, setSelectedIslandId, activeModal, setActiveModal,
-  isNewUser, onSignOut, onNotificationSelect, setDistressInitialTab, setIsArchipelagoModalOpen,
+  isNewUser, onSignOut, onNotificationSelect, setDistressInitialTab, setIsArchipelagoModalOpen, openDistressCount,
 }: MobileBottomNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -62,15 +63,18 @@ export default function MobileBottomNav({
       onClick: () => { setActiveModal('discover'); closeMore(); },
       active: activeModal === 'discover',
       badge: unreadDiscoverCount > 0,
+      badgeClass: 'bg-brand-primary',
     },
     {
       label: 'Questions',
       icon: Radio,
       onClick: () => { setDistressInitialTab('all'); setActiveModal('distress'); closeMore(); },
       active: activeModal === 'distress',
+      badge: openDistressCount > 0,
+      badgeClass: 'bg-orange-400',
     },
     {
-      label: 'Test',
+      label: 'Exam',
       icon: GraduationCap,
       onClick: () => { setActiveModal('testMode'); closeMore(); },
       active: activeModal === 'testMode',
@@ -188,7 +192,7 @@ export default function MobileBottomNav({
           </button>
         ) : (
           <>
-            {primaryItems.map(({ label, icon: Icon, onClick, active, badge }) => (
+            {primaryItems.map(({ label, icon: Icon, onClick, active, badge, badgeClass }) => (
               <button
                 key={label}
                 onClick={onClick}
@@ -200,7 +204,7 @@ export default function MobileBottomNav({
                 <Icon className="w-6 h-6" />
                 <span className="text-[10px] font-semibold tracking-wide">{label}</span>
                 {badge && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-brand-primary border border-[#111]" />
+                  <span className={cn("absolute top-1.5 right-1.5 w-2 h-2 rounded-full border border-[#111]", badgeClass ?? 'bg-brand-primary')} />
                 )}
               </button>
             ))}

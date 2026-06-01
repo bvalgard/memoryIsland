@@ -91,7 +91,10 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
           >
             <div className="p-8">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-bold tracking-tight">Create New Island</h3>
+                <div>
+                  <h3 className="text-2xl font-bold tracking-tight">Create Island</h3>
+                  <p className="text-xs text-brand-muted mt-0.5 italic">Anchor your knowledge</p>
+                </div>
                 <button type="button" onClick={onClose} className="text-brand-muted hover:text-white transition-colors">
                   <X className="w-6 h-6" />
                 </button>
@@ -115,7 +118,7 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
                   )}
 
                   <label className="block text-[10px] text-brand-muted uppercase tracking-[0.2em] font-medium mb-3 mt-4">
-                    Archipelago (Collection)
+                    Collection
                   </label>
                   <select
                     value={selectedArchipelagoId || ''}
@@ -210,7 +213,7 @@ export default function NewIslandModal({ isOpen, onClose, onSubmit, onSubmitColl
                   type="submit"
                   className="w-full btn-primary h-14"
                 >
-                  {isCollaborative ? 'Create Crew Island' : 'Anchor Island'}
+                  {isCollaborative ? 'Create Crew Island' : 'Create Island'}
                 </button>
               </form>
             </div>

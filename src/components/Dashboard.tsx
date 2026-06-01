@@ -122,6 +122,16 @@ export default function Dashboard() {
   const notifRef = useRef<HTMLDivElement>(null);
   const appLoadCheckDone = useRef(false);
   const defaultStudyModeApplied = useRef(false);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadingTimedOut(true), 7000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // Offline sync
   const { isOnline, syncStatus, pendingCount, pin, unpin, queueSession, isPinned } = useOfflineSync({
@@ -646,6 +656,20 @@ export default function Dashboard() {
 
   const trackingMode = progress?.settings?.progressTrackingMode ?? 'srs';
 
+  const dashboardSubtitle = (() => {
+    if (!progress?.stats) return 'Manage your knowledge base.';
+    const streak = progress.stats.dailyStreak ?? 0;
+    const todayDate = new Date().toISOString().split('T')[0];
+    const studiedToday = progress.stats.lastStudyDate === todayDate;
+    if (streak >= 7) return `${streak}-day streak. Keep it going.`;
+    if (trackingMode === 'srs' || trackingMode === 'both') {
+      if (globalDueCount > 0) return `${globalDueCount} card${globalDueCount === 1 ? '' : 's'} due today — let's go.`;
+      if (studiedToday) return 'All caught up. Check back tomorrow.';
+    }
+    if (streak > 0) return `${streak}-day streak. Keep it going.`;
+    return 'Manage your knowledge base.';
+  })();
+
   // Blind Spot Matrix computation
   const blindSpotData = (() => {
     const classified = allCards.filter(c => (c.responseTimeSamples ?? 0) >= 1 && (c.totalAnswers ?? 0) > 0);
@@ -731,6 +755,11 @@ export default function Dashboard() {
       type: 'info' as const,
       timestamp: q.lastActivityAt?.seconds ? q.lastActivityAt.seconds * 1000 : Date.now(),
     }));
+
+  const openDistressCount = myQuestions.filter(q =>
+    q.status === 'open' && q.answerCount > 0 &&
+    !seenNotificationIds.has(`question_response_${q.id}_${q.lastActivityAt?.seconds ?? 0}`)
+  ).length;
 
   const pendingAnswerBanner = myQuestions.find(
     q => q.status === 'open' && q.answerCount > 0 &&
@@ -1561,6 +1590,7 @@ export default function Dashboard() {
         onSignOut={handleSignOut}
         onNotificationSelect={handleNotificationClick}
         setDistressInitialTab={setDistressInitialTab}
+        openDistressCount={openDistressCount}
       />
 
       {/* Main Content */}
@@ -1783,7 +1813,7 @@ export default function Dashboard() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-brand-muted font-normal text-sm sm:text-base">Manage your knowledge base.</p>
+                    <p className="text-brand-muted font-normal text-sm sm:text-base">{dashboardSubtitle}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {isNewUser ? (
@@ -1962,9 +1992,24 @@ export default function Dashboard() {
                 )}
 
                 {loading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-pulse">
-                    {[1, 2, 3].map(i => <div key={i} className="h-44 rounded-[32px] bg-white/5" />)}
-                  </div>
+                  loadingTimedOut ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <AlertCircle className="w-10 h-10 text-brand-muted/40 mb-4" />
+                      <p className="text-sm font-bold text-white mb-1">Trouble connecting</p>
+                      <p className="text-xs text-brand-muted mb-6">Check your connection and try again.</p>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white transition-colors"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 animate-pulse">
+                      {[1, 2, 3].map(i => <div key={i} className="h-44 rounded-[32px] bg-white/5" />)}
+                    </div>
+                  )
                 ) : !selectedArchipelagoId ? (
                   // Home view: show archipelago cards
                   (() => {
@@ -2363,6 +2408,7 @@ export default function Dashboard() {
           onNotificationSelect={handleNotificationClick}
           setDistressInitialTab={setDistressInitialTab}
           setIsArchipelagoModalOpen={setIsArchipelagoModalOpen}
+          openDistressCount={openDistressCount}
         />
       )}
 

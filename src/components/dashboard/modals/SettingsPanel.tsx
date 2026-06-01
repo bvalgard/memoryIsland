@@ -54,47 +54,14 @@ export default function SettingsPanel({
             </p>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                <div>
-                  <p className="text-sm font-bold text-white mb-1">Island Sorting</p>
-                  <p className="text-xs text-brand-muted">Choose how your islands are ordered.</p>
-                </div>
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-                  className="bg-[#222] border border-white/10 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-brand-primary"
-                >
-                  <option value="alpha-asc">A to Z</option>
-                  <option value="alpha-desc">Z to A</option>
-                  <option value="creation">Creation Date</option>
-                  <option value="next-due">Next Due</option>
-                  <option value="most-struggling">Most Struggling</option>
-                </select>
-              </div>
 
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-                <div>
-                  <p className="text-sm font-bold text-white mb-1">Public Ranking</p>
-                  <p className="text-xs text-brand-muted">Show up on the global leaderboard.</p>
-                </div>
-                <button
-                  onClick={() => onUpdateSettings({ showOnGlobalLeaderboard: !(settings?.showOnGlobalLeaderboard ?? true) })}
-                  className={cn(
-                    "w-10 h-6 rounded-full relative transition-colors",
-                    (settings?.showOnGlobalLeaderboard ?? true) ? "bg-brand-primary" : "bg-white/10"
-                  )}
-                >
-                  <motion.div
-                    animate={{ x: (settings?.showOnGlobalLeaderboard ?? true) ? 16 : 4 }}
-                    className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
-                  />
-                </button>
-              </div>
+              {/* Study */}
+              <p className="text-xs uppercase tracking-widest text-brand-muted/60 font-bold">Study</p>
 
               <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                 <div className="mb-3">
                   <p className="text-sm font-bold text-white mb-1">Progress Tracking</p>
-                  <p className="text-xs text-brand-muted">Choose which system shows in the UI. Both always track silently.</p>
+                  <p className="text-xs text-brand-muted">Choose which system shows in the UI. Both systems run — the UI shows SRS progress while mastery is tracked in the background.</p>
                 </div>
                 <div className="flex bg-black/30 rounded-xl p-1 border border-white/10 gap-1">
                   {(['srs', 'status', 'both'] as const).map((mode) => (
@@ -158,8 +125,8 @@ export default function SettingsPanel({
 
               <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
                 <div className="mb-3">
-                  <p className="text-sm font-bold text-white mb-1">Study Grace Window</p>
-                  <p className="text-xs text-brand-muted">Cards due within this window will be included in your session.</p>
+                  <p className="text-sm font-bold text-white mb-1">Early Study Window</p>
+                  <p className="text-xs text-brand-muted">Include cards due within the next X minutes in your current session.</p>
                 </div>
                 <div className="flex bg-black/30 rounded-xl p-1 border border-white/10 gap-1">
                   {([0, 15, 30, 60, 120] as const).map((mins) => (
@@ -179,8 +146,50 @@ export default function SettingsPanel({
                 </div>
               </div>
 
+              {/* Account */}
+              <div className="pt-2 border-t border-white/5" />
+              <p className="text-xs uppercase tracking-widest text-brand-muted/60 font-bold">Account</p>
 
-              <p className="text-xs uppercase tracking-widest text-brand-muted/60 font-bold pt-2">Library Tools</p>
+              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                <div>
+                  <p className="text-sm font-bold text-white mb-1">Island Sorting</p>
+                  <p className="text-xs text-brand-muted">Choose how your islands are ordered.</p>
+                </div>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                  className="bg-[#222] border border-white/10 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-brand-primary"
+                >
+                  <option value="alpha-asc">A to Z</option>
+                  <option value="alpha-desc">Z to A</option>
+                  <option value="creation">Creation Date</option>
+                  <option value="next-due">Next Due</option>
+                  <option value="most-struggling">Most Struggling</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                <div>
+                  <p className="text-sm font-bold text-white mb-1">Public Ranking</p>
+                  <p className="text-xs text-brand-muted">Show up on the global leaderboard.</p>
+                </div>
+                <button
+                  onClick={() => onUpdateSettings({ showOnGlobalLeaderboard: !(settings?.showOnGlobalLeaderboard ?? true) })}
+                  className={cn(
+                    "w-10 h-6 rounded-full relative transition-colors",
+                    (settings?.showOnGlobalLeaderboard ?? true) ? "bg-brand-primary" : "bg-white/10"
+                  )}
+                >
+                  <motion.div
+                    animate={{ x: (settings?.showOnGlobalLeaderboard ?? true) ? 16 : 4 }}
+                    className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
+                  />
+                </button>
+              </div>
+
+              {/* Library Tools */}
+              <div className="pt-2 border-t border-white/5" />
+              <p className="text-xs uppercase tracking-widest text-brand-muted/60 font-bold">Library Tools</p>
 
               <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                 <div className="flex items-center gap-3">

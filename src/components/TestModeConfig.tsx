@@ -164,7 +164,7 @@ export default function TestModeConfig({
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Configure Your Voyage</h2>
-              <p className="text-[10px] text-brand-muted uppercase tracking-widest">Test Mode</p>
+              <p className="text-[10px] text-brand-muted uppercase tracking-widest">Exam Voyage</p>
             </div>
           </div>
           <button onClick={onClose} className="text-brand-muted hover:text-white transition-colors p-1">

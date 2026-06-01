@@ -126,10 +126,10 @@ export default function TestModeHub({ userTests, allSessions, loading, onClose, 
             )}
             <div>
               <h2 className="text-base font-bold text-white truncate max-w-[260px]">
-                {drilledTest ? drilledTest.name : 'Test Mode'}
+                {drilledTest ? drilledTest.name : 'Exam Voyage'}
               </h2>
               <p className="text-[10px] text-brand-muted uppercase tracking-widest">
-                {drilledTest ? `${drilledSessions.length} attempt${drilledSessions.length !== 1 ? 's' : ''}` : 'Exam Voyage'}
+                {drilledTest ? `${drilledSessions.length} attempt${drilledSessions.length !== 1 ? 's' : ''}` : "Captain's Log"}
               </p>
             </div>
           </div>
